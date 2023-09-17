@@ -27,4 +27,22 @@ export default defineConfig({
       },
     },
   },
+
+  resolve: {
+    alias: {
+      'string_decoder': 'string_decoder/',
+      'buffer': 'buffer/'
+    }
+  },
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': ['react', 'react-dom', 'chart.js', 'xml2js']
+        }
+      }
+    }
+  }
+
 })
