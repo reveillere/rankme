@@ -1,9 +1,10 @@
 import { dblpCategories } from './dblp';
 import { useState, useEffect } from 'react';
 import { Pie } from 'react-chartjs-2';
-import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-
+import '../App.css'
+import DateRangeSlider from './DateRangeSlider';
+import React from 'react';
 
 const pieOptions = {
   responsive: true,
@@ -40,10 +41,14 @@ export function PublicationsViz({ publications }) {
   const [publicationsByType, setPublicationsByType] = useState(null); // State to store fetched data
   const [startYear, setStartYear] = useState(0);
   const [endYear, setEndYear] = useState(new Date().getFullYear());
-  
+  const minYear = Math.min(...publications.map(pub => pub.dblp.year));
+  const maxYear = Math.max(...publications.map(pub => pub.dblp.year));
+  const [range, setRange] = React.useState([minYear, maxYear]);
+
+
   useEffect(() => {
     const fetchData = async () => {
-      setStartYear(Math.min(...publications.map(pub => pub.dblp.year)));
+      setStartYear(minYear);
       setPublicationsByType(calculatePublicationsByType(publications));
     }
     fetchData();
@@ -51,14 +56,14 @@ export function PublicationsViz({ publications }) {
 
   useEffect(() => {
     if (publications) {
-      const publis = publications.filter(pub => pub.dblp.year >= startYear && pub.dblp.year <= endYear);
+      const publis = publications.filter(pub => pub.dblp.year >= range[0] && pub.dblp.year <= range[1]);
       setPublicationsByType(calculatePublicationsByType(publis));
     }
-  }, [publications, startYear, endYear]);
+  }, [publications, range]);
 
-  if (!publicationsByType) return <div>Chargement...</div>; 
+  if (!publicationsByType) return <div>Chargement...</div>;
 
-  
+
   const colors = Object.values(dblpCategories).map(category => category.color);
   const data = {
     labels: Object.values(dblpCategories).map(category => category.name),
@@ -71,51 +76,20 @@ export function PublicationsViz({ publications }) {
       },
     ],
   };
+
+
   
-
-  console.log('DEBUG : publicationsByType : ', publicationsByType);
-
   return (
-    <div>
-      Total of {Object.values(publicationsByType).reduce((acc, val) => acc + val, 0) } publications in the period !
-      <div style={{  width: '300px', margin: '20px auto' }}>
+    <div className='App'>
+      <div style={{ fontWeight: 800, fontSize: 'large' }}>
+      Total of {Object.values(publicationsByType).reduce((acc, val) => acc + val, 0)} publications in the period !
+      </div>
+      <div style={{ width: '300px', margin: 'auto' }}>
         <Pie options={pieOptions} data={data} />
       </div>
-      <YearPickerChart startYear={startYear} setStartYear={setStartYear} endYear={endYear} setEndYear={setEndYear} />
+      
+       <DateRangeSlider minYear={minYear} maxYear={maxYear} range={range} setRange={setRange} />
     </div>
   );
 }
-
-
-
-
-export function YearPickerChart({ startYear, setStartYear, setEndYear, endYear } ) {
-  
-    const years = [];
-    for (let year = startYear; year <= endYear; year++) {
-      years.push(year);
-    }
-
-    return (
-        <div>
-            <div>
-                Filter dates from : 
-                <DatePicker
-                    selected={new Date(startYear, 0, 1)}
-                    onChange={(date) => date && setStartYear(date.getFullYear())}
-                    dateFormat="yyyy"
-                    showYearPicker
-                />
-                 to : 
-                <DatePicker
-                    selected={new Date(endYear, 0, 1)}
-                    onChange={(date) => date && setEndYear(date.getFullYear())}
-                    dateFormat="yyyy"
-                    showYearPicker
-                />
-            </div>
-      </div>
-    );
-}
-
 

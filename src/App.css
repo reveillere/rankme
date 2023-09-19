@@ -75,4 +75,7 @@ ul.publ-list>li.entry>cite { display:table-cell; font:inherit; padding:0px 2px; 
 cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
 
 
-
+.year-slider {
+  margin-left: 50px;
+  margin-right: 50px;
+}
