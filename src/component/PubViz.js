@@ -15,10 +15,6 @@ export default function PubViz() {
     const pid = useParams()['*'];
 
     useEffect(() => {
-        console.log('DEBUG : I do that only once');
-    }, []);
-
-    useEffect(() => {
         fetchAuthor(pid)
             .then((author) => {
                 setAuthor(author);

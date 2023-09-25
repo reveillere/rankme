@@ -5,15 +5,17 @@ import 'react-datepicker/dist/react-datepicker.css';
 import '../App.css'
 import DateRangeSlider from './DateRangeSlider';
 import React from 'react';
+import { Checkbox, Grid, FormGroup, FormControlLabel } from '@mui/material';
+
 
 const pieOptions = {
   responsive: true,
-  maintainAspectRatio: true,  // This ensures the chart maintains its aspect ratio
-  aspectRatio: 1,             // Default is 2, reduce this to make the pie smaller
+  maintainAspectRatio: true,
+  aspectRatio: 2,
   plugins: {
     legend: {
-      display: true,
-      position: 'right'  // This will place the legend on the right
+      display: false,
+      position: 'right'
     }
   }
 };
@@ -21,6 +23,7 @@ const pieOptions = {
 
 function calculatePublicationsByType(publications) {
   const publicationsByType = Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
 
   // Parcourez les publications et agrégez-les par type
   publications.forEach(publication => {
@@ -38,13 +41,14 @@ function calculatePublicationsByType(publications) {
 
 
 export function PublicationsViz({ publications }) {
-  const [publicationsByType, setPublicationsByType] = useState(null); // State to store fetched data
+  const [publicationsByType, setPublicationsByType] = useState(null);
   const [startYear, setStartYear] = useState(0);
   const [endYear, setEndYear] = useState(new Date().getFullYear());
   const minYear = Math.min(...publications.map(pub => pub.dblp.year));
   const maxYear = Math.max(...publications.map(pub => pub.dblp.year));
   const [range, setRange] = React.useState([minYear, maxYear]);
 
+  const [categorySelected, setCategorySelected] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,32 +68,87 @@ export function PublicationsViz({ publications }) {
   if (!publicationsByType) return <div>Chargement...</div>;
 
 
-  const colors = Object.values(dblpCategories).map(category => category.color);
-  const data = {
-    labels: Object.values(dblpCategories).map(category => category.name),
-    datasets: [
-      {
-        data: Object.values(publicationsByType),
-        backgroundColor: colors,
-        borderColor: colors,
-        borderWidth: 1,
-      },
-    ],
+
+  const data =  {
+      labels: Object.keys(dblpCategories)
+        .filter(key => categorySelected[key])
+        .map(key => dblpCategories[key].name),
+        datasets: [
+          {
+            data: Object.keys(dblpCategories)
+              .filter(key => categorySelected[key])
+              .map(key => publicationsByType[key] || 0),
+            backgroundColor: Object.keys(dblpCategories)
+              .filter(key => categorySelected[key])
+              .map(key => dblpCategories[key].color),
+            borderColor: Object.keys(dblpCategories)
+              .filter(key => categorySelected[key])
+              .map(key => dblpCategories[key].color),
+            borderWidth: 1,
+          },
+        ],
   };
-
-
   
+
+
+
+
+
   return (
     <div className='App'>
       <div style={{ fontWeight: 800, fontSize: 'large' }}>
-      Total of {Object.values(publicationsByType).reduce((acc, val) => acc + val, 0)} publications in the period !
+        Total of {Object.values(publicationsByType).reduce((acc, val) => acc + val, 0)} publications in the period !
       </div>
-      <div style={{ width: '300px', margin: 'auto' }}>
-        <Pie options={pieOptions} data={data} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', margin: '40px 0' }}>
+        <div style={{ width: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div>
+            <Pie options={pieOptions} data={data} />
+          </div>
+        </div>
+        <div style={{ width: '50%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <CategoriesSelector categorySelected={categorySelected} setCategorySelected={setCategorySelected} />
+        </div>
       </div>
-      
-       <DateRangeSlider minYear={minYear} maxYear={maxYear} range={range} setRange={setRange} />
+      <DateRangeSlider minYear={minYear} maxYear={maxYear} range={range} setRange={setRange} />
     </div>
+  );
+}
+
+
+
+
+function CategoriesSelector({ categorySelected, setCategorySelected }) {
+
+  const handleLineClick = (name) => {
+    return (event) => {
+      setCategorySelected(prevCategorySelected => {
+        return { ...prevCategorySelected, [name]: event.target.checked };
+      });
+    };
+  };
+
+  return (
+    <FormGroup style={{ margin: 0, padding: 0 }}>
+      {Object.entries(dblpCategories).map(([key, value]) => (
+        <div
+          key={key}
+          style={{ marginBottom: '-14px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+        >
+          <FormControlLabel
+            control={
+              <Checkbox
+                defaultChecked
+                size="small"
+                name={key}
+                style={{ color: value.color }}
+              />}
+            label={value.name}
+            onChange={handleLineClick(key)}
+            style={{ margin: 0 }}
+          />
+        </div>
+      ))}
+    </FormGroup>
   );
 }
 

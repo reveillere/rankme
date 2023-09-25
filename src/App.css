@@ -79,3 +79,10 @@ cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
   margin-left: 50px;
   margin-right: 50px;
 }
+
+
+.categories {
+  list-style-type: 'none'; 
+  margin: 0;
+  padding: 0
+}
