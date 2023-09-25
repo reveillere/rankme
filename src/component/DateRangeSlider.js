@@ -43,7 +43,7 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
 
     const handleInputChange = (event) => {
         const previousRange = minimalRange;
-        const newRange = Number(event.target.value);
+        const newRange = Number(event.target.value) - 1;
         if (newRange === 0) {
             setRange([range[1], range[1]]);
             setDisableSwap(false);
@@ -58,14 +58,14 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
 
     const calculateMarks = (interval) => {
         const marks = [];
-        marks.push({ value: minYear, label: minYear.toString() }); 
+        marks.push({ value: minYear, label: minYear.toString() });
 
         for (let year = minYear + interval; year < maxYear; year += interval) {
             marks.push({ value: year, label: year.toString() });
         }
 
         if (marks[marks.length - 1].value !== maxYear) {
-            marks.push({ value: maxYear, label: maxYear.toString() }); 
+            marks.push({ value: maxYear, label: maxYear.toString() });
         }
 
         return marks;
@@ -78,8 +78,7 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
         for (let i = 0; i < markElements.length - 1; i++) {
             const currentMark = markElements[i].getBoundingClientRect();
             const nextMark = markElements[i + 1].getBoundingClientRect();
-
-            if (currentMark.right > nextMark.left) {
+            if (currentMark.right + 1 > nextMark.left) {
                 isOverlapping = true;
                 break;
             }
@@ -89,7 +88,7 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
 
     useEffect(() => {
         if (sliderRef.current) {
-            let interval = 5  ;
+            let interval = 5;
             if (areSliderMarksOverlapping()) {
                 // If overlapping, adjust the marks to display every 5 years
                 setDisplayMarks(calculateMarks(interval));
@@ -102,9 +101,34 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
     };
 
     return (
-        <Box sx={{ width: '80%' }}>
-            <Box sx={{ marginBottom: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                Filter dates from {range[0]} to {range[1]} (range = {minimalRange}):
+        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Box sx={{ marginLeft: '20px', marginRight: '50px', width: '100px'}}>
+                <TextField
+                    id="standard-basic"
+                    label="Minimal range"
+                    defaultValue={minimalRange}
+                    variant="standard"
+                    type='number'
+                    fullWidth
+                    onChange={handleInputChange}
+                    inputProps={{ min: "1", max: maxYear - minYear + 1 }}
+                />
+            </Box>
+            <Box sx={{ width: '100%' }}>
+                <Slider
+                    ref={sliderRef}
+                    getAriaLabel={() => 'Minimum distance shift'}
+                    value={range}
+                    min={minYear}
+                    max={maxYear}
+                    step={1}
+                    onChange={handleChange}
+                    valueLabelDisplay="auto"
+                    disableSwap={disableSwap}
+                    marks={displayMarks}
+                />
+            </Box>
+            <Box sx={{ marginLeft: '50px', marginRight: '20px', width: '100px'}}>
                 <IconButton
                     color="primary"
                     aria-label="reset"
@@ -115,28 +139,8 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
                 </IconButton>
 
             </Box>
-            <Slider
-                ref={sliderRef}
-                getAriaLabel={() => 'Minimum distance shift'}
-                value={range}
-                min={minYear}
-                max={maxYear}
-                step={1}
-                onChange={handleChange}
-                valueLabelDisplay="auto"
-                disableSwap={disableSwap}
-                marks={displayMarks}
-            />
-            <TextField
-                id="standard-basic"
-                label="Minimal range"
-                defaultValue={minimalRange}
-                variant="standard"
-                type='number'
-                onChange={handleInputChange}
-                inputProps={{ min: "0", max: maxYear - minYear }}
-                sx={{ width: '80px', marginTop: '10px' }}
-            />
+
+
         </Box>
     );
 }

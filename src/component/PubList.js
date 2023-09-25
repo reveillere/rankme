@@ -5,7 +5,7 @@ import { fetchAuthor, getPublications, getName, dblpCategories} from './dblp';
 import { Box, CircularProgress } from '@mui/material';
 import '../App.css';
 
-function Publications({ data }) {
+export function Publications({ data }) {
   const pubs = [...data].sort((a, b) => b.year - a.year);
   const typeCounts = data.reduce((acc, curr) => {
     acc[curr.type] = (acc[curr.type] || 0) + 1;
@@ -48,7 +48,7 @@ function Publications({ data }) {
 }
 
 
-function PubList(props) {
+export function PubList(props) {
   const [author, setAuthor] = useState(null);
 
   const params = useParams()['*'];
@@ -78,7 +78,6 @@ function PubList(props) {
   return wrap(publ);
 }
 
-export default PubList
 
 
 

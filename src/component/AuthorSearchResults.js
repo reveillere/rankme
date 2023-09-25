@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye } from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
-import PubList from './PubList';
+import { PubList } from './PubList';
 
 import {
     Dialog,
@@ -46,7 +46,7 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
 
     const navigate = useNavigate();
     const gotoPublications = (url) => {
-        navigate(`/publications/${url}`);
+        navigate(`/stats/${url}`);
     };
 
     const Results = () => {

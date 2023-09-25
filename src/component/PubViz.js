@@ -5,8 +5,9 @@ import { CircularProgress } from '@mui/material';
 import { getPublications } from './dblp';
 import { PublicationsViz } from './dblpViz';
 
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-ChartJS.register(ArcElement, Tooltip, Legend);
+import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale } from 'chart.js';
+
+Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale);
 
 
 export default function PubViz() {
@@ -29,5 +30,5 @@ export default function PubViz() {
         ;
 
     const publications = getPublications(author);
-    return <PublicationsViz publications={publications} /> ;
+    return <PublicationsViz authorName={author?.dblpperson?.$?.name} publications={publications} /> ;
 }
