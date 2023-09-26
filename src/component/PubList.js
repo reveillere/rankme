@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useParams } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
-import { fetchAuthor, getPublications, getName, dblpCategories} from './dblp';
+import { fetchAuthor, getPublications, getName, dblpCategories } from './dblp';
 import { Box, CircularProgress } from '@mui/material';
 import '../App.css';
 
@@ -13,6 +13,14 @@ export function Publications({ data }) {
   }, {});
 
   let previousYear = null;
+
+  const title = (o) => {
+    if (typeof o === 'object')
+      return (<>
+        <i>{o.i}</i>{o._}</>
+      );
+    return <>{o}</>;
+  }
 
   return (
     <div>
@@ -34,7 +42,7 @@ export function Publications({ data }) {
                   {item.authors.join(', ')}:
                   <br />
                   <span className='title'>
-                    {item.dblp.title}
+                    {title(item.dblp.title)}
                   </span>
                   {item.venue} {year}
                 </cite>
@@ -71,10 +79,10 @@ export function PubList(props) {
 
   const publications = getPublications(author);
   const wrap = code => (props.pid ? code : (<div className='App'>{code}</div>));
-  const publ  = (<div className='publ'>
-        <h1>Publications of {getName(author)} </h1>
-        <Publications data={publications} />
-  </div>) 
+  const publ = (<div className='publ'>
+    <h1>Publications of {getName(author)} </h1>
+    <Publications data={publications} />
+  </div>)
   return wrap(publ);
 }
 

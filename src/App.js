@@ -54,7 +54,7 @@ function App() {
             onClose={handleMenuClose}
           >
             <MenuItem onClick={() => {
-              localStorage.clear(); // Clear the localStorage when 'Clear Cache' is clicked
+              localStorage.clear(); 
               handleMenuClose();
             }}>Clear Cache</MenuItem>
           </Menu>
