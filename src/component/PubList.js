@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { fetchAuthor, getPublications, getName, dblpCategories } from './dblp';
 import { Box, CircularProgress } from '@mui/material';
 import '../App.css';
+import { trimLastDigits} from './utils'
 
-export function Publications({ data }) {
+export function Publications({ author, data }) {
   const pubs = [...data].sort((a, b) => b.year - a.year);
   const typeCounts = data.reduce((acc, curr) => {
     acc[curr.type] = (acc[curr.type] || 0) + 1;
@@ -30,6 +31,7 @@ export function Publications({ data }) {
           const displayYear = previousYear !== year;
           previousYear = year;
           const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
+
           return (
             <React.Fragment key={index}>
               {displayYear && <li className="year">{year}</li>}
@@ -39,7 +41,17 @@ export function Publications({ data }) {
                 </div>
                 <div className="nr">[{nr}]</div>
                 <cite className='data'>
-                  {item.authors.join(', ')}:
+                  {item.authors.map((a, i) => (
+                    <span key={i} className="author">
+                      {a.$.pid !== author.pid ? (
+                        <a href={`/author/${a.$.pid}`}>
+                          {trimLastDigits(a._)}
+                        </a>
+                      ) : (
+                        trimLastDigits(a._)
+                      )}
+                    </span>
+                  )).reduce((prev, curr) => [prev, ', ', curr])}:
                   <br />
                   <span className='title'>
                     {title(item.dblp.title)}

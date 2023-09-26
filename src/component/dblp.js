@@ -85,17 +85,17 @@ export function getPublications(author, n) {
             const publicationObject = {};
             if (publication.inproceedings) {
                 publicationObject.type = 'inproceedings';
-                publicationObject.authors = ensureArray(publication?.inproceedings?.author).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.inproceedings?.author);
                 publicationObject.venue = publication.inproceedings.booktitle;
                 publicationObject.dblp = publication.inproceedings;
             } else if (publication.article) {
                 publicationObject.type = (publication.article.$?.publtype === 'informal') ? 'informal' : 'article';
-                publicationObject.authors = ensureArray(publication?.article?.author).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.article?.author);
                 publicationObject.venue = publication.article.journal
                 publicationObject.dblp = publication.article;
             } else if (publication.proceedings) {
                 publicationObject.type = 'proceedings';
-                publicationObject.authors = ensureArray(publication?.proceedings?.editor).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.proceedings?.editor);
                 publicationObject.venue = publication.proceedings.booktitle
                 publicationObject.dblp = publication.proceedings;
             } else if (publication.book) {
@@ -105,16 +105,16 @@ export function getPublications(author, n) {
                     publicationObject.venue = publication.book.publisher;
                 }
                 publicationObject.type = 'book';
-                publicationObject.authors = ensureArray(publication?.book?.author).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.book?.author);
                 publicationObject.dblp = publication.book;
             } else if (publication.incollection) {
                 publicationObject.type = 'incollection';
-                publicationObject.authors = ensureArray(publication?.incollection?.author).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.incollection?.author);
                 publicationObject.venue = publication.incollection.booktitle;
                 publicationObject.dblp = publication.incollection;
             } else if (publication.phdthesis) {
                 publicationObject.type = 'book';
-                publicationObject.authors = ensureArray(publication?.phdthesis?.author).map(author => author._);
+                publicationObject.authors = ensureArray(publication?.phdthesis?.author);
                 publicationObject.venue = 'PhD Thesis';
                 publicationObject.dblp = publication.phdthesis;
             }

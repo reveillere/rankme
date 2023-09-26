@@ -10,7 +10,7 @@ import { Publications } from './PubList';
 import CategoriesBarChart from './CategoriesBarChart';
 import CategoriesSelector from './CategoriesSelector';
 import YearPieChart from './YearPieChart';
-
+import { trimLastDigits } from './utils';
 
 function calculatePublicationsByType(publications) {
   const publicationsByType = Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
@@ -29,35 +29,28 @@ function calculatePublicationsByType(publications) {
 }
 
 
+const rank = (publication) => {
+  console.log(publication?.dblp?.url.replace(/\.html.*$/, '.xml'));
+}
 
-export function PublicationsViz({ authorName, publications }) {
-  const [publicationsByType, setPublicationsByType] = useState(null);
-  const [startYear, setStartYear] = useState(0);
+export function PublicationsViz({ author, publications }) {
   const minYear = Math.min(...publications.map(pub => pub.dblp.year));
   const maxYear = Math.max(...publications.map(pub => pub.dblp.year));
+  const [startYear, setStartYear] = useState(minYear);
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
   const [tabValue, setTabValue] = useState(0);
   const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
   const [filteredRecords, setFilteredRecords] = useState(publications);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setStartYear(minYear);
-      setPublicationsByType(calculatePublicationsByType(publications));
-    }
-    fetchData();
-  }, [publications]);
-
-  useEffect(() => {
     if (publications) {
       const publis = publications.filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1]);
-      setPublicationsByType(calculatePublicationsByType(publis));
-
       setFilteredRecords(publis.filter(pub => filterCategories[pub.type]));
+      publis.filter(pub => pub.type === 'inproceedings').forEach(pub => rank(pub));
     }
   }, [publications, filterYears, filterCategories]);
 
-  if (!publicationsByType) return <div>Chargement...</div>;
+  if (!filteredRecords) return <div>Chargement...</div>;
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -68,7 +61,7 @@ export function PublicationsViz({ authorName, publications }) {
 
   return (
     <div className='App'>
-      <h1>Records of {authorName}</h1>
+      <h1>Records of {trimLastDigits(author.name)}</h1>
       <div style={{ fontSize: 'large' }}>
         {publicationsShown === 0 ? 'No record found' : publicationsShown === publications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${publications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
       </div>
@@ -89,7 +82,7 @@ export function PublicationsViz({ authorName, publications }) {
       </div>
       <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
       <div style={{ height: '50px' }}></div>
-      <Publications data={filteredRecords} />
+      <Publications author={author} data={filteredRecords} />
     </div>
 
   );

@@ -64,8 +64,9 @@ function App() {
 
         <Routes>
           <Route path="/" element={<SearchAuthor />} />
+          <Route path="/author/*" element={<PubViz />} />
+          
           <Route path="/publications/*" element={<PubList />} />
-          <Route path="/stats/*" element={<PubViz />} />
           <Route path="/test/" element={<Test />} />
         </Routes>
       </div>

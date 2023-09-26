@@ -46,7 +46,7 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
 
     const navigate = useNavigate();
     const gotoPublications = (url) => {
-        navigate(`/stats/${url}`);
+        navigate(`/author/${url}`);
     };
 
     const Results = () => {

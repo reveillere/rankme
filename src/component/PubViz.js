@@ -30,5 +30,5 @@ export default function PubViz() {
         ;
 
     const publications = getPublications(author);
-    return <PublicationsViz authorName={author?.dblpperson?.$?.name} publications={publications} /> ;
+    return <PublicationsViz author={author?.dblpperson?.$} publications={publications} /> ;
 }

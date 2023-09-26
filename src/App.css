@@ -73,6 +73,11 @@ ul.publ-list>li.entry>div.nr { min-width:2.5em; text-align:center; white-space:n
 ul.publ-list>li.entry>cite { display:table-cell; font:inherit; padding:0px 2px; }
 
 cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
+cite.data .author a { color: #7d848a; text-decoration: none; cursor: pointer;}
+cite.data .author a:hover {
+  color: blue;
+  text-decoration: underline;
+}
 
 
 .year-slider {
