@@ -1,15 +1,27 @@
 import './App.css'
 import React, { useState } from 'react';
-import { AppBar, Toolbar, Typography, Button } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, IconButton } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import SearchAuthor from './component/SearchAuthor';
 import { PubList } from './component/PubList';
 import PubViz from './component/PubViz';
 import Test from './Test';
 import About from './About'; // Import the About component
+import './utils.js';
+import SettingsIcon from '@mui/icons-material/Settings';
+
 
 function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
 
   const handleAboutOpen = () => {
     setAboutDialogOpen(true);
@@ -22,18 +34,34 @@ function App() {
   return (
     <Router>
       <div>
-        <AppBar position="static" style={{ backgroundColor: '#123456' }}>
-          <Toolbar>
-            <Typography variant="h6" style={{ flexGrow: 1 }}>
-              RankeMe
-            </Typography>
-            <Button color="inherit" component={Link} to="/">Home</Button>
+        <AppBar position="static" style={{ backgroundColor: '#123456', height: '64px' }}>
+          <Toolbar style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Box display="flex" alignItems="center">
+              <Typography variant="h6">
+                RankMe
+              </Typography>
+              <Button color="inherit" component={Link} to="/">Home</Button>
+              <IconButton color="inherit" onClick={handleMenuOpen}>
+                <SettingsIcon />
+              </IconButton>
+            </Box>
             <Button color="inherit" onClick={handleAboutOpen}>About</Button>
           </Toolbar>
+
+          <Menu
+            anchorEl={anchorEl}
+            open={Boolean(anchorEl)}
+            onClose={handleMenuClose}
+          >
+            <MenuItem onClick={() => {
+              localStorage.clear(); // Clear the localStorage when 'Clear Cache' is clicked
+              handleMenuClose();
+            }}>Clear Cache</MenuItem>
+          </Menu>
         </AppBar>
-        
+
         <About open={aboutDialogOpen} onClose={handleAboutClose} />
-        
+
         <Routes>
           <Route path="/" element={<SearchAuthor />} />
           <Route path="/publications/*" element={<PubList />} />
@@ -42,6 +70,7 @@ function App() {
         </Routes>
       </div>
     </Router>
+
   );
 }
 
