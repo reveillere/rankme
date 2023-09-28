@@ -11,7 +11,7 @@ function SearchAuthor() {
   return (
     <div className='App'>
       <h1>Search author on DBLP</h1>
-      <AuthorSearchForm setResult={setQueryResult} setStatus={setQueryStatus} />
+      <AuthorSearchForm queryResult={queryResult}  setResult={setQueryResult} setStatus={setQueryStatus} />
       <AuthorSearchResults queryResult={queryResult} queryStatus={queryStatus} />
     </div>
   );

@@ -1,5 +1,5 @@
 import './App.css'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, IconButton } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import SearchAuthor from './component/SearchAuthor';
@@ -9,7 +9,6 @@ import Test from './Test';
 import About from './About'; // Import the About component
 import './utils.js';
 import SettingsIcon from '@mui/icons-material/Settings';
-
 
 function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);

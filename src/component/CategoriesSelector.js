@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Checkbox, FormGroup, FormControlLabel } from '@mui/material';
-import { dblpCategories } from './dblp';
+import { dblpCategories } from '../dblp';
 
 function CategoriesSelector({ records, selected, setSelected }) {
 

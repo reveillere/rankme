@@ -52,7 +52,10 @@ ul.publ-list>li.year {
   font-weight: 800;
 }
 
-
+ul.publ-list>li.entry .rank {
+  width: 50px;
+  text-align: center;
+}
 
 ul.publ-list>li.entry .box, 
 ul.publ-list>li.entry .nr, 

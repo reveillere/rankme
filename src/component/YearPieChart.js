@@ -1,6 +1,6 @@
 
 import { Pie } from 'react-chartjs-2';
-import { dblpCategories } from './dblp';
+import { dblpCategories } from '../dblp';
 
 
 function YearPieChart({ records }) {

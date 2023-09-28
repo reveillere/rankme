@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { fetchAuthor } from './dblp';
+import { fetchAuthor } from '../dblp';
 import { useParams } from 'react-router-dom';
 import { CircularProgress } from '@mui/material';
-import { getPublications } from './dblp';
+import { getPublications } from '../dblp';
 import { PublicationsViz } from './dblpViz';
 
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale } from 'chart.js';

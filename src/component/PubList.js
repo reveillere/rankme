@@ -1,10 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useParams } from 'react-router-dom';
 import React, { useState, useEffect } from 'react';
-import { fetchAuthor, getPublications, getName, dblpCategories } from './dblp';
+import { fetchAuthor, getPublications, getName, dblpCategories } from '../dblp';
 import { Box, CircularProgress } from '@mui/material';
 import '../App.css';
-import { trimLastDigits} from './utils'
+import { trimLastDigits } from '../utils'
 
 export function Publications({ author, data }) {
   const pubs = [...data].sort((a, b) => b.year - a.year);
@@ -23,6 +23,7 @@ export function Publications({ author, data }) {
     return <>{o}</>;
   }
 
+
   return (
     <div>
       <ul className='publ-list'>
@@ -36,27 +37,36 @@ export function Publications({ author, data }) {
             <React.Fragment key={index}>
               {displayYear && <li className="year">{year}</li>}
               <li className={`entry ${item.type}`}>
+                <div className="rank">
+                    {item.rank}
+                </div>
                 <div className="box">
-                  <img alt="paper" src="https://dblp.org/img/n.png" />
+                <img alt="paper" src="https://dblp.org/img/n.png" />
                 </div>
                 <div className="nr">[{nr}]</div>
                 <cite className='data'>
-                  {item.authors.map((a, i) => (
-                    <span key={i} className="author">
-                      {a.$.pid !== author.pid ? (
-                        <a href={`/author/${a.$.pid}`}>
-                          {trimLastDigits(a._)}
-                        </a>
-                      ) : (
-                        trimLastDigits(a._)
-                      )}
-                    </span>
-                  )).reduce((prev, curr) => [prev, ', ', curr])}:
+                  {
+                    item.authors.length > 0
+                      ? item.authors
+                        .map((a, i) => (
+                          <span key={i} className="author">
+                            {a.$.pid !== author.pid ? (
+                              <a href={`/author/${a.$.pid}`}>
+                                {trimLastDigits(a._)}
+                              </a>
+                            ) : (
+                              trimLastDigits(a._)
+                            )}
+                          </span>
+                        ))
+                        .reduce((prev, curr) => [prev, ', ', curr])
+                      : <span>No Authors Listed</span>
+                  }
                   <br />
                   <span className='title'>
                     {title(item.dblp.title)}
                   </span>
-                  {item.venue} {year}
+                  <Venue item={item} />
                 </cite>
               </li>
             </React.Fragment>
@@ -65,6 +75,25 @@ export function Publications({ author, data }) {
       </ul>
     </div>
   );
+}
+
+
+function Venue({ item }) {
+  return (
+    <span className='venue'>
+      {
+        item.type === 'article' ? (
+          <>
+            {item.venue} {item.dblp.pages} ({item.year})
+          </>
+        ) : (
+          <>
+            {item.venue} {item.dblp.year} {item.dblp.pages}
+          </>
+        )
+      }
+    </span>
+  )
 }
 
 

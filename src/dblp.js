@@ -105,7 +105,7 @@ export function getPublications(author, n) {
                     publicationObject.venue = publication.book.publisher;
                 }
                 publicationObject.type = 'book';
-                publicationObject.authors = ensureArray(publication?.book?.author);
+                publicationObject.authors = ensureArray(publication?.book?.editor);
                 publicationObject.dblp = publication.book;
             } else if (publication.incollection) {
                 publicationObject.type = 'incollection';

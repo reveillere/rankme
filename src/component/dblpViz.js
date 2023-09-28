@@ -1,4 +1,4 @@
-import { dblpCategories } from './dblp';
+import { dblpCategories } from '../dblp';
 import { useState, useEffect } from 'react';
 import { Bar, Pie } from 'react-chartjs-2';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -10,7 +10,8 @@ import { Publications } from './PubList';
 import CategoriesBarChart from './CategoriesBarChart';
 import CategoriesSelector from './CategoriesSelector';
 import YearPieChart from './YearPieChart';
-import { trimLastDigits } from './utils';
+import { trimLastDigits } from '../utils';
+import CorePortal from '../corePortal'
 
 function calculatePublicationsByType(publications) {
   const publicationsByType = Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
@@ -28,10 +29,11 @@ function calculatePublicationsByType(publications) {
   return publicationsByType;
 }
 
-
-const rank = (publication) => {
-  console.log(publication?.dblp?.url.replace(/\.html.*$/, '.xml'));
+async function rankJournal(publication) {
+  // console.log(publication.dblp);
 }
+
+
 
 export function PublicationsViz({ author, publications }) {
   const minYear = Math.min(...publications.map(pub => pub.dblp.year));
@@ -41,14 +43,64 @@ export function PublicationsViz({ author, publications }) {
   const [tabValue, setTabValue] = useState(0);
   const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
   const [filteredRecords, setFilteredRecords] = useState(publications);
+  const [coreRanks, setCoreRanks] = useState(null);
+
+  useEffect(() => {
+    const loadCoreRanks = async () => {
+      try {
+        const ranks = await CorePortal.load();
+        setCoreRanks(ranks);
+        console.log(`DEBUG: Core ranks loaded : ${ranks.length}`);
+      } catch (error) {
+        console.error('Error loading core ranks:', error);
+      }
+    };
+  
+    loadCoreRanks();
+  }, []);
+  
+
+  useEffect(() => {
+    const rankPublications = async () => {
+      if (coreRanks) {
+        const updatedRecords = [...filteredRecords]; // Create a new array to hold the updated records
+        
+        const inproceedings = updatedRecords.filter(pub => pub.type === 'inproceedings');
+        await Promise.all(inproceedings.map(async (pub) => {
+          try {
+            const rank = await rankConf(pub);
+            pub.rank = rank;
+          } catch (error) {
+            console.error('Error ranking inproceedings:', error);
+          }
+        }));
+  
+        const articles = updatedRecords.filter(pub => pub.type === 'article');
+        await Promise.all(articles.map(async (pub) => {
+          try {
+            await rankJournal(pub);
+          } catch (error) {
+            console.error('Error ranking article:', error);
+          }
+        }));
+        
+        setFilteredRecords(updatedRecords); // Update the state with the new array
+      }
+    };
+  
+    rankPublications();
+  }, [coreRanks, filteredRecords]);
+
+
 
   useEffect(() => {
     if (publications) {
       const publis = publications.filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1]);
       setFilteredRecords(publis.filter(pub => filterCategories[pub.type]));
-      publis.filter(pub => pub.type === 'inproceedings').forEach(pub => rank(pub));
     }
   }, [publications, filterYears, filterCategories]);
+
+  
 
   if (!filteredRecords) return <div>Chargement...</div>;
 
@@ -58,7 +110,22 @@ export function PublicationsViz({ author, publications }) {
 
   const publicationsShown = filteredRecords.length;
 
-
+  async function rankConf(publication) {
+    const acronym = publication?.dblp?.booktitle;
+    if (acronym === undefined) return;
+    const rankingSource = CorePortal.findSourceForYear(coreRanks, publication.dblp.year);
+    const ranking = coreRanks.find(rank => rank.source === rankingSource).ranks;
+    const candidates = ranking.filter(conf => conf.acronym === acronym);
+    if (candidates.length === 0) {
+      return "?";
+    } else if (candidates.length > 1) {
+      return "Multi";
+    } else {
+      const entry = candidates[0];
+      return entry.rank;
+    }
+  }
+  
   return (
     <div className='App'>
       <h1>Records of {trimLastDigits(author.name)}</h1>
