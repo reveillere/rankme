@@ -1,51 +1,14 @@
 import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 
-// const core = 'http://localhost:3000/core/conf-ranks/'
-// const portalAll = core + "?search=&by=all&source=all&do=Export";
-
-// export async function load() {
-//     try {
-//         const resp = await fetch(portalAll);
-//         if (!resp.ok) throw new Error(`HTTP error! Status: ${resp.status}`);
-        
-//         const txt = await resp.text();
-//         const headers = ['id', 'title', 'acronym', 'source', 'rank', 'm1', 'm2', 'm3', 'm4'];
-        
-//         const results = await Papa.parse(txt, {
-//             header: true,
-//             beforeFirstChunk: function (chunk) {
-//                 const rows = chunk.split(/\r\n|\r|\n/);
-//                 rows.unshift(headers.join());
-//                 return rows.join('\r\n');
-//             }
-//         });
-        
-//         return results.data;
-//     } catch (e) {
-//         console.error('Fetch Error: ', e);
-//         throw e;
-//     }
-// }
-
-
-
-// export async function rank(id, year) {
-//     try {
-//         const resp = await fetch(core + id);
-//         if (!resp.ok) throw new Error(`HTTP error! Status: ${resp.status}`);
-        
-//         const txt = await resp.text();
-//     } catch (e) {
-//         console.error('Fetch Error: ', e);
-//         throw e; 
-//     }
-// }
 
 const local = 'http://localhost:3000/core/conf-ranks/';
 const core = 'http://portal.core.edu.au/conf-ranks/';
 
 const base = local;
+
+export const ranks = [ 'A*', 'A', 'B', 'C', 'Unranked', 'Multi' ];
+
 
 export async function loadPage(query) {
     try {
@@ -79,6 +42,7 @@ async function parseRankSource(txt) {
         throw e;
     }
 }
+
 
 function extractSources(list) {
     const result = [];
@@ -127,7 +91,32 @@ async function load() {
     }
 }
 
+
+async function rank(coreRanks, publication) {
+    try {
+        const acronym = publication?.dblp?.booktitle;
+        if (!acronym) return "Unranked"; 
+
+        const rankingSource = findSourceForYear(coreRanks, publication.dblp.year);
+        const ranking = coreRanks.find(rank => rank.source === rankingSource)?.ranks;
+        if (!ranking) return "Unranked"; 
+
+        const candidates = ranking.filter(conf => conf.acronym === acronym);
+        if (candidates.length === 0) return "Unranked";
+        if (candidates.length > 1) return "Multi";
+
+        const entry = candidates[0];
+        return ranks.includes(entry.rank) ? entry.rank : "?";
+    } catch (error) {
+        console.error('Error in rank function:', error);
+        return "Error"; 
+    }
+}
+
+
 export default {
     load,
+    rank,
+    ranks,
     findSourceForYear
 }

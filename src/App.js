@@ -9,6 +9,8 @@ import Test from './Test';
 import About from './About'; // Import the About component
 import './utils.js';
 import SettingsIcon from '@mui/icons-material/Settings';
+import SearchIcon from '@mui/icons-material/Search';
+
 
 function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
@@ -39,7 +41,8 @@ function App() {
               <Typography variant="h6">
                 RankMe
               </Typography>
-              <Button color="inherit" component={Link} to="/">Home</Button>
+              <Button color="inherit" component={Link} to="/">      <SearchIcon />
+              </Button>
               <IconButton color="inherit" onClick={handleMenuOpen}>
                 <SettingsIcon />
               </IconButton>
@@ -53,7 +56,7 @@ function App() {
             onClose={handleMenuClose}
           >
             <MenuItem onClick={() => {
-              localStorage.clear(); 
+              localStorage.clear();
               handleMenuClose();
             }}>Clear Cache</MenuItem>
           </Menu>
@@ -64,7 +67,7 @@ function App() {
         <Routes>
           <Route path="/" element={<SearchAuthor />} />
           <Route path="/author/*" element={<PubViz />} />
-          
+
           <Route path="/publications/*" element={<PubList />} />
           <Route path="/test/" element={<Test />} />
         </Routes>

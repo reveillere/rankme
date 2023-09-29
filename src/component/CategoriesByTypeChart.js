@@ -3,12 +3,12 @@ import { Pie } from 'react-chartjs-2';
 import { dblpCategories } from '../dblp';
 
 
-function YearPieChart({ records }) {
+function CategoriesByTypeChart({ records }) {
     const pieOptions = {
         responsive: true,
         maintainAspectRatio: true,
         aspectRatio: 2,
-        plugins: {
+        plugin: {
           tooltip: {
             enabled: true
           },
@@ -43,4 +43,4 @@ function YearPieChart({ records }) {
     )
 }
 
-export default YearPieChart;
+export default CategoriesByTypeChart;

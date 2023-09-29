@@ -1,29 +1,31 @@
-import React from 'react';
 import { Bar } from 'react-chartjs-2';
 import { dblpCategories } from '../dblp';
 
 
-function CategoriesBarChart({ publications, selectedCategories, range }) {
-  const [startYear, endYear] = range;
+
+
+function CategoriesByYearChart({ records, selectedCategories }) {
+  const [startYear, endYear] = records.reduce(([min, max], record) => {
+    const year = record.dblp.year;
+    return [Math.min(min, year), Math.max(max, year)];
+  }, [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]);
   const dataByYear = {};
 
-  // Filter publications based on the selected range
-  const filteredPublications = publications.filter(pub => pub.dblp.year >= startYear && pub.dblp.year <= endYear);
+  const labels = Array.from({ length: endYear - startYear + 1 }, (_, i) => (i + startYear).toString());
 
-  filteredPublications.forEach(pub => {
+  for (let year = startYear; year <= endYear; year++) {
+    dataByYear[year] = {};
+  }
+  
+  for (let pub of records) {
     const year = pub.dblp.year;
     const type = pub.type;
-
-    if (!dataByYear[year]) {
-      dataByYear[year] = {};
-    }
 
     if (selectedCategories[type]) {
       dataByYear[year][type] = (dataByYear[year][type] || 0) + 1;
     }
-  });
+  }
 
-  const labels = Object.keys(dataByYear).sort();
   const datasets = Object.keys(selectedCategories).map(category => ({
     label: dblpCategories[category].name,
     data: labels.map(year => dataByYear[year][category] || 0),
@@ -54,9 +56,9 @@ function CategoriesBarChart({ publications, selectedCategories, range }) {
         stacked: true,
       },
     },
-    plugins: {
-      tooltip: {
-        enabled: true,
+    options: {
+      tooltips: {
+        enabled: true
       },
     },
   };
@@ -65,4 +67,4 @@ function CategoriesBarChart({ publications, selectedCategories, range }) {
   
 }
 
-export default CategoriesBarChart;  
+export default CategoriesByYearChart;  

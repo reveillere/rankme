@@ -19,7 +19,7 @@
   justify-content: center;
   align-items: center; 
   flex-direction: column;
-  width: 70vw;
+  width: 100%;
   color: #505b62;
   margin: 0px;
   font-size: 11pt;
@@ -40,7 +40,7 @@ ul.publ-list>li {
   display: flex;
   align-items: top; /* pour aligner verticalement les éléments */
   flex-wrap: nowrap; /* pour s'assurer que les éléments ne passent pas à la ligne suivante */
-  margin-bottom: 10px;
+  margin-bottom: 1em;
 }
 
 li {
@@ -53,15 +53,22 @@ ul.publ-list>li.year {
 }
 
 ul.publ-list>li.entry .rank {
-  width: 50px;
+  width: 6em; /* Largeur fixe */
+  overflow: hidden; 
   text-align: center;
+  /* padding-left: 1em; */
+  font-family: 'lucida', 'Papyrus', 'Comic Sans MS', 'Chalkduster', fantasy;
+  font-weight: bold;
 }
 
+
 ul.publ-list>li.entry .box, 
-ul.publ-list>li.entry .nr, 
+ul.publ-list>li.entry .nr,
+ul.publ-list>li.entry .rank, 
 ul.publ-list>li.entry p {
-  margin-right: 10px; /* ajoutez une marge à droite pour un peu d'espacement entre les éléments */
+  margin-right: 0; 
 }
+
 
 ul.publ-list>li.entry>div.box>img { width:12px; height:12px; }
 ul.publ-list>li.article>div.box>img { background:#c32b72; }
@@ -71,9 +78,24 @@ ul.publ-list>li.book>div.box>img { background:#f8c91f; }
 ul.publ-list>li.incollection>div.box>img { background:#ef942d; }
 ul.publ-list>li.informal>div.box>img { background:#606b70; }
 
-ul.publ-list>li.entry>div.nr { min-width:2.5em; text-align:center; white-space:nowrap;
-  padding-left:4px; }
-ul.publ-list>li.entry>cite { display:table-cell; font:inherit; padding:0px 2px; }
+
+ul.publ-list>li.entry>div.nr { 
+  width: 5em; 
+  overflow: hidden; 
+  text-align:center; 
+  white-space:nowrap;
+  padding-left:4px; 
+}
+
+
+/* CITE */
+ul.publ-list>li.entry>cite { 
+  /* display:table-cell;  */
+  font:inherit; 
+  padding:0px 2px; 
+  width: 100%;
+  margin-right: 1em;
+}
 
 cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
 cite.data .author a { color: #7d848a; text-decoration: none; cursor: pointer;}

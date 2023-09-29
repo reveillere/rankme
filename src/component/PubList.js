@@ -37,13 +37,13 @@ export function Publications({ author, data }) {
             <React.Fragment key={index}>
               {displayYear && <li className="year">{year}</li>}
               <li className={`entry ${item.type}`}>
-                <div className="rank">
-                    {item.rank}
-                </div>
                 <div className="box">
-                <img alt="paper" src="https://dblp.org/img/n.png" />
+                  <img alt="paper" src="https://dblp.org/img/n.png" />
                 </div>
                 <div className="nr">[{nr}]</div>
+                <div className="rank">
+                  {item.rank}
+                </div>
                 <cite className='data'>
                   {
                     item.authors.length > 0

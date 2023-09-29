@@ -5,9 +5,9 @@ import { CircularProgress } from '@mui/material';
 import { getPublications } from '../dblp';
 import { PublicationsViz } from './dblpViz';
 
-import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale } from 'chart.js';
+import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
 
-Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale);
+Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
 
 
 export default function PubViz() {
