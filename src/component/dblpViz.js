@@ -57,7 +57,7 @@ export function PublicationsViz({ author, publications }) {
         const inproceedings = updatedRecords.filter(pub => pub.type === 'inproceedings');
         await Promise.all(inproceedings.map(async (pub) => {
           try {
-            pub.rank = await CorePortal.rank(coreRanks, pub);;
+            pub.rank = await CorePortal.rank(coreRanks, pub);
           } catch (error) {
             console.error('Error ranking inproceedings:', error);
           }

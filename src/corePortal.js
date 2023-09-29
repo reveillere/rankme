@@ -2,21 +2,18 @@ import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 
 
-const local = 'http://localhost:3000/core/conf-ranks/';
-const core = 'http://portal.core.edu.au/conf-ranks/';
+const coreURL = 'http://localhost:3000/core';
 
-const base = local;
 
 export const ranks = [ 'A*', 'A', 'B', 'C', 'Unranked', 'Multi' ];
 
 
 export async function loadPage(query) {
     try {
-        const resp = await fetch(base + query);
+        const resp = await fetch(query);
         if (!resp.ok) throw new Error(`HTTP error! Status: ${resp.status}`);
-        const txt = await resp.text();
-        return txt;
-        
+        const text = await resp.text();
+        return text;
     } catch (e) {
         console.error('Fetch Error: ', e);
         throw e; 
@@ -61,8 +58,7 @@ function extractSources(list) {
                 });
             }
         });
-    });
-    
+    });    
     return result;
 }
  
@@ -70,26 +66,38 @@ function extractSources(list) {
 function findSourceForYear(list, year) {
     const sortedList = list.sort((a, b) => b.year - a.year);
     const foundItem = sortedList.find(item => item.year <= year);
-    return foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
+    const found = foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
+    return found;
 }
 
 
 async function load() {
     try {
-        const main = await loadPage('/');
+        const main = await loadPage(`${coreURL}/sources`);
         const dom = HTMLParser.parse(main);
         const options = dom.querySelectorAll('select[name=source] option');
         const sources = extractSources(options.map(o => o.rawText));
-        await Promise.all(sources.map(async item => {
-            const rankRaw = await loadPage('?search=&by=all&do=Export&source=' + item.source);
-            const rankJSON = await parseRankSource(rankRaw);
-            item.ranks = rankJSON;
-        }));
+
+        const promises = sources.map(async item => {
+            try {
+                const rankRaw = await loadPage(`${coreURL}/source/${item.source}`);
+                item.ranks = await parseRankSource(rankRaw);
+            } catch (e) {
+                console.error('Error loading and parsing rank for source:', item.source, e);
+            }
+        });
+
+        await Promise.all(promises);
+
         return sources;
     } catch (e) {
-        console.error('Error calling rank function:', e);
+        console.error('Error calling load function:', e);
     }
 }
+
+
+
+
 
 
 async function rank(coreRanks, publication) {
@@ -98,6 +106,7 @@ async function rank(coreRanks, publication) {
         if (!acronym) return "Unranked"; 
 
         const rankingSource = findSourceForYear(coreRanks, publication.dblp.year);
+
         const ranking = coreRanks.find(rank => rank.source === rankingSource)?.ranks;
         if (!ranking) return "Unranked"; 
 
