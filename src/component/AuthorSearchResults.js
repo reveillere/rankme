@@ -1,10 +1,11 @@
 /* eslint-disable react/prop-types */
-import { useState } from 'react';
 
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEye } from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
 import { PubList } from './PubList';
+import { useEffect, useState } from 'react';
+
 
 import {
     Dialog,
@@ -28,21 +29,7 @@ import {
 
 
 function AuthorSearchResults({ queryResult, queryStatus }) {
-    const [openDialog, setOpenDialog] = useState(false);
-    const [selectedItemIndex, setSelectedItemIndex] = useState(null);
-
-    const handleClickOpen = (index) => {
-        setOpenDialog(true);
-        setSelectedItemIndex(index);
-    };
-
-    const handleClose = () => {
-        setOpenDialog(false);
-        setSelectedItemIndex(null);
-    };
-
-    // const pid = queryResult[selectedItemIndex].pid;
-
+    
 
     const navigate = useNavigate();
     const gotoPublications = (url) => {
@@ -61,14 +48,6 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
                                     secondary={<span style={{ fontStyle: 'italic' }}>{elt.affiliation}</span>}
                                 />
                             </div>
-                            <IconButton
-                                edge="start"
-                                color="inherit"
-                                aria-label="preview"
-                                onClick={() => handleClickOpen(i)} // Pass the item index
-                            >
-                                <FontAwesomeIcon icon={faEye} />
-                            </IconButton>
                         </ListItemButton>
                     </ListItem>
                     <Divider />
@@ -88,43 +67,8 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
                 </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
-
-            {/* Modal Dialog */}
-            <Dialog
-                open={openDialog}
-                onClose={handleClose}
-                fullWidth={true}
-                maxWidth={'lg'}>
-                <DialogContent>
-                    {selectedItemIndex != null && <PubList pid={queryResult[selectedItemIndex].pid }/>} 
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleClose} color="primary">
-                        Close
-                    </Button>
-                </DialogActions>
-            </Dialog>
         </div>
     );
 }
 
 export default AuthorSearchResults;
-
-
-
-
-{/* <Dialog open={openDialog} onClose={handleClose} >
-                <DialogTitle style={{ fontWeight: 'bold' }}>{selectedItemIndex !== null && queryResult[selectedItemIndex].author}</DialogTitle>
-                <DialogContent>
-                    {lastPublications !== null ? (
-                        <PublicationsViz publications={lastPublications} />
-                    ) : (
-                        <p>Loading last publications...</p>
-                    )}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleClose} color="primary">
-                        Close
-                    </Button>
-                </DialogActions>
-            </Dialog> */}

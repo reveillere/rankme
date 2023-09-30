@@ -3,12 +3,20 @@ import Paper from '@mui/material/Paper';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase'
 import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react'; 
 
 
 import { searchAuthor } from '../dblp';
 
 
 function AuthorSearchForm({ queryResult, setResult, setStatus }) {
+
+    const inputRef = useRef(); 
+
+    useEffect(() => {
+        inputRef.current.focus(); 
+    }, []); 
+
 
     const processQuery = async e => {
         e.preventDefault();
@@ -38,6 +46,7 @@ function AuthorSearchForm({ queryResult, setResult, setStatus }) {
                 <AccountCircle />
             </IconButton>
             <InputBase
+                inputRef={inputRef}
                 sx={{ ml: 1, flex: 1 }}
                 placeholder="Author name"
                 inputProps={{ 'aria-label': 'Author name' }}

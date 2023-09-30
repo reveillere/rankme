@@ -5,7 +5,16 @@ import HTMLParser from 'node-html-parser';
 const coreURL = 'http://localhost:3000/core';
 
 
-export const ranks = [ 'A*', 'A', 'B', 'C', 'Unranked', 'Multi' ];
+export const ranks = {
+    'A*'        : { name: 'A*',         color: '#134d6b' }, // Bleu Foncé
+    'A'         : { name: 'A',          color: '#1f7ca0' }, // Bleu Moyen Foncé
+    'B'         : { name: 'B',          color: '#72b1d7' }, // Bleu Moyen Clair
+    'C'         : { name: 'C',          color: '#a5d1eb' }, // Bleu Clair
+    'Unranked'  : { name: 'Unranked',   color: '#d3d3d3' }, // Gris Clair
+    'Multi'     : { name: 'Multi',      color: '#ffd700' }, // Jaune
+};
+
+
 
 
 export async function loadPage(query) {
@@ -115,7 +124,7 @@ async function rank(coreRanks, publication) {
         if (candidates.length > 1) return "Multi";
 
         const entry = candidates[0];
-        return ranks.includes(entry.rank) ? entry.rank : "?";
+        return ranks[entry.rank] ? entry.rank : "?";
     } catch (error) {
         console.error('Error in rank function:', error);
         return "Error"; 

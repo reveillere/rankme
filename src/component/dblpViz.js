@@ -6,12 +6,10 @@ import DateRangeSlider from './DateRangeSlider';
 import React from 'react';
 import { Tab, Tabs } from '@mui/material';
 import { Publications } from './PubList';
-import CategoriesByYearChart from './CategoriesByYearChart';
-import CategoriesSelector from './CategoriesSelector';
-import CategoriesByTypeChart from './CategoriesByTypeChart';
+import { CategoriesPieChart, RanksPieChart, CategoriesByYearChart, RanksByYearChart } from './StatsChart';
 import { trimLastDigits } from '../utils';
 import CorePortal from '../corePortal'
-import RankSelector from './RankSelector';
+import { RankSelector, CategoriesSelector } from './Selector';
 
 async function rankJournal(publication) {
   // console.log(publication.dblp);
@@ -26,10 +24,7 @@ export function PublicationsViz({ author, publications }) {
   const [tabGraph, setTabGraph] = useState(0);
   const [tabSelect, setTabSelect] = useState(0);
   const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
-  const [filterRanks, setFilterRanks] = React.useState(CorePortal.ranks.reduce((acc, item) => {
-    acc[item] = true;
-    return acc;
-  }, {}));
+  const [filterRanks, setFilterRanks] = React.useState(Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
   const [rankedPublications, setRankedPublications] = useState ([...publications]);
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
 
@@ -123,8 +118,11 @@ export function PublicationsViz({ author, publications }) {
             <Tab label="Stats by year" />
           </Tabs>
           <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            {tabGraph === 0 && <CategoriesByTypeChart records={filteredRecords} />}
-            {tabGraph === 1 && <CategoriesByYearChart records={filteredRecords} selectedCategories={filterCategories} />}
+            {tabGraph === 0 && tabSelect === 0 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
+            {tabGraph === 0 && tabSelect === 1 && <RanksPieChart records={filteredRecords} selected={filterRanks} />}
+
+            {tabGraph === 1 && tabSelect === 0 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
+            {tabGraph === 1 && tabSelect === 1 && <RanksByYearChart records={filteredRecords} selected={filterRanks} />}
           </div>
         </div>
         <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>
