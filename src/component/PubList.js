@@ -5,6 +5,7 @@ import { fetchAuthor, getPublications, getName, dblpCategories } from '../dblp';
 import { Box, CircularProgress } from '@mui/material';
 import '../App.css';
 import { trimLastDigits } from '../utils'
+import Tooltip from '@mui/material/Tooltip';
 
 export function Publications({ author, data }) {
   const pubs = [...data].sort((a, b) => b.year - a.year);
@@ -42,7 +43,7 @@ export function Publications({ author, data }) {
                 </div>
                 <div className="nr">[{nr}]</div>
                 <div className="rank">
-                  {item.rank}
+                  {item.rank && <Tooltip title={item.rank.msg} arrow>{item.rank.value}</Tooltip> }
                 </div>
                 <cite className='data'>
                   {

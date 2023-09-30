@@ -4,7 +4,7 @@ import corePortal from '../corePortal';
 
 
 
-function PieChart({ records, selected, field, labelAccessor, colorAccessor }) {
+function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
   const options = {
     responsive: true,
     maintainAspectRatio: true,
@@ -25,7 +25,7 @@ function PieChart({ records, selected, field, labelAccessor, colorAccessor }) {
     labels: selectedKeys.map(key => labelAccessor(key)),
     datasets: [
       {
-        data: selectedKeys.map(key => records.filter(record => record[field] === key).length),
+        data: selectedKeys.map(key => records.filter(record => fieldAccessor(record) === key).length),
         backgroundColor: selectedKeys.map(key => colorAccessor(key)),
         borderColor: selectedKeys.map(key => colorAccessor(key)),
         borderWidth: 1,
@@ -41,7 +41,7 @@ export function CategoriesPieChart({ records, selected }) {
     <PieChart 
       records={records} 
       selected={selected} 
-      field="type"
+      fieldAccessor={(pub) => pub.type}
       labelAccessor={(key) => dblpCategories[key].name} 
       colorAccessor={(key) => dblpCategories[key].color}
     />
@@ -53,7 +53,7 @@ export function RanksPieChart({ records, selected }) {
     <PieChart 
       records={records} 
       selected={selected} 
-      field="rank"
+      fieldAccessor={(pub) => pub.rank?.value}
       labelAccessor={(key) => corePortal.ranks[key].name} 
       colorAccessor={(key) => corePortal.ranks[key].color}
     />
@@ -63,7 +63,7 @@ export function RanksPieChart({ records, selected }) {
 
 
 
-function ByYearChart({ records, selected, field, labelAccessor, colorAccessor }) {
+function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
   const options = {
     scales: {
       y: {
@@ -105,8 +105,8 @@ function ByYearChart({ records, selected, field, labelAccessor, colorAccessor })
   for (let pub of records) {
     const year = pub.dblp.year;
 
-    if (selected[pub[field]]) {
-      dataByYear[year][pub[field]] = (dataByYear[year][pub[field]] || 0) + 1;
+    if (selected[fieldAccessor(pub)]) {
+      dataByYear[year][fieldAccessor(pub)] = (dataByYear[year][fieldAccessor(pub)] || 0) + 1;
     }
   }
 
@@ -131,7 +131,7 @@ export function CategoriesByYearChart({ records, selected }) {
     <ByYearChart
       records={records}
       selected={selected}
-      field="type"
+      fieldAccessor={(pub) => pub.type}
       labelAccessor={(key) => dblpCategories[key].name} 
       colorAccessor={(key) => dblpCategories[key].color}
     />
@@ -143,7 +143,7 @@ export function RanksByYearChart({ records, selected }) {
     <ByYearChart
       records={records}
       selected={selected}
-      field="rank"
+      fieldAccessor={(pub) => pub.rank?.value}
       labelAccessor={(key) => corePortal.ranks[key].name} 
       colorAccessor={(key) => corePortal.ranks[key].color}
     />

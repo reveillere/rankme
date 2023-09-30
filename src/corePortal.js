@@ -47,19 +47,19 @@ function findSourceForYear(list, year) {
 async function rank(coreRanks, publication) {
     try {
         const acronym = publication?.dblp?.booktitle;
-        if (!acronym) return "Unranked"; 
+        if (!acronym) return { value: "Unranked", msg: "No acronym" }; 
 
         const rankingSource = findSourceForYear(coreRanks, publication.dblp.year);
 
         const ranking = coreRanks.find(rank => rank.source === rankingSource)?.ranks;
-        if (!ranking) return "Unranked"; 
+        if (!ranking) return { value: "Unranked", msg: `No ranking found in ${rankingSource}` }; 
 
         const candidates = ranking.filter(conf => conf.acronym === acronym);
-        if (candidates.length === 0) return "Unranked";
-        if (candidates.length > 1) return "Multi";
+        if (candidates.length === 0) return { value: "Unranked", msg: `No matching acronym in ${rankingSource}` };
+        if (candidates.length > 1) return { value: "Multi", msg: `Multiple matching acronyms in ${rankingSource}` };
 
         const entry = candidates[0];
-        return ranks[entry.rank] ? entry.rank : "?";
+        return ranks[entry.rank] ? { value: entry.rank, msg: `Ranking from ${rankingSource}` } : { value: "?", msg: "Unknown rank" };
     } catch (error) {
         console.error('Error in rank function:', error);
         return "Error"; 

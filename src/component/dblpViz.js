@@ -72,6 +72,7 @@ export function PublicationsViz({ author, publications }) {
         }));
 
         setRankedPublications(updatedRecords);
+        console.log(rankedPublications)
       }
     };
 
@@ -86,7 +87,7 @@ export function PublicationsViz({ author, publications }) {
         .filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1])
         .filter(pub => filterCategories[pub.type])
         .filter(pub => {
-          return pub.type === 'inproceedings' ? filterRanks[pub.rank] : true;
+          return pub.type === 'inproceedings' ? filterRanks[pub?.rank?.value] : true;
         }
         );
       setFilteredRecords(publis);

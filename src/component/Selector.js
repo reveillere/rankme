@@ -4,6 +4,16 @@ import CorePortal from '../corePortal';
 import { dblpCategories } from '../dblp';
 
 function Selector({ records, selected, setSelected, data, filterKey }) {
+  const [recordCountByType, setRecordCountByType] = React.useState([]);
+
+  React.useEffect(() => {
+    const counts = Object.keys(selected).reduce((acc, key) => ({
+      ...acc,
+      [key]: records.filter(record => filterKey(record) === key).length
+    }), {});
+    setRecordCountByType(counts);
+  }, []);
+
   const handleSelectAll = () => {
     const allSelected = Object.keys(selected).reduce((acc, key) => ({ ...acc, [key]: true }), {});
     setSelected(allSelected);
@@ -29,7 +39,7 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
                 name={key}
                 style={{ color: value.color }}
               />}
-            label={`${value.name} (${records.filter(record => record[filterKey] === key).length})`}
+            label={`${value.name} (${recordCountByType[key] || 0})`}
             onChange={() => setSelected({ ...selected, [key]: !selected[key] })}
             style={{ margin: 0, width: '400px', fontSize: '0.8rem' }}
           />
@@ -45,9 +55,9 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
 }
 
 export function RankSelector(props) {
-  return <Selector {...props} data={CorePortal.ranks} filterKey="rank" />;
+  return <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value } />;
 }
 
 export function CategoriesSelector(props) {
-  return <Selector {...props} data={dblpCategories} filterKey="type" />;
+  return <Selector {...props} data={dblpCategories} filterKey={record => record.type} />;
 }
