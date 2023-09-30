@@ -10,6 +10,9 @@ import { CategoriesPieChart, RanksPieChart, CategoriesByYearChart, RanksByYearCh
 import { trimLastDigits } from '../utils';
 import CorePortal from '../corePortal'
 import { RankSelector, CategoriesSelector } from './Selector';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import Button from '@mui/material/Button';
+
 
 async function rankJournal(publication) {
   // console.log(publication.dblp);
@@ -25,8 +28,9 @@ export function PublicationsViz({ author, publications }) {
   const [tabSelect, setTabSelect] = useState(0);
   const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
   const [filterRanks, setFilterRanks] = React.useState(Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
-  const [rankedPublications, setRankedPublications] = useState ([...publications]);
+  const [rankedPublications, setRankedPublications] = useState([...publications]);
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
+  const [isFilterActive, setIsFilterActive] = useState(false);
 
   const [coreRanks, setCoreRanks] = useState(null);
 
@@ -82,9 +86,9 @@ export function PublicationsViz({ author, publications }) {
         .filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1])
         .filter(pub => filterCategories[pub.type])
         .filter(pub => {
-          return pub.type === 'inproceedings' ? filterRanks[pub.rank] : true ;
+          return pub.type === 'inproceedings' ? filterRanks[pub.rank] : true;
         }
-      );
+        );
       setFilteredRecords(publis);
     }
   }, [rankedPublications, filterYears, filterCategories, filterRanks]);
@@ -103,38 +107,55 @@ export function PublicationsViz({ author, publications }) {
 
   const publicationsShown = filteredRecords.length;
 
-  
+
 
   return (
     <div className='App'>
-      <h1>Records of {trimLastDigits(author.name)}</h1>
-      <div style={{ fontSize: 'large', marginTop: '-1em' }}>
-        {publicationsShown === 0 ? 'No record found' : publicationsShown === publications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${publications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 40px 0' }}>
-        <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Tabs value={tabGraph} onChange={handleTabGraph} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-            <Tab label="Stats by type" />
-            <Tab label="Stats by year" />
-          </Tabs>
-          <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-            {tabGraph === 0 && tabSelect === 0 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
-            {tabGraph === 0 && tabSelect === 1 && <RanksPieChart records={filteredRecords} selected={filterRanks} />}
 
-            {tabGraph === 1 && tabSelect === 0 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
-            {tabGraph === 1 && tabSelect === 1 && <RanksByYearChart records={filteredRecords} selected={filterRanks} />}
+
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div id='foo' style={{ textAlign: 'center' }}>
+          <h1>Records of {trimLastDigits(author.name)}</h1>
+          <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
+            {publicationsShown === 0 ? 'No record found' : publicationsShown === publications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${publications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
           </div>
         </div>
-        <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>
-        <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-            <Tab label="Categories" />
-            <Tab label="Ranks" />
-          </Tabs>
-          {tabSelect === 0 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} />}
-          {tabSelect === 1 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} /> }
-        </div>
+
+        <div style={{ marginLeft: '100px', marginTop: '40px'}}>
+          <FilterButton isFilterActive={isFilterActive} setIsFilterActive={setIsFilterActive} />
+        </div> 
+        
       </div>
-      <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
+
+      {isFilterActive &&
+
+        <><div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 40px 0' }}>
+          <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Tabs value={tabGraph} onChange={handleTabGraph} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
+              <Tab label="Stats by type" />
+              <Tab label="Stats by year" />
+            </Tabs>
+            <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              {tabGraph === 0 && tabSelect === 0 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
+              {tabGraph === 0 && tabSelect === 1 && <RanksPieChart records={filteredRecords} selected={filterRanks} />}
+
+              {tabGraph === 1 && tabSelect === 0 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
+              {tabGraph === 1 && tabSelect === 1 && <RanksByYearChart records={filteredRecords} selected={filterRanks} />}
+            </div>
+          </div>
+          <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>
+            <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
+              <Tab label="Categories" />
+              <Tab label="Ranks" />
+            </Tabs>
+            {tabSelect === 0 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} />}
+            {tabSelect === 1 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}
+          </div>
+        </div>
+          <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
+        </>
+      }
+
       <div style={{ height: '50px' }}></div>
       <Publications author={author} data={filteredRecords} />
     </div>
@@ -145,5 +166,20 @@ export function PublicationsViz({ author, publications }) {
 
 
 
+function FilterButton({ isFilterActive, setIsFilterActive }) {
+  const handleButtonClick = () => {
+    setIsFilterActive(!isFilterActive); 
+  };
 
+  return (
+    <Button
+      variant={isFilterActive ? "contained" : "outlined"}
+      color="primary"
+      endIcon={<FilterListIcon />}
+      onClick={handleButtonClick}
+    >
+      Filter
+    </Button>
+  );
+}
 

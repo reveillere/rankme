@@ -12,6 +12,8 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import SearchIcon from '@mui/icons-material/Search';
 
 
+
+
 function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -63,6 +65,7 @@ function App() {
         </AppBar>
 
         <About open={aboutDialogOpen} onClose={handleAboutClose} />
+
 
         <Routes>
           <Route path="/" element={<SearchAuthor />} />

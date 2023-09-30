@@ -1,18 +1,9 @@
 /* eslint-disable react/prop-types */
 
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faEye } from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
-import { PubList } from './PubList';
-import { useEffect, useState } from 'react';
 
 
 import {
-    Dialog,
-    DialogContent,
-    DialogActions,
-    Button,
-    IconButton,
     List,
     ListItem,
     ListItemButton,
