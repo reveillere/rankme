@@ -10,7 +10,7 @@ import HTMLParser from 'node-html-parser';
 const app = express();
 const port = 3000;
 
-const coreURL = 'http://portal.core.edu.au/conf-ranks/';
+const confURL = 'http://portal.core.edu.au/conf-ranks/';
 const querySource = '?search=&by=all&do=Export&source='
 
 // Définir les routes
@@ -20,7 +20,7 @@ app.use(cors());
 app.get('/core/source/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const url = `${coreURL}${querySource}${id}`;
+    const url = `${confURL}${querySource}${id}`;
     const text = await loadPage(url);
     res.send(text);
   } catch (e) {
@@ -88,8 +88,8 @@ function extractSources(list) {
 
 app.get('/core/sources', async (req, res) => {
   try {
-    console.log('Loading page:', coreURL);
-    const resp = await fetch(coreURL);
+    console.log('Loading page:', confURL);
+    const resp = await fetch(confURL);
     if (!resp.ok) throw new Error(`HTTP error! Status: ${resp.status}`);
     const text = await resp.text();
     res.send(text);
@@ -100,18 +100,16 @@ app.get('/core/sources', async (req, res) => {
 });
 
 
-
-
 app.get('/core/ranks', async (req, res) => {
   try {
-      const main = await loadPage(`${coreURL}`);
+      const main = await loadPage(`${confURL}`);
       const dom = HTMLParser.parse(main);
       const options = dom.querySelectorAll('select[name=source] option');
       const sources = extractSources(options.map(o => o.rawText));
 
       const promises = sources.map(async item => {
           try {
-              const rankRaw = await loadPage(`${coreURL}${querySource}${item.source}`);
+              const rankRaw = await loadPage(`${confURL}${querySource}${item.source}`);
               item.ranks = await parseRankSource(rankRaw);
           } catch (e) {
               console.error('Error loading and parsing rank for source:', item.source, e);

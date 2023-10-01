@@ -1,15 +1,21 @@
-import './App.css'
 import React, { useState, useEffect } from 'react';
-import { AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, IconButton } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-import SearchAuthor from './component/SearchAuthor';
-import { PubList } from './component/PubList';
-import PubViz from './component/PubViz';
-import Test from './Test';
-import About from './About'; // Import the About component
-import './utils.js';
+
+// Material-UI Components and Icons
+import { AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, IconButton } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SearchIcon from '@mui/icons-material/Search';
+
+// Custom Components
+import AuthorSearch from './component/Search';
+import { Author } from './component/Author';
+import Test from './Test';
+import About from './component/About'; 
+
+// Styles and Other
+import './App.css';
+import './utils.js';
+
 
 
 
@@ -68,10 +74,8 @@ function App() {
 
 
         <Routes>
-          <Route path="/" element={<SearchAuthor />} />
-          <Route path="/author/*" element={<PubViz />} />
-
-          <Route path="/publications/*" element={<PubList />} />
+          <Route path="/" element={<AuthorSearch />} />
+          <Route path="/author/*" element={<Author />} />
           <Route path="/test/" element={<Test />} />
         </Routes>
       </div>

@@ -32,34 +32,61 @@ export function normalizeTitle(line, acronym) {
 }
 
 
-export function distanceTitle(str1, str2) {
-  const words1 = new Set(normalize(str1, "EACL"));
-  const words2 = new Set(normalize(str2, "EACL"));
+// export function distanceTitle(str1, str2) {
+//   const words1 = new Set(normalize(str1, str1));
+//   const words2 = new Set(normalize(str2, str2));
 
 
-  let differentWordsCount = 0;
-  let commonWordsCount = 0;
+//   let differentWordsCount = 0;
+//   let commonWordsCount = 0;
 
-  for (const word of words1) {
-      if (words2.has(word)) commonWordsCount++;
-      else {
-          console.log(`Different word : ${word}`);
-          differentWordsCount++;
-      }
+//   for (const word of words1) {
+//       if (words2.has(word)) commonWordsCount++;
+//       else {
+//           console.log(`Different word : ${word}`);
+//           differentWordsCount++;
+//       }
+//   }
+
+//   for (const word of words2) {
+//       if (!words1.has(word)) {
+//           console.log(`Different word : ${word}`);
+//           differentWordsCount++;
+//       }
+//   }
+
+//   return {
+//       commonWordsCount,
+//       differentWordsCount
+//   };
+// }
+
+
+export function levenshteinDistance(str1, str2) {
+  const a = normalizeTitle(str1);
+  const b = normalizeTitle(str2);
+  
+  const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+
+  for (let i = 0; i <= a.length; i += 1) matrix[0][i] = i;
+  for (let j = 0; j <= b.length; j += 1) matrix[j][0] = j;
+
+  for (let j = 1; j <= b.length; j += 1) {
+    for (let i = 1; i <= a.length; i += 1) {
+      const substitutionCost = a[i - 1] === b[j - 1] ? 0 : 1;
+
+      matrix[j][i] = Math.min(
+        matrix[j - 1][i] + 1, // deletion
+        matrix[j][i - 1] + 1, // insertion
+        matrix[j - 1][i - 1] + substitutionCost, // substitution
+      );
+    }
   }
 
-  for (const word of words2) {
-      if (!words1.has(word)) {
-          console.log(`Different word : ${word}`);
-          differentWordsCount++;
-      }
-  }
-
-  return {
-      commonWordsCount,
-      differentWordsCount
-  };
+  return matrix[b.length][a.length];
 }
+
+
 
 
 

@@ -1,6 +1,14 @@
-import React from 'react';
-import { Dialog, DialogTitle, DialogActions, IconButton, DialogContent, Typography, Button } from '@mui/material';
+// Material-UI Components and Icons
+import {
+  Dialog,
+  DialogTitle,
+  DialogActions,
+  DialogContent,
+  Typography,
+  IconButton,
+} from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+
 
 function About({ open, onClose }) {
   return (

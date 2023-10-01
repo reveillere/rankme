@@ -12,7 +12,7 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
       [key]: records.filter(record => filterKey(record) === key).length
     }), {});
     setRecordCountByType(counts);
-  }, []);
+  }, [records]);
 
   const handleSelectAll = () => {
     const allSelected = Object.keys(selected).reduce((acc, key) => ({ ...acc, [key]: true }), {});
@@ -39,7 +39,17 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
                 name={key}
                 style={{ color: value.color }}
               />}
-            label={`${value.name} (${recordCountByType[key] || 0})`}
+            label={
+              <span style={{ color: selected[key] ? 'inherit' : 'lightgray' }}>
+              {(() => {
+                  let count = records.filter(record => filterKey(record) === key).length;
+                  if (selected[key])
+                    return `${value.name} (${count})`
+                  else
+                    return `${value.name} (${recordCountByType[key]})`
+                })()}
+              </span>
+            }
             onChange={() => setSelected({ ...selected, [key]: !selected[key] })}
             style={{ margin: 0, width: '400px', fontSize: '0.8rem' }}
           />

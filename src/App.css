@@ -53,7 +53,7 @@ ul.publ-list>li.year {
 }
 
 ul.publ-list>li.entry .rank {
-  width: 6em; /* Largeur fixe */
+  width: 7em; /* Largeur fixe */
   overflow: hidden; 
   text-align: center;
   /* padding-left: 1em; */
@@ -98,8 +98,8 @@ ul.publ-list>li.entry>cite {
 }
 
 cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
-cite.data .author a { color: #7d848a; text-decoration: none; cursor: pointer;}
-cite.data .author a:hover {
+cite.data .link a { color: #7d848a; text-decoration: none; cursor: pointer;}
+cite.data .link a:hover {
   color: blue;
   text-decoration: underline;
 }

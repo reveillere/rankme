@@ -43,14 +43,14 @@ export function Publications({ author, data }) {
                 </div>
                 <div className="nr">[{nr}]</div>
                 <div className="rank">
-                  {item.rank && <Tooltip title={item.rank.msg} arrow>{item.rank.value}</Tooltip> }
+                {item.rank && <Tooltip title={<div>{item.rank.msg}</div>} placement="bottom"><span>{item.rank.value}</span></Tooltip>}
                 </div>
                 <cite className='data'>
                   {
                     item.authors.length > 0
                       ? item.authors
                         .map((a, i) => (
-                          <span key={i} className="author">
+                          <span key={i} className="link">
                             {a.$.pid !== author.pid ? (
                               <a href={`/author/${a.$.pid}`}>
                                 {trimLastDigits(a._)}
@@ -80,22 +80,47 @@ export function Publications({ author, data }) {
 
 
 function Venue({ item }) {
+  let link;
+  let extra;
+  if (item.type === 'article') {
+    let pages = item.dblp.pages;
+    link = (
+      <>
+        {item.venue} {item.dblp.volume}({item.dblp.number}){pages && ':'} {pages}
+      </>
+    );
+    extra = (
+      <>
+        ({item.dblp.year})
+      </>
+    );
+  } else if (item.type === 'inproceedings') {
+    link = (
+      <>
+        {item.venue} {item.dblp.year} 
+      </>
+    );
+    extra = (
+      <>
+        : {item.dblp.pages}
+      </>
+    );
+  } else {
+    extra = (
+      <>
+        {item.venue} {item.dblp.year} {item.dblp.pages}
+      </>
+    );
+  }
+
   return (
-    <span className='venue'>
-      {
-        item.type === 'article' ? (
-          <>
-            {item.venue} {item.dblp.pages} ({item.year})
-          </>
-        ) : (
-          <>
-            {item.venue} {item.dblp.year} {item.dblp.pages}
-          </>
-        )
-      }
+    <span className='link'>
+      <span className='venue'>{link}</span>
     </span>
-  )
+  );
 }
+
+
 
 
 export function PubList(props) {

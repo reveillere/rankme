@@ -132,6 +132,31 @@ export function getPublications(author, n) {
 }
 
 
+export async function getVenueTitle(publication) {
+    if (publication.type === 'inproceedings') {
+        let url = publication.dblp.url.replace(/\/[^/]+\.html#.*$/, "/index.xml");
+        try {
+            // Make an HTTP request to the DBLP API using fetch
+            const response = await fetch(`https://dblp.org/${url}`);
+    
+            // Check if the response status is OK (200)
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+    
+            // Parse the XML response
+            const xmlData = await response.text();
+            const parser = new xml2js.Parser({ explicitArray: false });
+            const result = await parser.parseStringPromise(xmlData);
+            return result?.bht?.h1;
+        } catch (error) {
+            console.error('Error fetching conference full name:', error);
+            return "";
+        }
+    } else return "";
+} 
 
 
 
+
+ 
