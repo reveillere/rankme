@@ -56,7 +56,14 @@ async function parseRankSource(txt) {
           }
       });
       
-      return results.data;
+      const filteredData = results.data.map(item => ({
+        id: item.id,
+        title: item.title,
+        acronym: item.acronym,
+        rank: item.rank
+      }));
+      
+      return filteredData;
   } catch (e) {
       console.error('Fetch Error: ', e);
       throw e;

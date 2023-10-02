@@ -10,7 +10,7 @@ import FilterListIcon from '@mui/icons-material/FilterList';
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
 
 // DBLP and CorePortal
-import { dblpCategories, fetchAuthor, getPublications } from '../dblp';
+import { dblpCategories, fetchAuthor, getPublications, getVenueTitle } from '../dblp';
 import CorePortal from '../corePortal';
 
 // Components
@@ -49,7 +49,7 @@ export function Author() {
         ;
 
     const publications = getPublications(author);
-    return <PublicationsViz author={author?.dblpperson?.$} publications={publications} /> ;
+    return <AuthorShow author={author?.dblpperson?.$} publications={publications} /> ;
 }
 
 
@@ -59,7 +59,7 @@ async function rankJournal(publication) {
   
   
   
-function PublicationsViz({ author, publications }) {
+function AuthorShow({ author, publications }) {
     const minYear = Math.min(...publications.map(pub => pub.dblp.year));
     const maxYear = Math.max(...publications.map(pub => pub.dblp.year));
     const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
@@ -95,6 +95,7 @@ function PublicationsViz({ author, publications }) {
           const inproceedings = updatedRecords.filter(pub => pub.type === 'inproceedings');
           await Promise.all(inproceedings.map(async (pub) => {
             try {
+              pub.fullName = await getVenueTitle(pub);
               pub.rank = await CorePortal.rank(coreRanks, pub);
             } catch (error) {
               console.error('Error ranking inproceedings:', error);
@@ -104,6 +105,7 @@ function PublicationsViz({ author, publications }) {
           const articles = updatedRecords.filter(pub => pub.type === 'article');
           await Promise.all(articles.map(async (pub) => {
             try {
+              pub.fullName = await getVenueTitle(pub);
               await rankJournal(pub);
             } catch (error) {
               console.error('Error ranking article:', error);
@@ -123,11 +125,7 @@ function PublicationsViz({ author, publications }) {
       if (rankedPublications) {
         const publis = rankedPublications
           .filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1])
-          .filter(pub => filterCategories[pub.type])
-          .filter(pub => {
-            return pub.type === 'inproceedings' ? filterRanks[pub?.rank?.value] : true;
-          }
-          );
+          .filter(pub => filterCategories[pub.type]);
         setFilteredRecords(publis);
       }
     }, [rankedPublications, filterYears, filterCategories, filterRanks]);

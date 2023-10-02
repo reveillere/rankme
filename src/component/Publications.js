@@ -78,47 +78,62 @@ export function Publications({ author, data }) {
   );
 }
 
-
 function Venue({ item }) {
   let link;
   let extra;
-  if (item.type === 'article') {
-    let pages = item.dblp.pages;
-    link = (
-      <>
-        {item.venue} {item.dblp.volume}({item.dblp.number}){pages && ':'} {pages}
-      </>
-    );
-    extra = (
-      <>
-        ({item.dblp.year})
-      </>
-    );
-  } else if (item.type === 'inproceedings') {
-    link = (
-      <>
-        {item.venue} {item.dblp.year} 
-      </>
-    );
-    extra = (
-      <>
-        : {item.dblp.pages}
-      </>
-    );
-  } else {
-    extra = (
-      <>
-        {item.venue} {item.dblp.year} {item.dblp.pages}
-      </>
-    );
+  
+  const { type, venue, dblp: { pages, volume, number, year, journal, publisher, isbn } = {} } = item || {};
+
+  switch(type) {
+    case 'article':
+      link = (
+        <>
+          {venue} {volume}{number && `(${number})`}{pages && `: ${pages}`}
+        </>
+      );
+      extra = <> ({year})</>;
+      break;
+    case 'inproceedings':
+      link = <>{venue} {year}</>;
+      extra = pages && <>: {pages}</>;
+      break;
+    case 'informal':
+      link = <>{journal} {volume}</>;
+      extra = <>({year})</>;
+      break;
+    case 'proceedings':
+      link = <>{publisher} {year}, ISBN {isbn}</>;
+      extra = <>{venue} {year} {pages} ({year})</>;
+      break;
+    case 'book':
+      extra = <>{venue} {year} {pages}</>;
+      break;
+    case 'incollection': 
+      extra = <>{venue} {year} {pages} ({year})</>;
+      break;
+    default:
+      extra = <>{venue} {year} {pages} ({year})</>;
   }
 
   return (
     <span className='link'>
-      <span className='venue'>{link}</span>
+      <span className='venue'>
+        {item.fullName ? 
+          <a>
+            <Tooltip title={<div>{item.fullName}</div>} placement="bottom">
+              <span>{link}</span>
+            </Tooltip>
+          </a> 
+          : 
+          link
+        }
+         {extra}
+      </span>
     </span>
   );
 }
+
+
 
 
 

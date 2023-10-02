@@ -8,12 +8,11 @@ export const trimLastDigits = (str) => {
 }
 
 
-export function normalizeTitle(line, acronym) {
+export function normalizeTitle(line) {
   const wordsToRemove = ['acm', 'ieee', 'international', 'national']
       .concat(['symposium', 'conference', 'workshop', 'proceedings', 'chapter', 'association'])
       .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
       .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
-  if (acronym && acronym.trim()) wordsToRemove.push(acronym.trim().toLowerCase()); // add acronym to wordsToRemove if provided
 
 
   const regex = new RegExp(`\\b(?<!-)(?:${wordsToRemove.join('|')})(?!-)\\b`, 'gi');
@@ -30,36 +29,6 @@ export function normalizeTitle(line, acronym) {
       .split(/\s+/) // split by whitespace
       .filter(Boolean); // remove empty strings
 }
-
-
-// export function distanceTitle(str1, str2) {
-//   const words1 = new Set(normalize(str1, str1));
-//   const words2 = new Set(normalize(str2, str2));
-
-
-//   let differentWordsCount = 0;
-//   let commonWordsCount = 0;
-
-//   for (const word of words1) {
-//       if (words2.has(word)) commonWordsCount++;
-//       else {
-//           console.log(`Different word : ${word}`);
-//           differentWordsCount++;
-//       }
-//   }
-
-//   for (const word of words2) {
-//       if (!words1.has(word)) {
-//           console.log(`Different word : ${word}`);
-//           differentWordsCount++;
-//       }
-//   }
-
-//   return {
-//       commonWordsCount,
-//       differentWordsCount
-//   };
-// }
 
 
 export function levenshteinDistance(str1, str2) {

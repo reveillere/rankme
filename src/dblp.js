@@ -6,9 +6,9 @@ import { ensureArray } from './utils';
 export const dblpCategories = {
     'article'       : { name: 'Journal articles', letter: 'j', color: '#c32b72' },
     'inproceedings' : { name: 'Conference and Workshop Papers', letter: 'c', color: '#196ca3'},
-    'proceedings'   : { name: 'Editorship', letter: 'e', color: '#0aeedf' },
-    'book'          : { name: 'Books and Theses', letter: 'b', color: '#33c36d' },
-    'incollection'  : { name: 'Parts in Books or Collections', letter: 'p', color: '#96ad2c' },
+    'proceedings'   : { name: 'Editorship', letter: 'e', color: '#33c3ba' },
+    'book'          : { name: 'Books and Theses', letter: 'b', color: '#f8c91f' },
+    'incollection'  : { name: 'Parts in Books or Collections', letter: 'p', color: '#ef942d' },
     'informal'      : { name: 'Informal and Other Publications', letter: 'i', color: '#606b70' },
 }
 
@@ -100,12 +100,13 @@ export function getPublications(author, n) {
                 publicationObject.dblp = publication.proceedings;
             } else if (publication.book) {
                 if (publication.book?.$?.publtype === 'habil') {
-                    publicationObject.venue = publication.school
+                    publicationObject.venue = publication.book.school
+                    publicationObject.authors = ensureArray(publication?.book?.author);
                 } else {
                     publicationObject.venue = publication.book.publisher;
+                    publicationObject.authors = ensureArray(publication?.book?.editor);
                 }
                 publicationObject.type = 'book';
-                publicationObject.authors = ensureArray(publication?.book?.editor);
                 publicationObject.dblp = publication.book;
             } else if (publication.incollection) {
                 publicationObject.type = 'incollection';
@@ -133,7 +134,6 @@ export function getPublications(author, n) {
 
 
 export async function getVenueTitle(publication) {
-    if (publication.type === 'inproceedings') {
         let url = publication.dblp.url.replace(/\/[^/]+\.html#.*$/, "/index.xml");
         try {
             // Make an HTTP request to the DBLP API using fetch
@@ -153,7 +153,6 @@ export async function getVenueTitle(publication) {
             console.error('Error fetching conference full name:', error);
             return "";
         }
-    } else return "";
 } 
 
 

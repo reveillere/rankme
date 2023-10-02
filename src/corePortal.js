@@ -62,10 +62,9 @@ async function rank(coreRanks, publication) {
         }
 
         if (candidates.length > 1) {
-            let fullName = await getVenueTitle(publication);
-            let distances = candidates.map(conf => ({ conf: conf, distance: levenshteinDistance(fullName, conf.title) }));
+            let distances = candidates.map(conf => ({ conf: conf, distance: levenshteinDistance(publication.fullName, conf.title, conf) }));
             let bestMatch = distances.reduce((min, current) => current.distance < min.distance ? current : min, distances[0]);
-            console.log(`Best match for ${acronym} in ${publication.dblp.year} is ${bestMatch.conf.title} with distance ${bestMatch.distance}`);
+            console.log(`Best match for ${acronym} in ${publication.dblp.year} is ${bestMatch.conf.title} with distance=${bestMatch.distance}`);
             return checkForKnownRank(bestMatch.conf.rank, rankingSource);
         }
 
