@@ -27,7 +27,7 @@ services:
     <<: *common-service
     build:
       context: reverse-proxy/
-      dockerfile: ./Dockerfile.dev
+      dockerfile: ./Dockerfile.prod
 
     volumes:
       - ./reverse-proxy/logs:/var/log/nginx
