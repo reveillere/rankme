@@ -31,7 +31,7 @@ services:
 
     volumes:
       - ./reverse-proxy/logs:/var/log/nginx
-    - type: bind
+      - type: bind
         source: "/etc/letsencrypt"
         target: "/etc/letsencrypt"
         read_only: true
