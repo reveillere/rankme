@@ -1,0 +1,40 @@
+version: "3.3"
+
+x-common-service: &common-service
+  restart: always
+
+services:
+  api:
+    <<: *common-service
+    build:
+      context: api/
+      dockerfile: ./Dockerfile.prod
+
+    volumes:
+      - ./api/src:/app/src
+      - ./api/logs:/app/logs
+
+  front:
+    <<: *common-service
+    build:
+      context: front/
+      dockerfile: ./Dockerfile.dev
+
+    volumes:
+      - ./front/src:/app/src
+
+  reverseproxy:
+    <<: *common-service
+    build:
+      context: reverse-proxy/
+      dockerfile: ./Dockerfile.dev
+
+    volumes:
+      - ./reverse-proxy/logs:/var/log/nginx
+    # - type: bind
+      #   source: "/etc/letsencrypt"
+      #   target: "/etc/letsencrypt"
+      #   read_only: true
+    ports:
+      - 8080:80
+      # - 443:443

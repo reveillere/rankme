@@ -1,0 +1,48 @@
+2023/10/05 11:36:06 [error] 24#24: *9 upstream prematurely closed connection while reading response header from upstream, client: 172.18.0.1, server: localhost, request: "GET /api/core/rank?acronym=ICECS&title=International%20Conference%20on%20Electronics%2C%20Circuits%2C%20and%20Systems%20(ICECS)&year=2013 HTTP/1.1", upstream: "http://172.18.0.4:80/core/rank?acronym=ICECS&title=International%20Conference%20on%20Electronics%2C%20Circuits%2C%20and%20Systems%20(ICECS)&year=2013", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/iscc/iscc2013.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/iscc/iscc2013.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/iscc/iscc2013.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/iscc/iscc2013.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/journals/ijaacs/ijaacs5.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/journals/ijaacs/ijaacs5.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/journals/ijsnet/ijsnet11.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/journals/ijsnet/ijsnet11.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/journals/jnca/jnca35.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/journals/jnca/jnca35.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/camad/camad2012.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/camad/camad2012.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/ccnc/ccnc2012.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/ccnc/ccnc2012.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/icc/icc2012.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/icc/icc2012.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:36:06 [error] 24#24: *9 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /api/dblp/venue/db/conf/icc/icc2012.html HTTP/1.1", upstream: "http://172.18.0.4:80/dblp/venue/db/conf/icc/icc2012.html", host: "localhost:8080", referrer: "http://localhost:8080/author/18/4550"
+2023/10/05 11:55:26 [error] 29#29: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://172.18.0.3:80/", host: "localhost:8080", referrer: "http://localhost:8080/author/291/3048"
+2023/10/05 11:55:26 [error] 29#29: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /author/291/3048 HTTP/1.1", upstream: "http://172.18.0.3:80/author/291/3048", host: "localhost:8080", referrer: "http://localhost:8080/author/291/3048"
+2023/10/05 11:55:26 [error] 29#29: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /favicon.ico HTTP/1.1", upstream: "http://172.18.0.3:80/favicon.ico", host: "localhost:8080", referrer: "http://localhost:8080/author/291/3048"
+2023/10/05 12:19:12 [error] 22#22: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://172.18.0.3:80/", host: "localhost:8080", referrer: "http://localhost:8080/author/11/1262"
+2023/10/05 12:19:12 [error] 22#22: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /author/11/1262 HTTP/1.1", upstream: "http://172.18.0.3:80/author/11/1262", host: "localhost:8080", referrer: "http://localhost:8080/author/11/1262"
+2023/10/05 12:19:12 [error] 22#22: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /favicon.ico HTTP/1.1", upstream: "http://172.18.0.3:80/favicon.ico", host: "localhost:8080", referrer: "http://localhost:8080/author/11/1262"
+2023/10/05 12:28:17 [error] 23#23: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://172.18.0.4:80/", host: "localhost:8080", referrer: "http://localhost:8080/author/52/2030"
+2023/10/05 12:28:17 [error] 23#23: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /author/52/2030 HTTP/1.1", upstream: "http://172.18.0.4:80/author/52/2030", host: "localhost:8080", referrer: "http://localhost:8080/author/52/2030"
+2023/10/05 13:30:43 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:44 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:44 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:45 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:46 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:48 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:52 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:30:59 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:31:12 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:31:38 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:32:29 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:33:29 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:34:30 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:35:31 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:36:31 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:37:31 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:38:32 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:39:32 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:40:33 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:41:33 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:42:34 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:43:34 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:44:34 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:45:35 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:46:35 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:47:36 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:48:36 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:49:36 [emerg] 1#1: host not found in upstream "front" in /etc/nginx/nginx.conf:14
+2023/10/05 13:51:32 [error] 23#23: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET / HTTP/1.1", upstream: "http://172.18.0.3:80/", host: "localhost:8080", referrer: "http://localhost:8080/author/347/5524"
+2023/10/05 13:51:32 [error] 23#23: *1 connect() failed (111: Connection refused) while connecting to upstream, client: 172.18.0.1, server: localhost, request: "GET /author/347/5524 HTTP/1.1", upstream: "http://172.18.0.3:80/author/347/5524", host: "localhost:8080", referrer: "http://localhost:8080/author/347/5524"

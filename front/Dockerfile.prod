@@ -1,0 +1,17 @@
+FROM node
+
+WORKDIR /app
+
+COPY package.json ./
+RUN npm install
+
+COPY vite.config.js ./
+COPY public/ public/
+COPY index.html ./
+COPY server.js ./
+COPY src/ ./
+
+EXPOSE 80
+
+RUN npm run build
+CMD npm start

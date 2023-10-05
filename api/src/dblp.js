@@ -23,7 +23,6 @@ export async function fetchAuthor(req, res) {
         }
 
         // Make an HTTP request to the DBLP API using fetch
-        console.log('doing the fetch to DBLP for url', url)
         const response = await throttler.fetch(url);
 
         // Check if the response status is OK (200)
