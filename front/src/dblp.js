@@ -1,74 +1,52 @@
 
-import xml2js from 'xml2js';
 import { ensureArray } from './utils';
-
+import withCache from './cache';
 
 export const dblpCategories = {
-    'article'       : { name: 'Journal articles', letter: 'j', color: '#c32b72' },
-    'inproceedings' : { name: 'Conference and Workshop Papers', letter: 'c', color: '#196ca3'},
-    'proceedings'   : { name: 'Editorship', letter: 'e', color: '#33c3ba' },
-    'book'          : { name: 'Books and Theses', letter: 'b', color: '#f8c91f' },
-    'incollection'  : { name: 'Parts in Books or Collections', letter: 'p', color: '#ef942d' },
-    'informal'      : { name: 'Informal and Other Publications', letter: 'i', color: '#606b70' },
+    'article': { name: 'Journal articles', letter: 'j', color: '#c32b72' },
+    'inproceedings': { name: 'Conference and Workshop Papers', letter: 'c', color: '#196ca3' },
+    'proceedings': { name: 'Editorship', letter: 'e', color: '#33c3ba' },
+    'book': { name: 'Books and Theses', letter: 'b', color: '#f8c91f' },
+    'incollection': { name: 'Parts in Books or Collections', letter: 'p', color: '#ef942d' },
+    'informal': { name: 'Informal and Other Publications', letter: 'i', color: '#606b70' },
 }
 
-const affiliations = jsonData => {
-    const note = jsonData.info?.notes?.note;
-    if (note && note["@type"] === "affiliation")
-        return note.text;
-    else return '';
-}
 
 
 export async function searchAuthor(query) {
-    const prefix = "https://dblp.org/pid/";
-    const pid = url => url.substring(prefix.length);
-    try {
-        const url = 'https://dblp.org/search/author/api/?format=json&q=' + query;
-        const response = await fetch(url);
-        const data = await response.json();
-        const hits = data.result.hits;
-
-        if (hits['@total'] === "0") {
-            return []
-        } else {
-
-            return hits.hit.map(hit => ({
-                author: hit.info.author,
-                pid: pid(hit.info.url),
-                affiliation: affiliations(hit),
-            }));
-        }
-    } catch (error) {
-        console.error('Error fetching author:', error);
-        return [];
-    }
+    const cacheKey = `authorSearch:${query}`;
+    return await withCache(cacheKey, async () => {
+        const resp = await fetch(`/api/dblp/search/author/${query}`);
+        const data = await resp.json();
+        return data;
+    });
 }
 
 export async function fetchAuthor(authorPID) {
-    try {
-        // Make an HTTP request to the DBLP API using fetch
-        const response = await fetch(`https://dblp.org/pid/${authorPID}.xml`);
-
-        // Check if the response status is OK (200)
-        if (!response.ok) {
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        // Parse the XML response
-        const xmlData = await response.text();
-        const parser = new xml2js.Parser({ explicitArray: false });
-        const result = await parser.parseStringPromise(xmlData);
-        return result;
-    } catch (error) {
-        console.error('Error fetching author:', error);
-        return [];
-    }
+    const cacheKey = `author:${authorPID}`;
+    return await withCache(cacheKey, async () => {
+        const resp = await fetch(`/api/dblp/author/${authorPID}`);
+        const data = await resp.json();
+        return data;
+    });
 }
+
+
+export async function getVenueTitle(publication) {
+    const cacheKey = `venue:${publication.dblp.url}`;
+    return await withCache(cacheKey, async () => {
+        const resp = await fetch(`/api/dblp/venue/${publication.dblp.url}`);
+        const data = await resp.json();
+        return data;
+    });
+}
+
 
 export function getName(author) {
     return author?.dblpperson?.$?.name;
 }
+
+
 
 // Function to fetch the last n publications of an author on DBLP
 export function getPublications(author, n) {
@@ -133,29 +111,5 @@ export function getPublications(author, n) {
 }
 
 
-export async function getVenueTitle(publication) {
-        let url = publication.dblp.url.replace(/\/[^/]+\.html#.*$/, "/index.xml");
-        try {
-            // Make an HTTP request to the DBLP API using fetch
-            const response = await fetch(`https://dblp.org/${url}`);
-    
-            // Check if the response status is OK (200)
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-    
-            // Parse the XML response
-            const xmlData = await response.text();
-            const parser = new xml2js.Parser({ explicitArray: false });
-            const result = await parser.parseStringPromise(xmlData);
-            return result?.bht?.h1;
-        } catch (error) {
-            console.error('Error fetching conference full name:', error);
-            return "";
-        }
-} 
 
 
-
-
- 

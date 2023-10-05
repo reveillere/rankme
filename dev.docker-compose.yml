@@ -1,0 +1,27 @@
+version: "3.3"
+services:
+  api:
+    build:
+      context: api/
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./api/src:/app/src
+    restart: always
+
+  front:
+    build:
+      context: front/
+      dockerfile: ./Dockerfile
+    volumes:
+      - ./front/src:/app/src
+    restart: always
+  
+  reverseproxy:
+    build:
+      context: reverse-proxy/
+      dockerfile: ./dev.dockerfile
+    volumes:
+    -  ./reverse-proxy/logs:/var/log/nginx
+    ports:
+          - 8080:80
+    restart: always

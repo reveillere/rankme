@@ -1,8 +1,6 @@
 import { defineConfig, transformWithEsbuild } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// console.log(import.meta.env);
-
 export default defineConfig({
   base: '/',
   plugins: [
@@ -42,11 +40,21 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'vendor': ['react', 'react-dom', 'react-router-dom', 'chart.js', 'xml2js', 'react-datepicker', 'react-chartjs-2'],
+          'vendor': ['react', 'react-dom', 'react-router-dom', 'chart.js', 'react-datepicker', 'react-chartjs-2'],
           'mui' : ['@mui/material', '@mui/icons-material']
         }
       }
-    }
+    },
+  },
+
+  server: {
+    watch: {
+      usePolling: true,
+    },
+    host: true, 
+    strictPort: true,
+    port: 80, 
   }
+
 
 })

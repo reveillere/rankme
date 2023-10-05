@@ -21,7 +21,7 @@ function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccess
   
   const selectedKeys = Object.keys(selected);
   
-  const data = {
+  const datas = {
     labels: selectedKeys.map(key => labelAccessor(key)),
     datasets: [
       {
@@ -33,7 +33,8 @@ function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccess
     ],
   };
   
-  return <Pie options={options} data={data} />;
+
+  return <Pie options={options} data={datas} />;
 }
 
 export function CategoriesPieChart({ records, selected }) {

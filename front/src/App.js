@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, Box, Menu, MenuItem, IconButton } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import SearchIcon from '@mui/icons-material/Search';
+import CircularProgress from '@mui/material/CircularProgress';
 
 // Custom Components
 import AuthorSearch from './component/Search';
@@ -51,14 +52,14 @@ function App() {
               </Typography>
               <Button color="inherit" component={Link} to="/">      <SearchIcon />
               </Button>
-              <IconButton color="inherit" onClick={handleMenuOpen}>
-                <SettingsIcon />
-              </IconButton>
+              {/* <IconButton color="inherit">
+                <CircularProgress /> 
+              </IconButton> */}
             </Box>
             <Button color="inherit" onClick={handleAboutOpen}>About</Button>
           </Toolbar>
 
-          <Menu
+          {/* <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
             onClose={handleMenuClose}
@@ -67,7 +68,7 @@ function App() {
               localStorage.clear();
               handleMenuClose();
             }}>Clear Cache</MenuItem>
-          </Menu>
+          </Menu> */}
         </AppBar>
 
         <About open={aboutDialogOpen} onClose={handleAboutClose} />
