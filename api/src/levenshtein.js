@@ -1,5 +1,5 @@
 function normalizeTitle(line) {
-  const wordsToRemove = ['acm', 'ieee', 'international', 'national']
+  const wordsToRemove = ['acm', 'ieee', 'international', 'national', 'IFIP']
       .concat(['symposium', 'conference', 'workshop', 'proceedings', 'chapter', 'association'])
       .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
       .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);

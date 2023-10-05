@@ -103,7 +103,7 @@ async function parseRankSource(txt) {
     return results.data.map(item => ({
       id: item.id,
       title: item.title,
-      acronym: item.acronym,
+      acronym: (""+ item.acronym).toUpperCase(),
       rank: item.rank
     })).filter(item => item.id !== "");
   } catch (e) {
@@ -122,7 +122,7 @@ export async function controllerRank(req, res) {
     return;
   }
 
-  const rank = await getRank(acronym, title, year);
+  const rank = await getRank(acronym.toUpperCase(), title, year);
   res.json(rank);
 }
 
@@ -150,7 +150,13 @@ async function getRank(acronym, title, year) {
     { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}`, exact: exact, score: score };
 
   if (candidates.length === 0) {
-    rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+    const exactMatch = source.find(conf => levenshtein(conf.title, title) === 0);
+    
+    if (exactMatch) {
+        rank = sanitizedRank(exactMatch.rank, false, 0);
+    } else {
+        rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+    }
   } else if (candidates.length > 1) {
     let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(conf.title, title) }));
     let bestMatch = scores.reduce((min, current) => current.score < min.score ? current : min, scores[0]);

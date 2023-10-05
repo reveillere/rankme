@@ -52,14 +52,14 @@ function App() {
               </Typography>
               <Button color="inherit" component={Link} to="/">      <SearchIcon />
               </Button>
-              {/* <IconButton color="inherit">
-                <CircularProgress /> 
-              </IconButton> */}
+              <IconButton color="inherit" onClick={handleMenuOpen}>
+                <SettingsIcon /> 
+              </IconButton>
             </Box>
             <Button color="inherit" onClick={handleAboutOpen}>About</Button>
           </Toolbar>
 
-          {/* <Menu
+          <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
             onClose={handleMenuClose}
@@ -68,7 +68,7 @@ function App() {
               localStorage.clear();
               handleMenuClose();
             }}>Clear Cache</MenuItem>
-          </Menu> */}
+          </Menu>
         </AppBar>
 
         <About open={aboutDialogOpen} onClose={handleAboutClose} />
