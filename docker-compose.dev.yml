@@ -3,12 +3,18 @@ version: "3.3"
 x-common-service: &common-service
   restart: always
 
+
 services:
   api:
     <<: *common-service
     build:
       context: api/
       dockerfile: ./Dockerfile.dev
+    # depends_on:
+    #   - mongo
+    # environment:
+    #   - MONGO_URI=mongodb://mongo:27017/rankme
+
 
     volumes:
       - ./api/src:/app/src
@@ -33,3 +39,14 @@ services:
       - ./reverse-proxy/logs:/var/log/nginx
     ports:
       - 8080:80
+
+#   mongo:
+#     <<: *common-service
+#     image: mongo:latest
+#     ports:
+#       - "27017:27017"
+#     volumes:
+#       - mongo-data:/data/db
+
+# volumes:
+#   mongo-data:

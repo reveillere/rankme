@@ -1,5 +1,5 @@
-import { defineConfig, transformWithEsbuild } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, transformWithEsbuild } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   base: '/',
@@ -7,14 +7,12 @@ export default defineConfig({
     {
       name: 'treat-js-files-as-jsx',
       async transform(code, id) {
-        if (!id.match(/src\/.*\.js$/)) return null
+        if (!id.match(/src\/.*\.js$/)) return null;
 
-        // Use the exposed transform from vite, instead of directly
-        // transforming with esbuild
         return transformWithEsbuild(code, id, {
           loader: 'jsx',
           jsx: 'automatic',
-        })
+        });
       },
     },
     react(),
@@ -28,33 +26,13 @@ export default defineConfig({
       },
     },
   },
-
-  resolve: {
-    alias: {
-      'string_decoder': 'string_decoder/',
-      'buffer': 'buffer/'
-    }
-  },
-
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'vendor': ['react', 'react-dom', 'react-router-dom', 'chart.js', 'react-datepicker', 'react-chartjs-2'],
-          'mui' : ['@mui/material', '@mui/icons-material']
-        }
-      }
-    },
-  },
-
+  
   server: {
     watch: {
       usePolling: true,
     },
-    host: true, 
+    host: true,
     strictPort: true,
-    port: 80, 
-  }
-
-
-})
+    port: 80,
+  },
+});

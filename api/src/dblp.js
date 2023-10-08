@@ -2,7 +2,7 @@ import xml2js from 'xml2js';
 import QueueThrottler from './throttler.js';
 import NodeCache from 'node-cache';
 
-export const BASE = 'https://dblp.org';
+const BASE = 'https://dblp.org';
 
 const throttler = new QueueThrottler();
 

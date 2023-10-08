@@ -42,7 +42,7 @@ function App() {
   };
 
   return (
-    <Router>
+    <Router basename='/'>
       <div>
         <AppBar position="static" style={{ backgroundColor: '#123456', height: '64px' }}>
           <Toolbar style={{ display: 'flex', justifyContent: 'space-between' }}>

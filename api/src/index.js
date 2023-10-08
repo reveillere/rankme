@@ -14,5 +14,11 @@ app.use(morgan('dev', { stream: accessLogStream }));
 app.use(router);
 
 app.listen(port, () => {
+  console.log(`Trying to configure the DB`);
+  initDB();
   console.log(`Server is running ...`);
 });
+
+function initDB() {
+  console.log('Initializing DB ...');
+}
