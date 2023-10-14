@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 import NodeCache from 'node-cache';
-import { levenshtein } from './levenshtein.js';  
+import { normalizeTitle, levenshtein } from './levenshtein.js';  
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
 export const querySource = '?search=&by=all&do=Export&source=';
@@ -129,6 +129,7 @@ export async function controllerRank(req, res) {
 
 
 async function getRank(acronym, title, year) {  
+  const titleNormalized = normalizeTitle(title);
 
   const key = `rank:${acronym}:${title}:${year}`
   let rank = coreDB.get(key); 
@@ -150,7 +151,7 @@ async function getRank(acronym, title, year) {
     { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}`, exact: exact, score: score };
 
   if (candidates.length === 0) {
-    const exactMatch = source.find(conf => levenshtein(conf.title, title) === 0);
+    const exactMatch = source.find(conf => levenshtein(normalizeTitle(conf.title), titleNormalized) === 0);
     
     if (exactMatch) {
         rank = sanitizedRank(exactMatch.rank, false, 0);
@@ -158,12 +159,12 @@ async function getRank(acronym, title, year) {
         rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
     }
   } else if (candidates.length > 1) {
-    let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(conf.title, title) }));
+    let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(normalizeTitle(conf.title), titleNormalized) }));
     let bestMatch = scores.reduce((min, current) => current.score < min.score ? current : min, scores[0]);
     rank = sanitizedRank(bestMatch.conf.rank, false, bestMatch.score);
   } else {
     const entry = candidates[0];
-    const score = levenshtein(entry.title, title);
+    const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
     rank = sanitizedRank(entry.rank, true, score);
   } 
 

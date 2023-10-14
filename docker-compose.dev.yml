@@ -10,15 +10,16 @@ services:
     build:
       context: api/
       dockerfile: ./Dockerfile.dev
-    # depends_on:
-    #   - mongo
-    # environment:
-    #   - MONGO_URI=mongodb://mongo:27017/rankme
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/rankme
 
 
     volumes:
       - ./api/src:/app/src
       - ./api/logs:/app/logs
+      - ./api/data:/app/data
 
   front:
     <<: *common-service
@@ -34,19 +35,21 @@ services:
     build:
       context: reverse-proxy/
       dockerfile: ./Dockerfile.dev
-
+    depends_on:
+      - api
+      - front
     volumes:
       - ./reverse-proxy/logs:/var/log/nginx
     ports:
       - 8080:80
 
-#   mongo:
-#     <<: *common-service
-#     image: mongo:latest
-#     ports:
-#       - "27017:27017"
-#     volumes:
-#       - mongo-data:/data/db
+  mongo:
+    <<: *common-service
+    image: mongo:latest
+    ports:
+      - 27017:27017
+    volumes:
+      - ./mongodb/data:/app/db
+      - ./mongodb/log:/var/log/mongodb
+    command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
 
-# volumes:
-#   mongo-data:

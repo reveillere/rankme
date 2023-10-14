@@ -13,7 +13,7 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
     const [displayMarks, setDisplayMarks] = React.useState(initialMarks);
     const defaultRange = 4;
     const [minimalRange, setMinimalRange] = React.useState(defaultRange);
-    const [disableSwap, setDisableSwap] = React.useState(true);
+    const [disableSwap, setDisableSwap] = React.useState(false);
 
 
     const handleChange = (event, newValue, activeThumb) => {

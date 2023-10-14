@@ -57,7 +57,7 @@ ul.publ-list>li.entry .rank {
   overflow: hidden; 
   text-align: center;
   /* padding-left: 1em; */
-  font-family: 'lucida', 'Papyrus', 'Comic Sans MS', 'Chalkduster', fantasy;
+  /* font-family: 'lucida', 'Papyrus', 'Comic Sans MS', 'Chalkduster', fantasy; */
   font-weight: bold;
 }
 

@@ -3,6 +3,7 @@ import morgan from 'morgan'
 import cors from 'cors';
 import router from './routes.js';
 import fs from 'fs';
+import * as sjr from './sjrPortal.js';
 
 const accessLogStream = fs.createWriteStream('./logs/access.log', { flags: 'a' });
 
@@ -13,12 +14,8 @@ app.use(cors());
 app.use(morgan('dev', { stream: accessLogStream }));
 app.use(router);
 
-app.listen(port, () => {
-  console.log(`Trying to configure the DB`);
-  initDB();
+app.listen(port, async () => {
+  sjr.load();
   console.log(`Server is running ...`);
 });
 
-function initDB() {
-  console.log('Initializing DB ...');
-}

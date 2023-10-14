@@ -14,6 +14,7 @@ import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScal
 // DBLP and CorePortal
 import { dblpCategories, fetchAuthor, getPublications, getVenueTitle } from '../dblp';
 import * as CorePortal from '../corePortal';
+import * as SjrPortal from '../sjrPortal';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
@@ -59,10 +60,6 @@ export function Author() {
 }
 
 
-async function rankJournal(publication) {
-  // console.log(publication.dblp);
-}
-
 
 
 function AuthorShow({ author, publications }) {
@@ -88,7 +85,8 @@ function AuthorShow({ author, publications }) {
           pub.rank = await CorePortal.rank(pub.venue, pub.fullName, pub.dblp.year);
         } else if (pub.type === 'article') {
           pub.fullName = await getVenueTitle(pub);
-          await rankJournal(pub);
+          console.log(`Try to rank ${pub.fullName} in ${pub.dblp.year}`);
+          pub.rank = await SjrPortal.rank(pub.fullName, pub.dblp.year); 
         } else {
           return;
         }
