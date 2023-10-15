@@ -30,7 +30,9 @@ services:
 
   mongo:
     <<: *common-service
-    image: mongo:latest
+    build: 
+        context: .
+        dockerfile: ./Dockerfile.mongo
     ports:
       - 27017:27017
     volumes:
@@ -52,5 +54,3 @@ services:
       - ./log/reverse-proxy:/var/log/nginx
     ports:
       - 8080:80
-
-  

@@ -29,7 +29,9 @@ services:
 
   mongo:
       <<: *common-service
-      image: mongo:latest
+      builld: 
+        context: .
+        dockerfile: ./Dockerfile.mongo
       ports:
         - 27017:27017
       volumes:
