@@ -37,7 +37,7 @@ services:
       volumes:
         - ./mongodb/data:/app/db
         - ./log/mongodb:/var/log/mongodb
-      command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
+      command: ["bash", "-c", "mkdir -p /var/log/mongodb && mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false"]
 
 
   reverseproxy:
