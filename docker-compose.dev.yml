@@ -30,7 +30,9 @@ services:
 
   mongo:
     <<: *common-service
-    image: mongo:latest
+    build:
+      context: mongodb/
+      dockerfile: Dockerfile
     ports:
       - "27017:27017"
     volumes:
