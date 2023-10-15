@@ -15,7 +15,7 @@ services:
       - MONGO_URI=mongodb://mongo:27017/
 
     volumes:
-      - ./log/api:/app/log
+      - ./api/log:/app/log
 
 
 
@@ -33,10 +33,10 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongod.conf:/etc/mongod.conf 
-      - ./log/mongodb:/var/log/mongodb 
+      - ./mongodb/mongod.conf:/etc/mongod.conf 
+      - ./mongodb/log:/var/log/mongodb 
       - type: bind
-        source: ./data
+        source: ./mongodb/data
         target: /data/db
     command: ["mongod", "--config", "/etc/mongod.conf"]  
 
@@ -50,7 +50,7 @@ services:
       - api
       - front
     volumes:
-      - ./log/reverse-proxy:/var/log/nginx
+      - ./reverse-proxy/log:/var/log/nginx
       - type: bind
         source: "/etc/letsencrypt"
         target: "/etc/letsencrypt"
