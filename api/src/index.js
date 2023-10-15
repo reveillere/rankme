@@ -15,7 +15,8 @@ app.use(morgan('dev', { stream: accessLogStream }));
 app.use(router);
 
 app.listen(port, async () => {
-  sjr.load();
+  await sjr.load();
+  
   console.log(`Server is running ...`);
 });
 

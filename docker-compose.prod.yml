@@ -9,10 +9,15 @@ services:
     build:
       context: api/
       dockerfile: ./Dockerfile.prod
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/
 
     volumes:
       - ./api/src:/app/src
       - ./api/logs:/app/logs
+
 
   front:
     <<: *common-service
@@ -23,12 +28,26 @@ services:
     volumes:
       - ./front/src:/app/src
 
+  mongo:
+      <<: *common-service
+      image: mongo:latest
+      ports:
+        - 27017:27017
+      volumes:
+        - ./mongodb/data:/app/db
+        - ./mongodb/log:/var/log/mongodb
+      command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
+
+
   reverseproxy:
     <<: *common-service
     build:
       context: reverse-proxy/
       dockerfile: ./Dockerfile.prod
-
+    depends_on:
+      - api
+      - front
+    
     volumes:
       - ./reverse-proxy/logs:/var/log/nginx
       - type: bind

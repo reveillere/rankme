@@ -1,34 +1,14 @@
 import { MongoClient } from 'mongodb';
 import Papa from 'papaparse';
 import fetch from 'node-fetch';
-import fs from 'fs';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 
 
-const URI = "mongodb://mongo:27017";
-const client = new MongoClient(URI);
+const mongoURI = process.env.MONGO_URI;
+const client = new MongoClient(mongoURI);
+let config = null;
 
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
-const DATA_DIR = '/app/data/scimagojr';
-
-async function fetchCSV(year) {
-    const DATA_FILE_PATH = `${DATA_DIR}/${year}.csv`;
-
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-
-    try {
-        const data = await fs.promises.readFile(DATA_FILE_PATH, 'utf8');
-        return data;
-    } catch (error) {
-        const resp = await fetch(`${BASE}${year}`);
-        const text = await resp.text();
-
-        await fs.promises.writeFile(DATA_FILE_PATH, text, 'utf8');
-        return text;
-    }
-}
 
 async function parseCSV(txt) {
     try {
@@ -49,22 +29,35 @@ async function parseCSV(txt) {
     }
 }
 
-
+// Initialize the database
 export async function load() {
+    console.log('Loading scimagojr database ...');
     try {
         await client.connect();
         const db = client.db("scimagojr");
-        for (let year = 1999; year <= 2022; year++) {
+
+        // Load the configuration parameters
+        const collection = db.collection("config");
+        const newConfig = { start: 1999, end: 2022 };
+        config = await collection.findOne({});
+        if (config) {
+            await collection.updateOne({}, { $set: newConfig });
+        } else {
+            config = newConfig
+            await collection.insertOne(newConfig);
+        }
+
+        // Load the data
+        for (let year = config.start; year <= config.end; year++) {
             const collectionName = year.toString();
             const collection = db.collection(collectionName);
             const count = await collection.countDocuments();
-            if (count > 0) {
-                console.log(`Collection scimagojr:${collectionName} already exists, skipping.`);
-            } else {
-                const csvData = await fetchCSV(year);
+            if (count === 0) {
+                const resp = await fetch(`${BASE}${year}`);
+                const csvData = await resp.text();
                 const jsonObj = await parseCSV(csvData);
                 await collection.insertMany(jsonObj);
-                console.log(`${jsonObj.length} elements inserted into the  scimagojr${collectionName}.`);
+                console.log(`${jsonObj.length} elements inserted into sjr:${collectionName}.`);
             }
         }
     } catch (error) {
@@ -80,11 +73,11 @@ async function getRank(title, year) {
     try {
         await client.connect();
         const db = client.db("scimagojr");
-        if (year < 1999) {
-            year = 1999;
+        if (year < config.start) {
+            year = config.start;
         }
-        if (year > 2022) {
-            year = 2022;
+        if (year > config.end) {
+            year = config.end;
         }
         const collection = db.collection(year.toString());
         const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);

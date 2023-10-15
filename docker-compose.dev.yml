@@ -13,13 +13,12 @@ services:
     depends_on:
       - mongo
     environment:
-      - MONGO_URI=mongodb://mongo:27017/rankme
+      - MONGO_URI=mongodb://mongo:27017/
 
 
     volumes:
       - ./api/src:/app/src
       - ./api/logs:/app/logs
-      - ./api/data:/app/data
 
   front:
     <<: *common-service
