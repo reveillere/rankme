@@ -25,9 +25,7 @@ services:
       context: front/
       dockerfile: ./Dockerfile.prod
 
-
-
-   mongo:
+  mongo:
     <<: *common-service
     build:
       context: mongodb/
