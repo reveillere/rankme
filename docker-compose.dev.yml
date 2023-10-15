@@ -30,17 +30,18 @@ services:
 
   mongo:
     <<: *common-service
-    build: 
-        context: .
-        dockerfile: ./Dockerfile.mongo
+    image: mongo:latest
     ports:
-      - 27017:27017
+      - "27017:27017"
     volumes:
-      - ./mongodb/data:/app/db
-      - ./log/mongodb:/var/log/mongodb
-    command: ["bash", "-c", "mkdir -p /var/log/mongodb && mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false"]
+      - ./mongod.conf:/etc/mongod.conf 
+      - ./log/mongodb:/var/log/mongodb 
+      - type: bind
+        source: ./data
+        target: /data/db
+    # command: ["mongod", "--setParameter", "diagnosticDataCollectionEnabled=false"]  
+    command: ["mongod", "--config", "/etc/mongod.conf"]  
 
-  
   
   reverseproxy:
     <<: *common-service
@@ -54,3 +55,5 @@ services:
       - ./log/reverse-proxy:/var/log/nginx
     ports:
       - 8080:80
+
+
