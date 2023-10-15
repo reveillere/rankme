@@ -27,7 +27,7 @@ services:
 
 
 
-  mongo:
+   mongo:
     <<: *common-service
     build:
       context: mongodb/
@@ -40,7 +40,7 @@ services:
       - type: bind
         source: ./mongodb/data
         target: /data/db
-    command: ["mongod", "--config", "/etc/mongod.conf"]  
+    command: ["mongod", "--config", "/etc/mongod.conf"] 
 
 
   reverseproxy:
