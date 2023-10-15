@@ -33,8 +33,12 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./mongodb/mongod.conf:/etc/mongod.conf 
-      - ./mongodb/log:/var/log/mongodb 
+      - type: bind
+        source: ./mongodb/mongod.conf
+        target: /etc/mongod.conf 
+      - type: bind
+        source: ./mongodb/log
+        target: /var/log/mongodb
       - type: bind
         source: ./mongodb/data
         target: /data/db
