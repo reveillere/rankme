@@ -39,7 +39,6 @@ services:
       - type: bind
         source: ./data
         target: /data/db
-    # command: ["mongod", "--setParameter", "diagnosticDataCollectionEnabled=false"]  
     command: ["mongod", "--config", "/etc/mongod.conf"]  
 
   
