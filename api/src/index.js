@@ -5,7 +5,7 @@ import router from './routes.js';
 import fs from 'fs';
 import * as sjr from './sjrPortal.js';
 
-const accessLogStream = fs.createWriteStream('./logs/access.log', { flags: 'a' });
+const accessLogStream = fs.createWriteStream('./log/access.log', { flags: 'a' });
 
 const app = express();
 const port = 80;

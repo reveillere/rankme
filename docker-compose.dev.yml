@@ -14,41 +14,43 @@ services:
       - mongo
     environment:
       - MONGO_URI=mongodb://mongo:27017/
-
-
     volumes:
       - ./api/src:/app/src
-      - ./api/logs:/app/logs
+      - ./log/api:/app/log
 
-  front:
-    <<: *common-service
-    build:
-      context: front/
-      dockerfile: ./Dockerfile.dev
 
-    volumes:
-      - ./front/src:/app/src
+    front:
+      <<: *common-service
+      build:
+        context: front/
+        dockerfile: ./Dockerfile.dev
+      volumes:
+        - ./front/src:/app/src
 
-  reverseproxy:
-    <<: *common-service
-    build:
-      context: reverse-proxy/
-      dockerfile: ./Dockerfile.dev
-    depends_on:
-      - api
-      - front
-    volumes:
-      - ./reverse-proxy/logs:/var/log/nginx
-    ports:
-      - 8080:80
 
-  mongo:
-    <<: *common-service
-    image: mongo:latest
-    ports:
-      - 27017:27017
-    volumes:
-      - ./mongodb/data:/app/db
-      - ./mongodb/log:/var/log/mongodb
-    command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
+    mongo:
+      <<: *common-service
+      image: mongo:latest
+      ports:
+        - 27017:27017
+      volumes:
+        - ./mongodb/data:/app/db
+        - ./log/mongodb:/var/log/mongodb
+      command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
 
+    
+    
+    reverseproxy:
+      <<: *common-service
+      build:
+        context: reverse-proxy/
+        dockerfile: ./Dockerfile.dev
+      depends_on:
+        - api
+        - front
+      volumes:
+        - ./log/reverse-proxy:/var/log/nginx
+      ports:
+        - 8080:80
+
+  

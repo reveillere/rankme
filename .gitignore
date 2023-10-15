@@ -2,8 +2,7 @@
 
 
 mongodb
-api/logs
-reverse-proxy/logs
+log/
 
 # dependencies
 front/node_modules
