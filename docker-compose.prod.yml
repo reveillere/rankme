@@ -15,7 +15,6 @@ services:
       - MONGO_URI=mongodb://mongo:27017/
 
     volumes:
-      - ./api/src:/app/src
       - ./api/logs:/app/logs
 
 
@@ -25,8 +24,6 @@ services:
       context: front/
       dockerfile: ./Dockerfile.prod
 
-    volumes:
-      - ./front/src:/app/src
 
   mongo:
       <<: *common-service
@@ -36,7 +33,7 @@ services:
       volumes:
         - ./mongodb/data:/app/db
         - ./mongodb/log:/var/log/mongodb
-      command: mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false
+      command: ["bash", "-c", "mkdir -p /var/log/mongodb && mongod --dbpath /app/db --logpath /var/log/mongodb/mongod.log --logappend --setParameter diagnosticDataCollectionEnabled=false"]
 
 
   reverseproxy:
