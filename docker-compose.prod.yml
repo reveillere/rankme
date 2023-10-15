@@ -29,7 +29,7 @@ services:
 
   mongo:
       <<: *common-service
-      builld: 
+      build: 
         context: .
         dockerfile: ./Dockerfile.mongo
       ports:
