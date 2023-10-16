@@ -33,6 +33,8 @@ services:
     image: mongo:latest
     volumes:
       - db-data:/data/db
+    ports:
+      - "27017:27017"
     command: ["--quiet",  "--logpath=/data/db/mongod.log" ]
 
   

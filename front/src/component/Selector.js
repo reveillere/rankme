@@ -67,10 +67,11 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
 
 export function RankSelector(props) {
   return (
-  <>
-      <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value} />
-      <Selector {...props} data={SjrPortal.ranks} filterKey={record => record.rank?.value} />
-  </>);
+  <div style={{ display: "flex", gap: "0px" }}>
+      <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value} style={{ float: "left" }}/>
+      <Selector {...props} data={SjrPortal.ranks} filterKey={record => record.rank?.value} style={{ float: "left" }} />
+      <div style={{ clear: "both" }}></div>
+  </div>);
 }
 
 export function CategoriesSelector(props) {
