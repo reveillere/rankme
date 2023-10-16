@@ -27,22 +27,12 @@ services:
 
   mongo:
     <<: *common-service
-    build:
-      context: mongodb/
-      dockerfile: Dockerfile
-    ports:
-      - "27017:27017"
+    image: mongo:latest
     volumes:
-      - type: bind
-        source: ./mongodb/mongod.conf
-        target: /etc/mongod.conf 
-      - type: bind
-        source: ./mongodb/log
-        target: /var/log/mongodb
-      - type: bind
-        source: ./mongodb/data
-        target: /data/db
-    command: ["mongod", "--config", "/etc/mongod.conf"] 
+      - db-data:/data/db
+    command: ["--quiet",  "--logpath=/data/db/mongod.log" ]
+
+  
 
 
   reverseproxy:
@@ -61,3 +51,8 @@ services:
         read_only: true
     ports:
       - 443:443
+
+
+
+volumes:
+  db-data:
