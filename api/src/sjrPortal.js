@@ -92,7 +92,7 @@ async function getRank(title, year) {
             return { value: elt.data['BestQuartile'], msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
         }
 
-        return { value: "Unranked", msg: `No ranking found in scimagojr:${year}` };
+        return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
 
     } catch (error) {
         console.error('Error during levenshtein computation', error);

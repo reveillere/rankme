@@ -1,10 +1,10 @@
 import withCache from './cache';
 
 export const ranks = {
-    'Q1'        : { name: 'Q1',          color: '#134d6b' }, // Bleu Foncé
-    'Q2'        : { name: 'Q2',          color: '#1f7ca0' }, // Bleu Moyen Foncé
-    'Q3'        : { name: 'Q3',          color: '#72b1d7' }, // Bleu Moyen Clair
-    'Unranked'  : { name: 'Unranked',    color: '#d3d3d3' }, // Gris Clair
+    'Q1'        : { name: 'Q1',          color: '#c32b72' }, 
+    'Q2'        : { name: 'Q2',          color: '#ff8bbd' }, 
+    'Q3'        : { name: 'Q3',          color: '#ffc6db' }, 
+    'QU'        : { name: 'Unranked',    color: '#d3d3d3' }, 
 };
 
 export async function rank(title, year) {

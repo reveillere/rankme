@@ -1,6 +1,7 @@
 import React from 'react';
 import { Checkbox, FormGroup, FormControlLabel } from '@mui/material';
 import CorePortal from '../corePortal';
+import SjrPortal from '../sjrPortal';
 import { dblpCategories } from '../dblp';
 
 function Selector({ records, selected, setSelected, data, filterKey }) {
@@ -65,9 +66,14 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
 }
 
 export function RankSelector(props) {
-  return <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value } />;
+  return (
+  <>
+      <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value} />
+      <Selector {...props} data={SjrPortal.ranks} filterKey={record => record.rank?.value} />
+  </>);
 }
 
 export function CategoriesSelector(props) {
   return <Selector {...props} data={dblpCategories} filterKey={record => record.type} />;
 }
+ 

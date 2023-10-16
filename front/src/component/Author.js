@@ -69,7 +69,10 @@ function AuthorShow({ author, publications }) {
   const [tabGraph, setTabGraph] = useState(0);
   const [tabSelect, setTabSelect] = useState(0);
   const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
-  const [filterRanks, setFilterRanks] = React.useState(Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
+  const [filterRanks, setFilterRanks] = React.useState({
+    ...Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+    ...Object.keys(SjrPortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+  });
   const [rankedPublications, setRankedPublications] = useState([...publications]);
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
@@ -85,7 +88,6 @@ function AuthorShow({ author, publications }) {
           pub.rank = await CorePortal.rank(pub.venue, pub.fullName, pub.dblp.year);
         } else if (pub.type === 'article') {
           pub.fullName = await getVenueTitle(pub);
-          console.log(`Try to rank ${pub.fullName} in ${pub.dblp.year}`);
           pub.rank = await SjrPortal.rank(pub.fullName, pub.dblp.year); 
         } else {
           return;
@@ -125,7 +127,7 @@ function AuthorShow({ author, publications }) {
       .filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1])
       .filter(pub => filterCategories[pub.type])
       .filter(pub => {
-        if (pub.type === 'inproceedings') {
+        if (pub.type === 'inproceedings' || pub.type === 'article') {
           if (pub.rank)
             return filterRanks[pub.rank.value];
           else
@@ -150,7 +152,7 @@ function AuthorShow({ author, publications }) {
 
   const publicationsShown = filteredRecords.length;
 
-
+  const ranks = { ...CorePortal.ranks, ...SjrPortal.ranks };
 
   return (
     <div className='App'>
@@ -178,10 +180,10 @@ function AuthorShow({ author, publications }) {
             </Tabs>
             <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
               {tabGraph === 0 && tabSelect === 0 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
-              {tabGraph === 0 && tabSelect === 1 && <RanksPieChart records={filteredRecords} selected={filterRanks} />}
+            {tabGraph === 0 && tabSelect === 1 && <RanksPieChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
 
               {tabGraph === 1 && tabSelect === 0 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
-              {tabGraph === 1 && tabSelect === 1 && <RanksByYearChart records={filteredRecords} selected={filterRanks} />}
+            {tabGraph === 1 && tabSelect === 1 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
             </div>
           </div>
           <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>

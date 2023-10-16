@@ -1,6 +1,5 @@
 import { Bar, Pie } from 'react-chartjs-2';
 import { dblpCategories } from '../dblp';
-import corePortal from '../corePortal';
 
 
 
@@ -49,14 +48,14 @@ export function CategoriesPieChart({ records, selected }) {
   );
 }
 
-export function RanksPieChart({ records, selected }) {
+export function RanksPieChart({ records, selected, ranks }) {
   return (
     <PieChart 
       records={records} 
       selected={selected} 
       fieldAccessor={(pub) => pub.rank?.value}
-      labelAccessor={(key) => corePortal.ranks[key].name} 
-      colorAccessor={(key) => corePortal.ranks[key].color}
+      labelAccessor={(key) => ranks[key].name} 
+      colorAccessor={(key) => ranks[key].color}
     />
   );
 }
@@ -139,14 +138,14 @@ export function CategoriesByYearChart({ records, selected }) {
   );
 }
 
-export function RanksByYearChart({ records, selected }) {
+export function RanksByYearChart({ records, selected, ranks }) {
   return (
     <ByYearChart
       records={records}
       selected={selected}
       fieldAccessor={(pub) => pub.rank?.value}
-      labelAccessor={(key) => corePortal.ranks[key].name} 
-      colorAccessor={(key) => corePortal.ranks[key].color}
+      labelAccessor={(key) => ranks[key].name} 
+      colorAccessor={(key) => ranks[key].color}
     />
   );
 }
