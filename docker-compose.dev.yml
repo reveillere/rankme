@@ -12,6 +12,7 @@ services:
       dockerfile: ./Dockerfile.dev
     depends_on:
       - mongo
+      - redis
     environment:
       - MONGO_URI=mongodb://mongo:27017/
     volumes:
@@ -37,7 +38,17 @@ services:
       - "27017:27017"
     command: ["--quiet",  "--logpath=/data/db/mongod.log" ]
 
-  
+  redis:
+    <<: *common-service
+    image: redis:latest
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+
   reverseproxy:
     <<: *common-service
     build:
@@ -54,4 +65,5 @@ services:
 
 volumes:
   db-data:
+  redis-data:
 

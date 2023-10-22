@@ -103,19 +103,39 @@ function AuthorShow({ author, publications }) {
       }
     };
 
+    // const rankPublications = async () => {
+    //   setUpdateCompleted(false);
+    //   setUpdateInProgress(true);
+    //   let total = publications.length;
+    //   let current = 0;
+    //   for (const [index, pub] of publications.entries()) {
+    //     await rankPublication(pub, index);
+    //     current++;
+    //     setUpdateCurrentCompleted(Math.floor(current / total * 100));
+    //   }
+    //   setUpdateCompleted(true);
+    //   setUpdateInProgress(false);
+    // };
+
     const rankPublications = async () => {
       setUpdateCompleted(false);
       setUpdateInProgress(true);
-      let total = publications.length;
+      const total = publications.length;
       let current = 0;
-      for (const [index, pub] of publications.entries()) {
-        await rankPublication(pub, index);
-        current++;
-        setUpdateCurrentCompleted(Math.floor(current / total * 100));
-      }
+  
+      const rankAndProgress = async (pub, index) => {
+          await rankPublication(pub, index);
+          current++;
+          setUpdateCurrentCompleted(Math.floor(current / total * 100));
+      };
+  
+      const rankPromises = publications.map((pub, index) => rankAndProgress(pub, index));
+      await Promise.all(rankPromises);
+  
       setUpdateCompleted(true);
       setUpdateInProgress(false);
-    };
+  };
+  
 
     rankPublications();
   }, []);

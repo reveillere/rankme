@@ -2,14 +2,29 @@ import { MongoClient } from 'mongodb';
 import Papa from 'papaparse';
 import fetch from 'node-fetch';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
+import * as cache from './cache.js'
 
 
-const mongoURI = process.env.MONGO_URI;
-const client = new MongoClient(mongoURI);
+
 let config = null;
 
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 
+const mongoURI = process.env.MONGO_URI;
+let client;
+let db;
+
+async function getDB() {
+    if (!client) {
+        client = new MongoClient(mongoURI);
+        await client.connect();
+        db = client.db("scimagojr");
+    }
+    return db;
+}
+
+        
+  
 async function parseCSV(txt) {
     try {
         const results = await Papa.parse(txt, {
@@ -33,8 +48,7 @@ async function parseCSV(txt) {
 export async function load() {
     console.log('Loading scimagojr database ...');
     try {
-        await client.connect();
-        const db = client.db("scimagojr");
+        const db = await getDB();
 
         // Load the configuration parameters
         const collection = db.collection("config");
@@ -47,12 +61,12 @@ export async function load() {
             await collection.insertOne(newConfig);
         }
 
-        // Load the data
         for (let year = config.start; year <= config.end; year++) {
             const collectionName = year.toString();
             const collection = db.collection(collectionName);
             const count = await collection.countDocuments();
             if (count === 0) {
+                console.log(`Fetching: ${BASE}${year}`);
                 const resp = await fetch(`${BASE}${year}`);
                 const csvData = await resp.text();
                 const jsonObj = await parseCSV(csvData);
@@ -63,16 +77,18 @@ export async function load() {
     } catch (error) {
         console.error('Error during connection or insertion:', error);
         throw error;
-    } finally {
-        await client.close();
     }
 }
 
 async function getRank(title, year) {
-    const titleNormalized = normalizeTitle(title);
+    const key = `sjr:${year}:${title}`;
     try {
-        await client.connect();
-        const db = client.db("scimagojr");
+        let response = await cache.get(key);
+        if (response) {
+            return response;
+        }
+        const db = await getDB();
+
         if (year < config.start) {
             year = config.start;
         }
@@ -81,6 +97,7 @@ async function getRank(title, year) {
         }
         const collection = db.collection(year.toString());
         const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);
+        const titleNormalized = normalizeTitle(title);
         const result = documents.map(item => {
             const title1 = normalizeTitle(item.Title);
             const distance = levenshtein(title1, titleNormalized);
@@ -89,17 +106,16 @@ async function getRank(title, year) {
 
         if (result.length > 0) {
             const elt = result[0];
-            return { value: elt.data['BestQuartile'], msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
+            response = { value: elt.data['BestQuartile'], msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
+        } else {
+            response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
         }
-
-        return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
-
+        cache.set(key, response);
+        return response;
     } catch (error) {
         console.error('Error during levenshtein computation', error);
         throw error;
-    } finally {
-        await client.close();
-    }
+    } 
 }
 
 
