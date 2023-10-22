@@ -1,22 +1,26 @@
 import fetch from 'node-fetch';
 import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
-import NodeCache from 'node-cache';
-import { normalizeTitle, levenshtein } from './levenshtein.js';  
+import { normalizeTitle, levenshtein } from './levenshtein.js';
+import * as cache from './cache.js'
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
 export const querySource = '?search=&by=all&do=Export&source=';
 
-// TTL = 1 days, checkperiod = 1 hour
-const coreDB = new NodeCache({ stdTTL: 60 * 60 * 24 * 1, checkperiod: 60 * 60 });
-const RANKS = [ 'A*', 'A', 'B', 'C' ];
+const RANKS = ['A*', 'A', 'B', 'C'];
+
+
 
 
 async function getSources() {
-  const sources = coreDB.get('sources');
-  if (sources == undefined) {
-    // cache miss
-    const resp = await fetch(BASE);
+  const url = BASE;
+  const sources = await cache.get(url);
+  if (sources !== null) {
+    return sources;
+  }
+
+  // cache miss
+  const resp = await fetch(BASE);
   const html = await resp.text();
   const dom = HTMLParser.parse(html);
   const options = dom.querySelectorAll('select[name=source] option').map(o => o.rawText);
@@ -35,10 +39,8 @@ async function getSources() {
       }
     });
   });
-  coreDB.set('sources', data);
+  cache.set(url, data);
   return data;
-  } 
-  return sources;
 }
 
 // Returns the list of availables sources on Core Portal
@@ -49,23 +51,31 @@ export async function controllerSources(req, res) {
   } catch (e) {
     console.error('Error fetching sources: ', e);
     res.status(500).json({ error: 'Internal Server Error', message: e.message });
-  } 
+  }
+}
+
+ 
+// Returns the source  for a given source
+async function getSource(id) {
+  const url = `${BASE}/?search=&by=all&do=Export&source=${id}`;
+  const source = await cache.get(url);
+  if (source) {
+    return source;
+  }
+  const resp = await fetch(`${BASE}/?search=&by=all&do=Export&source=${id}`);
+  const text = await resp.text();
+  const data = await parseRankSource(text);
+  cache.set(url, data);
+  return data;
 }
 
 
-// Returns the source  for a given source
-async function getSource(id) {
-  const key = `source:${id}`
-  const source = coreDB.get(key); 
-  if (source == undefined) {
-    // cache miss
-    const resp = await fetch(`${BASE}/?search=&by=all&do=Export&source=${id}`);
-    const text = await resp.text();
-    const data = await parseRankSource(text);
-    coreDB.set(key, data);
-    return data;
-  } 
-  return source;
+export async function load() {
+  console.log('Loading core sources ...');
+  const sources = await getSources();
+  for (const source of sources) {
+    await getSource(source.source);
+  }
 }
 
 export async function controllerSource(req, res) {
@@ -75,8 +85,8 @@ export async function controllerSource(req, res) {
     if (!sources.some(item => item.source === id)) {
       res.status(404).json({ error: `Source ${id} not found in availables sources!` });
       return;
-    } 
-    const source = await getSource(id); 
+    }
+    const source = await getSource(id);
     res.json(source);
   } catch (e) {
     console.error('Error fetching source: ', e);
@@ -103,7 +113,7 @@ async function parseRankSource(txt) {
     return results.data.map(item => ({
       id: item.id,
       title: item.title,
-      acronym: (""+ item.acronym).toUpperCase(),
+      acronym: ("" + item.acronym).toUpperCase(),
       rank: item.rank
     })).filter(item => item.id !== "");
   } catch (e) {
@@ -111,7 +121,7 @@ async function parseRankSource(txt) {
     throw e;
   }
 }
- 
+
 export async function controllerRank(req, res) {
   const year = decodeURIComponent(req.query.year);
   const acronym = decodeURIComponent(req.query.acronym);
@@ -128,23 +138,22 @@ export async function controllerRank(req, res) {
 
 
 
-async function getRank(acronym, title, year) {  
-  const titleNormalized = normalizeTitle(title);
+async function getRank(acronym, title, year) {
+  const key = `rank:${acronym}:${title}:${year}`;
 
-  const key = `rank:${acronym}:${title}:${year}`
-  let rank = coreDB.get(key); 
-  if (rank != undefined) {
-    // cache hit
+  let rank = await cache.get(key);
+  if (rank) {
     return rank;
   }
 
   // cache miss
+  const titleNormalized = normalizeTitle(title);
   const sources = await getSources();
   const sortedList = sources.sort((a, b) => b.year - a.year);
   const foundItem = sortedList.find(item => item.year <= year);
   const sourceKey = foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
   const source = await getSource(sourceKey);
- 
+
   const candidates = source.filter(conf => conf.acronym === acronym);
   const sanitizedRank = (rank, exact, score) => RANKS.includes(rank) ?
     { value: rank, msg: `${sourceKey}`, exact: exact, score: score } :
@@ -152,11 +161,11 @@ async function getRank(acronym, title, year) {
 
   if (candidates.length === 0) {
     const exactMatch = source.find(conf => levenshtein(normalizeTitle(conf.title), titleNormalized) === 0);
-    
+
     if (exactMatch) {
-        rank = sanitizedRank(exactMatch.rank, false, 0);
+      rank = sanitizedRank(exactMatch.rank, false, 0);
     } else {
-        rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+      rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
     }
   } else if (candidates.length > 1) {
     let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(normalizeTitle(conf.title), titleNormalized) }));
@@ -166,8 +175,8 @@ async function getRank(acronym, title, year) {
     const entry = candidates[0];
     const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
     rank = sanitizedRank(entry.rank, true, score);
-  } 
+  }
 
-  coreDB.set(key, rank);
+  cache.set(key, rank);
   return rank;
 }
