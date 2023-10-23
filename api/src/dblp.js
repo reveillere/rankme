@@ -1,6 +1,5 @@
 import xml2js from 'xml2js';
 import * as cache from './cache.js';
-import fetch from 'node-fetch';
 import sax from "sax";
 
 const BASE = 'https://dblp.org';
@@ -12,30 +11,30 @@ export async function fetchAuthor(req, res) {
     try {
         const authorPID = req.params[0];
         const url = `${BASE}/pid/${authorPID}.xml`;
+        const key = `dblp:pid:${authorPID}`;
 
-        let response = await cache.get(url);
+        let response = await cache.get(key);
         if (response == null) {
             const resp = await throttler.fetch(url);
             const xmlData = await resp.text();
             const parser = new xml2js.Parser({ explicitArray: false });
             response = await parser.parseStringPromise(xmlData);
+            await cache.set(key, response);
         }
-        cache.set(url, response);
         res.json(response);
     } catch (error) {
         console.error('Error fetching author:', error);
         res.json([]);
     }
 }
-
-
-
+    
 export async function searchAuthor(req, res) {
     const { query } = req.params;
     const url = `${BASE}/search/author/api/?format=json&q=${query}`;
+    const key = `dblp:search:author/${query}`;
 
     try {
-        let response = await cache.get(url);
+        let response = await cache.get(key);
         if (response == null) {
             const resp = await throttler.fetch(url);
             const data = await resp.json();
@@ -58,8 +57,8 @@ export async function searchAuthor(req, res) {
                     affiliation: affiliations(hit),
                 }));
             }
+            await cache.set(key, response);
         }
-        cache.set(url, response);
         res.json(response);
     } catch (error) {
         console.error('Error searching author:', error);
@@ -153,20 +152,22 @@ function parseURL(s) {
 export async function getVenueTitle(req, res) {
     const processIndirectRef = async (ref) => {
         const url = `${BASE}/${ref.replace(/.html$/, '.xml')}`;
-        let title = await cache.get(url);
+        const key = `dblp:venue:${ref}`;
+        let title = await cache.get(key);
         if (title == null) {
             title = await searchTitle(url);
-            cache.set(url, title);
+            await cache.set(key, title);
         }
         return title;
     }
     const searchQuery = req.params[0];
     try {
-        let title = await cache.get(searchQuery);
-        if (title == null) {
+        const key = `dblp:venue:${searchQuery}`;
+        let title = await cache.get(key);
+        if (title === null) {
             const query = searchQuery.replace(/\d+\.html$/, '');
             const urlParts = parseURL(query);
-            title = "UNKNOWN";
+            title = null;
             if (urlParts.first === urlParts.second) {
                 const url = `${BASE}/db/${urlParts.type}/${urlParts.first}/index.xml`;
                 title = await searchTitle(url);
@@ -180,12 +181,10 @@ export async function getVenueTitle(req, res) {
                     title = await processIndirectRef(title.ref);
                 }
             }
-        }
-        if (title.content)
+            await cache.set(key, title.content); 
             res.json(title.content);
-        else {
-            console.error('Error[2] fetching  conference full name: ', title.toString());
-            res.json("UNKNOWN");
+        } else {
+            res.json(title);
         }
     } catch (error) {
         console.error('Error fetching conference full name in ', searchQuery);

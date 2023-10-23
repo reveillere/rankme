@@ -29,6 +29,7 @@ export async function get(key) {
 }
 
 export async function set(key, value) {
+    console.log('[redis] set:', key)
     const redisClient = await createRedisClient();
     await redisClient.set(key, JSON.stringify(value));
 }   

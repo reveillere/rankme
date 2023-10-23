@@ -106,11 +106,15 @@ async function getRank(title, year) {
 
         if (result.length > 0) {
             const elt = result[0];
-            response = { value: elt.data['BestQuartile'], msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
+            const rank = elt.data['BestQuartile'];
+            if (rank === '-') {
+                response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
+            } else
+                response = { value: rank, msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
         } else {
             response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
         }
-        cache.set(key, response);
+        await cache.set(key, response);
         return response;
     } catch (error) {
         console.error('Error during levenshtein computation', error);

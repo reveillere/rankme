@@ -13,9 +13,9 @@ import QueueThrottler from './throttler.js';
 const throttler = new QueueThrottler();
 
 async function getSources() {
-  const url = BASE;
-  const sources = await cache.get(url);
-  if (sources !== null) {
+  const key = 'core:sources';
+  const sources = await cache.get(key);
+  if (sources) {
     return sources;
   }
 
@@ -39,7 +39,7 @@ async function getSources() {
       }
     });
   });
-  cache.set(url, data);
+  await cache.set(key, data);
   return data;
 }
 
@@ -58,14 +58,15 @@ export async function controllerSources(req, res) {
 // Returns the source  for a given source
 async function getSource(id) {
   const url = `${BASE}/?search=&by=all&do=Export&source=${id}`;
-  const source = await cache.get(url);
+  const key = `core:source:${id}`;
+  const source = await cache.get(key);
   if (source) {
     return source;
   }
-  const resp = await throttler.fetch(`${BASE}/?search=&by=all&do=Export&source=${id}`);
+  const resp = await throttler.fetch(url);
   const text = await resp.text();
   const data = await parseRankSource(text);
-  cache.set(url, data);
+  await cache.set(key, data);
   return data;
 }
 
@@ -140,7 +141,7 @@ export async function controllerRank(req, res) {
 
 
 async function getRank(acronym, title, year) {
-  const key = `rank:${acronym}:${title}:${year}`;
+  const key = `core:rank:${acronym}:${title}:${year}`;
 
   let rank = await cache.get(key);
   if (rank) {
@@ -178,6 +179,6 @@ async function getRank(acronym, title, year) {
     rank = sanitizedRank(entry.rank, true, score);
   }
 
-  cache.set(key, rank);
+  await cache.set(key, rank);
   return rank;
 }
