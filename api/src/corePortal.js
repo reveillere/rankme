@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
@@ -10,7 +9,8 @@ export const querySource = '?search=&by=all&do=Export&source=';
 const RANKS = ['A*', 'A', 'B', 'C'];
 
 
-
+import QueueThrottler from './throttler.js';
+const throttler = new QueueThrottler();
 
 async function getSources() {
   const url = BASE;
@@ -20,7 +20,7 @@ async function getSources() {
   }
 
   // cache miss
-  const resp = await fetch(BASE);
+  const resp = await throttler.fetch(BASE);
   const html = await resp.text();
   const dom = HTMLParser.parse(html);
   const options = dom.querySelectorAll('select[name=source] option').map(o => o.rawText);
@@ -62,7 +62,7 @@ async function getSource(id) {
   if (source) {
     return source;
   }
-  const resp = await fetch(`${BASE}/?search=&by=all&do=Export&source=${id}`);
+  const resp = await throttler.fetch(`${BASE}/?search=&by=all&do=Export&source=${id}`);
   const text = await resp.text();
   const data = await parseRankSource(text);
   cache.set(url, data);
@@ -74,6 +74,7 @@ export async function load() {
   console.log('Loading core sources ...');
   const sources = await getSources();
   for (const source of sources) {
+    console.log(`Fetching: ${source.source}`);
     await getSource(source.source);
   }
 }
