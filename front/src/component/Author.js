@@ -117,24 +117,43 @@ function AuthorShow({ author, publications }) {
     //   setUpdateInProgress(false);
     // };
 
-    const rankPublications = async () => {
+    const rankPublications = async (maxConcurrentRequests = 10) => {
       setUpdateCompleted(false);
       setUpdateInProgress(true);
+    
       const total = publications.length;
       let current = 0;
-  
+      let inProgress = 0;
+      let nextIndex = 0;
+    
       const rankAndProgress = async (pub, index) => {
-          await rankPublication(pub, index);
-          current++;
-          setUpdateCurrentCompleted(Math.floor(current / total * 100));
+        await rankPublication(pub, index);
+        current++;
+        setUpdateCurrentCompleted(Math.floor(current / total * 100));
+        inProgress--;
+        processNext();
       };
-  
-      const rankPromises = publications.map((pub, index) => rankAndProgress(pub, index));
-      await Promise.all(rankPromises);
-  
-      setUpdateCompleted(true);
-      setUpdateInProgress(false);
-  };
+    
+      const processNext = () => {
+        if (nextIndex >= total) {
+          if (inProgress === 0) {
+            setUpdateCompleted(true);
+            setUpdateInProgress(false);
+          }
+          return;
+        }
+        if (inProgress < maxConcurrentRequests) {
+          const pub = publications[nextIndex++];
+          inProgress++;
+          rankAndProgress(pub, nextIndex - 1);
+        }
+      };
+    
+      for (let i = 0; i < maxConcurrentRequests; i++) {
+        processNext();
+      }
+    };
+    
   
 
     rankPublications();
