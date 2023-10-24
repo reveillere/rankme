@@ -7,8 +7,8 @@ class QueueThrottler {
 
     // Créer des limiters spécifiques pour chaque domaine
     this.limiters = {
-      'dblp.org': new Bottleneck({ maxConcurrent: 1, minTime: 100 }),
-      'portal.core.edu.au': new Bottleneck({ maxConcurrent: 1, minTime: 100 }),
+      'dblp.org': new Bottleneck({ maxConcurrent: 1, minTime: 200 }),
+      'portal.core.edu.au': new Bottleneck({ maxConcurrent: 1, minTime: 200 }),
     };
   }
 
@@ -24,8 +24,8 @@ class QueueThrottler {
 
   async processQueue() {
     if (this.queue.length) {
-      const { request, resolve, reject } = this.queue.shift();
-      const limiter = this.getLimiterForURL(request.url);
+      const { request, url, resolve, reject } = this.queue.shift();
+      const limiter = this.getLimiterForURL(url);
 
       limiter.schedule(async () => {
         try {
@@ -48,15 +48,15 @@ class QueueThrottler {
     }
   }
 
-  addRequestToQueue(request) {
+  addRequestToQueue(request, url) {
     return new Promise((resolve, reject) => {
-      this.queue.push({ request, resolve, reject });
+      this.queue.push({ request, url, resolve, reject });
       this.processQueue();
     });
   }
 
   fetch(url) {
-    return this.addRequestToQueue(() => fetch(url));
+    return this.addRequestToQueue(() => fetch(url), url);
   }
 }
 
