@@ -12,22 +12,48 @@ export async function fetchAuthor(req, res) {
         const authorPID = req.params[0];
         const url = `${BASE}/pid/${authorPID}.xml`;
         const key = `dblp:pid:${authorPID}`;
+        let update = false;
 
-        let response = await cache.get(key);
-        if (response == null) {
+        let author = await cache.get(key);
+        if (author == null) {
             const resp = await throttler.fetch(url);
             const xmlData = await resp.text();
             const parser = new xml2js.Parser({ explicitArray: false });
-            response = await parser.parseStringPromise(xmlData);
-            await cache.set(key, response);
+            author = await parser.parseStringPromise(xmlData);
+            update = true;
         }
-        res.json(response);
+        const ensureArray = obj => Array.isArray(obj) ? obj : (obj ? [obj] : []);
+        const publications = ensureArray(author?.dblpperson?.r);
+
+        async function processPublication(pub, rankPrefix) {
+            const url = pub.url.split('#')[0];
+            if (!pub.fullName) {
+                pub.fullName = await cache.get(`dblp:venue:${url}`);
+                update = true;
+            }
+            if (!pub.rank) {
+                pub.rank = await cache.get(`${rankPrefix}:${pub.fullName}`);
+                update = true;
+            }
+        }
+        for (const pub of publications) {
+            if (pub.inproceedings) {
+                await processPublication(pub.inproceedings, `rank:core:${pub.inproceedings.year}:${pub.inproceedings.booktitle}`);
+            } else if (pub.article && pub.article['@']?.publtype  !== 'informal') {
+                await processPublication(pub.article, `rank:sjr:${pub.article.year}`);
+            }
+        }
+        
+        if (update) {
+            await cache.set(key, author);
+        }
+        res.json(author);
     } catch (error) {
         console.error('Error fetching author:', error);
         res.json([]);
     }
 }
-    
+
 export async function searchAuthor(req, res) {
     const { query } = req.params;
     const url = `${BASE}/search/author/api/?format=json&q=${query}`;
@@ -167,7 +193,7 @@ export async function getVenueTitle(req, res) {
         if (title === null) {
             const query = searchQuery.replace(/\d+\.html$/, '');
             const urlParts = parseURL(query);
-            title = null;
+            title = "";
             if (urlParts.first === urlParts.second) {
                 const url = `${BASE}/db/${urlParts.type}/${urlParts.first}/index.xml`;
                 title = await searchTitle(url);
@@ -181,7 +207,7 @@ export async function getVenueTitle(req, res) {
                     title = await processIndirectRef(title.ref);
                 }
             }
-            await cache.set(key, title.content); 
+            await cache.set(key, title.content);
             res.json(title.content);
         } else {
             res.json(title);
@@ -190,6 +216,6 @@ export async function getVenueTitle(req, res) {
         console.error('Error fetching conference full name in ', searchQuery);
         res.json("UNKNOWN");
     }
-} 
+}
 
 

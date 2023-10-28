@@ -28,18 +28,21 @@ function getData(key) {
 }
 
 export default async function withCache(key, fn) {
-    const cachedData = getData(key);
+    console.log('Fetch : ', key)
+    return await fn();
 
-    if (cachedData) {
-        return cachedData;
-    }
+    // const cachedData = getData(key);
 
-    try {
-        const data = await fn();
-        setData(key, data);
-        return data;
-    } catch (error) {
-        console.error(`Error fetching data for key ${key}:`, error);
-        throw error;
-    }
+    // if (cachedData) {
+    //     return cachedData;
+    // }
+
+    // try {
+    //     const data = await fn();
+    //     setData(key, data);
+    //     return data;
+    // } catch (error) {
+    //     console.error(`Error fetching data for key ${key}:`, error);
+    //     throw error;
+    // }
 }

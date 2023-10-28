@@ -78,20 +78,43 @@ function AuthorShow({ author, publications }) {
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [updateInProgress, setUpdateInProgress] = useState(false);
   const [updateCompleted, setUpdateCompleted] = useState(false);
-  const [updateCompletedPercent, setUpdateCurrentCompleted] = useState(0);   
+  const [updateCompletedPercent, setUpdateCurrentCompleted] = useState(0);
 
   useEffect(() => {
+    const rankable = (pub) => pub.type === 'inproceedings' || pub.type === 'article';
+
     const rankPublication = async (pub, index) => {
       try {
-        if (pub.type === 'inproceedings') {
-          pub.fullName = await getVenueTitle(pub);
-          pub.rank = await CorePortal.rank(pub.venue, pub.fullName, pub.dblp.year);
-        } else if (pub.type === 'article') {
-          pub.fullName = await getVenueTitle(pub);
-          pub.rank = await SjrPortal.rank(pub.fullName, pub.dblp.year); 
+        if (rankable(pub)) {
+          console.log(`Ranking ${pub.type} ...`);
+          if (!pub.hasOwnProperty('fullName')) {
+            if (pub.dblp.fullName) {
+              console.log('\tUsing dblp title...');
+              pub.fullName = pub.dblp.fullName;
+            } else {
+              console.log('\tGetting venue title from CorePortal...');
+              pub.fullName = await getVenueTitle(pub);
+            }
+          }
+
+          if (!pub.hasOwnProperty('rank')) {
+            if (pub.dblp.rank) {
+              console.log('\tUsing dblp rank...');
+              pub.rank = pub.dblp.rank;
+            } else {
+              if (pub.type === 'inproceedings') {
+                console.log('\tRaning using CorePortal rank...');
+                pub.rank = await CorePortal.rank(pub.venue, pub.fullName, pub.dblp.year);
+              } else if (pub.type === 'article') {
+                console.log('\tRaning using SjrPortal rank...');
+                pub.rank = await SjrPortal.rank(pub.fullName, pub.dblp.year);
+              }
+            }
+          }
         } else {
           return;
         }
+
         setRankedPublications(prev => {
           const newPublications = [...prev];
           newPublications[index] = pub;
@@ -103,58 +126,24 @@ function AuthorShow({ author, publications }) {
       }
     };
 
-    // const rankPublications = async () => {
-    //   setUpdateCompleted(false);
-    //   setUpdateInProgress(true);
-    //   let total = publications.length;
-    //   let current = 0;
-    //   for (const [index, pub] of publications.entries()) {
-    //     await rankPublication(pub, index);
-    //     current++;
-    //     setUpdateCurrentCompleted(Math.floor(current / total * 100));
-    //   }
-    //   setUpdateCompleted(true);
-    //   setUpdateInProgress(false);
-    // };
-
-    const rankPublications = async (maxConcurrentRequests = 10) => {
+    const rankPublications = async () => {
       setUpdateCompleted(false);
       setUpdateInProgress(true);
-    
+
       const total = publications.length;
       let current = 0;
-      let inProgress = 0;
-      let nextIndex = 0;
-    
+
       const rankAndProgress = async (pub, index) => {
         await rankPublication(pub, index);
         current++;
         setUpdateCurrentCompleted(Math.floor(current / total * 100));
-        inProgress--;
-        processNext();
       };
-    
-      const processNext = () => {
-        if (nextIndex >= total) {
-          if (inProgress === 0) {
-            setUpdateCompleted(true);
-            setUpdateInProgress(false);
-          }
-          return;
-        }
-        if (inProgress < maxConcurrentRequests) {
-          const pub = publications[nextIndex++];
-          inProgress++;
-          rankAndProgress(pub, nextIndex - 1);
-        }
-      };
-    
-      for (let i = 0; i < maxConcurrentRequests; i++) {
-        processNext();
-      }
-    };
-    
-  
+
+      await Promise.all(publications.map(rankAndProgress));
+
+      setUpdateInProgress(false);
+      setUpdateCompleted(true);
+    };  
 
     rankPublications();
   }, []);
@@ -227,7 +216,7 @@ function AuthorShow({ author, publications }) {
           </div>
           <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>
             <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-            <Tab label="Ranks" />
+              <Tab label="Ranks" />
               <Tab label="Categories" />
             </Tabs>
             {tabSelect === 0 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}

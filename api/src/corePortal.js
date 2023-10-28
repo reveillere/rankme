@@ -141,7 +141,7 @@ export async function controllerRank(req, res) {
 
 
 async function getRank(acronym, title, year) {
-  const key = `core:rank:${acronym}:${title}:${year}`;
+  const key = `rank:core:${year}:${acronym}:${title}`;
 
   let rank = await cache.get(key);
   if (rank) {

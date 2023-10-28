@@ -11,17 +11,17 @@ let config = null;
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 
 const mongoURI = process.env.MONGO_URI;
-let client;
-let db;
+    let client;
+    let db;
 
-async function getDB() {
-    if (!client) {
-        client = new MongoClient(mongoURI);
-        await client.connect();
-        db = client.db("scimagojr");
+    async function getDB() {
+        if (!client) {
+            client = new MongoClient(mongoURI);
+            await client.connect();
+            db = client.db("scimagojr");
+        }
+        return db;
     }
-    return db;
-}
 
         
   
@@ -81,7 +81,7 @@ export async function load() {
 }
 
 async function getRank(title, year) {
-    const key = `sjr:${year}:${title}`;
+    const key = `rank:sjr:${year}:${title}`;
     try {
         let response = await cache.get(key);
         if (response) {
@@ -127,6 +127,8 @@ async function getRank(title, year) {
 export async function controllerRank(req, res) {
     const year = decodeURIComponent(req.query.year);
     const title = decodeURIComponent(req.query.title);
+
+    console.log(`Request to rank ${title} in ${year} ...`);
 
     if (!year || !title) {
         res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters year and/or acronym' });
