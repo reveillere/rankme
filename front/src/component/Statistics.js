@@ -5,9 +5,7 @@ import { dblpCategories } from '../dblp';
 
 function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
   const options = {
-    responsive: true,
-    maintainAspectRatio: true,
-    aspectRatio: 2,
+    responsive: false,
     plugins: {
       tooltip: {
         enabled: true
@@ -65,6 +63,7 @@ export function RanksPieChart({ records, selected, ranks }) {
 
 function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
   const options = {
+    responsive: false,
     scales: {
       y: {
         stacked: true,

@@ -52,7 +52,7 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
               </span>
             }
             onChange={() => setSelected({ ...selected, [key]: !selected[key] })}
-            style={{ margin: 0, width: '400px', fontSize: '0.8rem' }}
+            style={{ margin: 0, width: '100%', fontSize: '0.8rem' }}
           />
         </div>
       ))}
@@ -67,14 +67,24 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
 
 export function RankSelector(props) {
   return (
-  <div style={{ display: "flex", gap: "0px" }}>
-      <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value} style={{ float: "left" }}/>
-      <Selector {...props} data={SjrPortal.ranks} filterKey={record => record.rank?.value} style={{ float: "left" }} />
+    <div style={{ display: "flex", gap: "0px", width: '400px' }}>
+      <div style={{ width: '200px' }}> 
+        <Selector {...props} data={CorePortal.ranks} filterKey={record => record.rank?.value} />
+      </div>
+      <div style={{ width: '200px' }}> 
+        <Selector {...props} data={SjrPortal.ranks} filterKey={record => record.rank?.value} />
+      </div>
       <div style={{ clear: "both" }}></div>
-  </div>);
+    </div>
+  );
 }
 
+
 export function CategoriesSelector(props) {
-  return <Selector {...props} data={dblpCategories} filterKey={record => record.type} />;
+  return (
+    <div style={{ width: '400px' }}>
+      <Selector {...props} data={dblpCategories} filterKey={record => record.type} />
+    </div>
+  );
 }
  

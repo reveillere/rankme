@@ -1,27 +1,15 @@
-import { MongoClient } from 'mongodb';
 import Papa from 'papaparse';
 import fetch from './throttler.js';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
 import { getVenueFullName }  from './dblp.js';
-
+import { getClient } from './db.js';
 
 let config = null;
 
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 
-const mongoURI = process.env.MONGO_URI;
-    let client;
-    let db;
 
-    async function getDB() {
-        if (!client) {
-            client = new MongoClient(mongoURI);
-            await client.connect();
-            db = client.db("scimagojr");
-        }
-        return db;
-    }
 
         
   
@@ -48,7 +36,8 @@ async function parseCSV(txt) {
 export async function load() {
     console.log('Loading scimagojr database ...');
     try {
-        const db = await getDB();
+        const client = await getClient();
+        const db = client.db("scimagojr");
 
         // Load the configuration parameters
         const collection = db.collection("config");
@@ -82,7 +71,9 @@ export async function load() {
 
 async function computeRank(venueFullName, year) {
     try {
-        const db = await getDB();
+        const client = await getClient();
+        const db = client.db("scimagojr");
+
         if (year < config.start) {
             year = config.start;
         }

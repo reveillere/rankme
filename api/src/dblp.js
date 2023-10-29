@@ -1,6 +1,7 @@
 import xml2js from 'xml2js';
 import * as cache from './cache.js';
 import sax from "sax";
+import { getClient } from './db.js';
 
 const BASE = 'https://dblp.org';
 
@@ -176,7 +177,7 @@ async function searchTitle(ref) {
                     try {
                         const title = await getVenueFullName(refHref);
                         resolve(title);
-                    } catch(err) {
+                    } catch (err) {
                         reject(err);
                     }
                 }
@@ -185,7 +186,7 @@ async function searchTitle(ref) {
                     try {
                         const title = await getVenueFullName(refHref);
                         resolve(title);
-                    } catch(err) {
+                    } catch (err) {
                         reject(err);
                     }
                 }
@@ -217,13 +218,16 @@ async function searchTitle(ref) {
     });
 }
 
-
 export async function getVenueFullName(ref) {
     const key = `dblp:venue:${ref}`;
 
     let title = await cache.get(key);
     if (title == null) {
-        title = await searchTitle(ref);
+        try {
+            title = await searchTitle(ref);
+        } catch (err) {
+            title = "NO TITLE FOUND";
+        }
         cache.set(key, title); 
     }
 
@@ -243,7 +247,7 @@ export async function controllerVenue(req, res) {
         const title = await getVenueFullName(ref);
         res.json(title);
     } catch (error) {
-        console.log('Error during venue title computation', error);
+        console.log('Error during venue title computation of ', ref, " ", error);
         res.status(400).json({ error: error.message })
     }
 }

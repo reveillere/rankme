@@ -56,17 +56,17 @@ export function Author() {
 
   if (author === null)
     return (
-<Box style={{
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: '100vh' // prend toute la hauteur de la fenêtre
-}}>
+      <Box style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh' // prend toute la hauteur de la fenêtre
+      }}>
         <CircularProgress color="primary" />
         <span style={{ color: theme.palette.primary.main }}>
-            Loading...
+          Loading...
         </span></Box>
-    
+
     )
       ;
 
@@ -139,13 +139,13 @@ function AuthorShow({ author, publications }) {
             makeProgress(); makeProgress();
             return;
           }
-  
+
           setRankedPublications(prev => {
             const newPublications = [...prev];
             newPublications[index] = pub;
             return newPublications;
           });
-  
+
         } catch (error) {
           console.error(`Error ranking ${pub.type}:`, error);
         }
@@ -155,7 +155,7 @@ function AuthorShow({ author, publications }) {
 
       setUpdateInProgress(false);
       setUpdateCompleted(true);
-    };  
+    };
 
     rankPublications();
   }, []);
@@ -212,31 +212,33 @@ function AuthorShow({ author, publications }) {
 
       {isFilterActive &&
 
-        <><div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 40px 0' }}>
-          <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Tabs value={tabGraph} onChange={handleTabGraph} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-              <Tab label="Stats by year" />
-              <Tab label="Stats by type" />
-            </Tabs>
-            <div style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              {tabGraph === 0 && tabSelect === 0 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
-              {tabGraph === 0 && tabSelect === 1 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
+<>
+<div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 40px 0', height: '250px', boxSizing: 'border-box', overflow: 'hidden'  }}>
+  <div style={{ width: '45%', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
+    <Tabs value={tabGraph} onChange={handleTabGraph} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
+      <Tab label="Stats by year" />
+      <Tab label="Stats by type" />
+    </Tabs>
+    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+      {tabGraph === 0 && tabSelect === 0 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
+      {tabGraph === 0 && tabSelect === 1 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
 
-              {tabGraph === 1 && tabSelect === 0 && <RanksPieChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
-              {tabGraph === 1 && tabSelect === 1 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
-            </div>
-          </div>
-          <div style={{ width: '50%', display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: '5em' }}>
-            <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-              <Tab label="Ranks" />
-              <Tab label="Categories" />
-            </Tabs>
-            {tabSelect === 0 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}
-            {tabSelect === 1 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} />}
-          </div>
-        </div>
-          <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
-        </>
+      {tabGraph === 1 && tabSelect === 0 && <RanksPieChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
+      {tabGraph === 1 && tabSelect === 1 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
+    </div>
+  </div>
+  <div style={{ width: '45%', display: 'flex', flexDirection: 'column', marginLeft: '10%', alignItems: 'center', boxSizing: 'border-box' }}>
+    <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
+      <Tab label="Ranks" />
+      <Tab label="Categories" />
+    </Tabs>
+    {tabSelect === 0 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}
+    {tabSelect === 1 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} />}
+  </div>
+</div>
+<DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
+</>
+
       }
 
       <div style={{ height: '50px' }}></div>

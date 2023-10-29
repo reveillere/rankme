@@ -10,7 +10,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 // Custom Components
 import AuthorSearch from './component/Search';
 import { Author } from './component/Author';
-import About from './component/About'; 
+import About from './component/About';
 
 // Styles and Other
 import './App.css';
@@ -37,13 +37,14 @@ function App() {
         <AppBar position="static" style={{ backgroundColor: '#123456', height: '64px' }}>
           <Toolbar style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Box display="flex" alignItems="center">
-              <Typography variant="h6">
-                RankMe
-              </Typography>
+              <Button color="inherit" onClick={handleAboutOpen} style={{ textTransform: 'none' }}>
+                <Typography variant="h6">
+                  RankMe
+                </Typography>
+              </Button>
               <Button color="inherit" component={Link} to="/">      <SearchIcon />
               </Button>
             </Box>
-            <Button color="inherit" onClick={handleAboutOpen}>About</Button>
           </Toolbar>
         </AppBar>
 
