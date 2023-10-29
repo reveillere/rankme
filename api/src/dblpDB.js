@@ -222,8 +222,6 @@ const processXML = async (filePath) => {
 
 
 
-
-
 const main = async () => {
     try {
         const currentMD5 = await getCurrentMD5();
