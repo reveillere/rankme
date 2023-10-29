@@ -24,3 +24,11 @@ GET http://localhost:8080/api/rank/db/journals/stvr/stvr32.html?year=2022
 ### rank conf
 GET http://localhost:8080/api/rank/db/conf/icst/icst2020.html?year=2020&acronym=ICST
 
+
+
+
+
+
+
+### TEST DBLP
+GET https://dblp.org/search/author/api/?format=json&q=david$+lo$&c=0

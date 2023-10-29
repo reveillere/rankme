@@ -3,7 +3,9 @@
 
 data/
 log/
-
+api/dblp.xml.gz
+api/dblp.xml
+api/localMD5.txt
 
 # dependencies
 front/node_modules

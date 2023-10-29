@@ -120,8 +120,17 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
                             <div onClick={() => gotoPublications(elt.pid)} style={{ minWidth: '500px', textDecoration: 'none' }}>
                                 <ListItemText
                                     primary={<span style={{ fontWeight: 'bold' }}>{elt.author}</span>}
-                                    secondary={<span style={{ fontStyle: 'italic' }}>{elt.affiliation}</span>}
+                                    secondary={
+                                        <>
+                                            {elt.affiliation.map((affil, index) => (
+                                                <span key={index} style={{ fontStyle: 'italic', display: 'block' }}>
+                                                    {affil}
+                                                </span>
+                                            ))}
+                                        </>
+                                    }
                                 />
+
                             </div>
                         </ListItemButton>
                     </ListItem>
@@ -137,18 +146,18 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
     return (
         <div>
             {queryStatus === 'pending' && (
-                <Box 
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  height: '100vh', // Viewport Height
-                }}
-              >
-                <IconButton sx={{ p: '10px' }} aria-label="menu">
-                  <CircularProgress /> Searching...
-                </IconButton>
-              </Box>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        height: '100vh', // Viewport Height
+                    }}
+                >
+                    <IconButton sx={{ p: '10px' }} aria-label="menu">
+                        <CircularProgress /> Searching...
+                    </IconButton>
+                </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
         </div>

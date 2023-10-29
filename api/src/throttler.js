@@ -5,11 +5,12 @@ const MAX_RETRIES = 5;
 
 const limiter = new Bottleneck({
   maxConcurrent: 1,
-  minTime: 200 
+  minTime: 500 
 });
 
 async function fetch(url, options = {}, retries = MAX_RETRIES) {
   return limiter.schedule(async () => {
+    console.log(`Doing fetch to ${url}`)
     const response = await nodeFetch(url, options);
 
     if (response.status === 429 && retries > 0) {

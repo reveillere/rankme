@@ -6,9 +6,11 @@ const BASE = 'https://dblp.org';
 
 import fetch from './throttler.js';
 
+const ensureArray = obj => Array.isArray(obj) ? obj : (obj ? [obj] : []);
+
+
 export async function updateAuthor(author) {
     let update = 0;
-    const ensureArray = obj => Array.isArray(obj) ? obj : (obj ? [obj] : []);
     const publications = ensureArray(author?.dblpperson?.r);
 
     async function processPublication(pub) {
@@ -75,9 +77,9 @@ async function getAuthor(authorPID, key) {
 // ****************************************************************************************************
 
 export async function controllerSearch(req, res) {
-    const authorPID = req.params[0];
+    const searchQuery = req.params[0];
     try {
-        const author = await getSearchAuthor(authorPID);
+        const author = await getSearchAuthor(searchQuery);
         res.json(author);
     } catch (error) {
         console.log('Error during search computation', error);
@@ -85,32 +87,37 @@ export async function controllerSearch(req, res) {
     }
 }
 
-async function getSearchAuthor(authorPID) {
-    const key = `dblp:search:${authorPID}`;
+async function getSearchAuthor(searchQuery) {
+    const key = `dblp:search:${searchQuery}`;
 
-    let results = await cache.get(key);
+    // let results = await cache.get(key);
+    let results = null;
     if (results == null) {
-        results = await searchAuthor(authorPID);
-        cache.set(key, results); 
+        console.log(`Search: [${searchQuery}]`)
+        const exactMatches = await searchAuthor(searchQuery.replace(/ +/g, '$ ') + '$');
+        const likelyMatches = await searchAuthor(searchQuery);
+        const combined = exactMatches.concat(likelyMatches);
+        results = combined.filter((value, index, self) => 
+            self.findIndex(item => item.pid === value.pid) === index
+        );        cache.set(key, results); 
     }
     return results
 }
 
-export async function searchAuthor(authorPID) {
-    const url = `${BASE}/search/author/api/?format=json&q=${authorPID}`;
+export async function searchAuthor(searchQuery) {
+    const url = `${BASE}/search/author/api/?format=json&q=${searchQuery}`;
 
     const resp = await fetch(url);
     const data = await resp.json();
     const hits = data.result.hits;
 
-    if (hits['@total'] === "0") {
+    if (hits['@total'] === "0") {   
         return [];
     } else {
         const affiliations = jsonData => {
-            const note = jsonData.info?.notes?.note;
-            if (note && note["@type"] === "affiliation")
-                return note.text;
-            else return '';
+            return ensureArray(jsonData.info?.notes?.note)
+                .filter(note => note["@type"] === "affiliation")
+                .map(note => note.text);
         }
         const prefix = `${BASE}/pid/`;
         const pid = url => url.substring(prefix.length);
