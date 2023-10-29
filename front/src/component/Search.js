@@ -137,9 +137,18 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
     return (
         <div>
             {queryStatus === 'pending' && (
-                <Box style={{ display: 'flex', justifyContent: 'center' }}>
-                    <CircularProgress />
-                </Box>
+                <Box 
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100vh', // Viewport Height
+                }}
+              >
+                <IconButton sx={{ p: '10px' }} aria-label="menu">
+                  <CircularProgress /> Searching...
+                </IconButton>
+              </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
         </div>

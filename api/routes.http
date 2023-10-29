@@ -1,7 +1,26 @@
 
+### Search autho
+GET http://localhost:8080/api/dblp/search/reveill
+
 ### Leveau Julien
 GET http://localhost:8080/api/dblp/author/272/2198
 
 
+### Venue conf
+GET http://localhost:8080/api/dblp/venue/db/conf/middleware/middleware2021.html
 
+###
+GET http://localhost:8080/api/dblp/venue/db/conf/middleware/index.html
+
+### Venue journal
+GET http://localhost:8080/api/dblp/venue/db/journals/stvr/index.html
+
+### Conference rank
+GET http://localhost:8080/api/rank/db/conf/middleware/middleware2021.html?year=2021&acronym=middleware
+
+### Journal rank
+GET http://localhost:8080/api/rank/db/journals/stvr/stvr32.html?year=2022
+
+### rank conf
+GET http://localhost:8080/api/rank/db/conf/icst/icst2020.html?year=2020&acronym=ICST
 

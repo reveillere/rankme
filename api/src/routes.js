@@ -5,15 +5,15 @@ import * as sjr from './sjrPortal.js';
 
 const router = express.Router();
     
-router.get('/core/rank', core.controllerRank);
+router.get('/dblp/author/*', dblp.controllerAuthor);
+router.get('/dblp/search/*', dblp.controllerSearch);
+router.get('/dblp/venue/*', dblp.controllerVenue);
 
-router.get('/dblp/author/*', dblp.fetchAuthor);
-router.get('/dblp/search/author/:query', dblp.searchAuthor);
+router.get('/rank/db/conf/*', core.controllerRank);
+router.get('/rank/db/journals/*', sjr.controllerRank);
 
-router.get('/dblp/venue/*', dblp.getVenueTitle);
-
-router.get('/sjr/rank', sjr.controllerRank);
-
-  
 export default router;
+
+
+
 

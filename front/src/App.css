@@ -101,7 +101,6 @@ cite.data .title { color:#666666; font-weight:700; margin-right: 5px;}
 cite.data .link a { color: #7d848a; text-decoration: none; cursor: pointer;}
 cite.data .link a:hover {
   color: blue;
-  text-decoration: underline;
 }
 
 

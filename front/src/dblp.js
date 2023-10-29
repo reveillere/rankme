@@ -1,6 +1,5 @@
 
 import { ensureArray } from './utils';
-import withCache from './cache';
 
 export const dblpCategories = {
     'article': { name: 'Journal articles', letter: 'j', color: '#c32b72' },
@@ -14,31 +13,19 @@ export const dblpCategories = {
 
 
 export async function searchAuthor(query) {
-    const cacheKey = `authorSearch:${query}`;
-    return await withCache(cacheKey, async () => {
-        const resp = await fetch(`/api/dblp/search/author/${query}`);
-        const data = await resp.json();
-        return data;
-    });
+    const resp = await fetch(`/api/dblp/search/${query}`);
+    return await resp.json();
 }
 
 export async function fetchAuthor(authorPID) {
-    const cacheKey = `author:${authorPID}`;
-    return await withCache(cacheKey, async () => {
         const resp = await fetch(`/api/dblp/author/${authorPID}`);
-        const data = await resp.json();
-        return data;
-    });
+        return await resp.json();
 }
 
 
 export async function getVenueTitle(publication) {
-    const cacheKey = `venue:${publication.dblp.url}`;
-    return await withCache(cacheKey, async () => {
-        const resp = await fetch(`/api/dblp/venue/${publication.dblp.url}`);
-        const data = await resp.json();
-        return data;
-    });
+    const resp = await fetch(`/api/dblp/venue/${publication.dblp.url}`);
+    return await resp.json();
 }
 
 

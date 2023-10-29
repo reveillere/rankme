@@ -1,8 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useParams } from 'react-router-dom';
-import React, { useState, useEffect } from 'react';
-import { fetchAuthor, getPublications, getName, dblpCategories } from '../dblp';
-import { Box, CircularProgress } from '@mui/material';
+import React from 'react';
+import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
@@ -138,35 +136,6 @@ function Venue({ item }) {
 
 
 
-export function PubList(props) {
-  const [author, setAuthor] = useState(null);
-
-  const params = useParams()['*'];
-  const pid = props.pid ? props.pid : params;
-
-  useEffect(() => {
-    fetchAuthor(pid)
-      .then((author) => {
-        setAuthor(author);
-      })
-      .catch((error) => {
-        console.error('Error fetching last publications:', error);
-      });
-  }, [pid]);
-
-  if (author === null) return (
-    <Box style={{ display: 'flex', justifyContent: 'center' }}>
-      <CircularProgress />
-    </Box>);
-
-  const publications = getPublications(author);
-  const wrap = code => (props.pid ? code : (<div className='App'>{code}</div>));
-  const publ = (<div className='publ'>
-    <h1>Publications of {getName(author)} </h1>
-    <Publications data={publications} />
-  </div>)
-  return wrap(publ);
-}
 
 
 

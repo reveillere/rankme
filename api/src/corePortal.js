@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
+import { getVenueFullName } from './dblp.js';
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
 export const querySource = '?search=&by=all&do=Export&source=';
@@ -9,8 +10,7 @@ export const querySource = '?search=&by=all&do=Export&source=';
 const RANKS = ['A*', 'A', 'B', 'C'];
 
 
-import QueueThrottler from './throttler.js';
-const throttler = new QueueThrottler();
+import fetch from './throttler.js';
 
 async function getSources() {
   const key = 'core:sources';
@@ -20,7 +20,7 @@ async function getSources() {
   }
 
   // cache miss
-  const resp = await throttler.fetch(BASE);
+  const resp = await fetch(BASE);
   const html = await resp.text();
   const dom = HTMLParser.parse(html);
   const options = dom.querySelectorAll('select[name=source] option').map(o => o.rawText);
@@ -63,7 +63,7 @@ async function getSource(id) {
   if (source) {
     return source;
   }
-  const resp = await throttler.fetch(url);
+  const resp = await fetch(url);
   const text = await resp.text();
   const data = await parseRankSource(text);
   await cache.set(key, data);
@@ -124,32 +124,40 @@ async function parseRankSource(txt) {
   }
 }
 
+
 export async function controllerRank(req, res) {
-  const year = decodeURIComponent(req.query.year);
-  const acronym = decodeURIComponent(req.query.acronym);
-  const title = decodeURIComponent(req.query.title);
+  const ref = 'db/conf/' + req.params[0];
+  const year = req.query.year;
+  const acronym = req.query.acronym;
 
   if (!year || !acronym) {
-    res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters year and/or acronym' });
+    res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
     return;
   }
-
-  const rank = await getRank(acronym.toUpperCase(), title, year);
-  res.json(rank);
+  
+  try {
+    const rank = await getRank(acronym.toUpperCase(), ref, year);
+    res.json(rank);
+  } catch (error) {
+    console.error('Error during rank computation', error);
+    res.status(400).json({ error: 'Internal Server Error', message: error.message });
+  }
 }
 
-
-
-async function getRank(acronym, title, year) {
-  const key = `rank:core:${year}:${acronym}:${title}`;
+async function getRank(acronym, ref, year) {
+  const key = `rank:${year}:${ref}`;
 
   let rank = await cache.get(key);
-  if (rank) {
-    return rank;
+  if (rank === null) {
+    const venueFullName = await getVenueFullName(ref);
+    rank = await computeRank(acronym.toUpperCase(), venueFullName, year);
+    cache.set(key, rank);
   }
+  return rank;
+}
 
-  // cache miss
-  const titleNormalized = normalizeTitle(title);
+async function computeRank(acronym, venueFullName, year) {
+  const titleNormalized = normalizeTitle(venueFullName);
   const sources = await getSources();
   const sortedList = sources.sort((a, b) => b.year - a.year);
   const foundItem = sortedList.find(item => item.year <= year);
@@ -160,6 +168,8 @@ async function getRank(acronym, title, year) {
   const sanitizedRank = (rank, exact, score) => RANKS.includes(rank) ?
     { value: rank, msg: `${sourceKey}`, exact: exact, score: score } :
     { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}`, exact: exact, score: score };
+
+  let rank;
 
   if (candidates.length === 0) {
     const exactMatch = source.find(conf => levenshtein(normalizeTitle(conf.title), titleNormalized) === 0);
@@ -178,7 +188,5 @@ async function getRank(acronym, title, year) {
     const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
     rank = sanitizedRank(entry.rank, true, score);
   }
-
-  await cache.set(key, rank);
   return rank;
 }

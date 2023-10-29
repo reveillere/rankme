@@ -8,14 +8,10 @@ export const ranks = {
     'QU'        : { name: 'Unranked',   color: '#C0AEB4' }, 
 };
 
-export async function rank(title, year) {
-    const query = `title=${encodeURIComponent(title)}&year=${encodeURIComponent(year)}`;
-    const cacheKey = `sjrPortal:${query}`;
-    return await withCache(cacheKey, async () => {
-        const resp = await fetch(`/api/sjr/rank?${query}`);
-        const data = await resp.json();
-        return data;
-    });
+export async function rank(ref, year) {
+    const url = `/api/rank/${ref.split('#')[0]}?year=${year}`
+    const resp = await fetch(url);
+    return await resp.json();
 }
 
 export default { ranks, rank };

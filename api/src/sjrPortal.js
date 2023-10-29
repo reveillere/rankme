@@ -1,9 +1,9 @@
 import { MongoClient } from 'mongodb';
 import Papa from 'papaparse';
-import fetch from 'node-fetch';
+import fetch from './throttler.js';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
-
+import { getVenueFullName }  from './dblp.js';
 
 
 let config = null;
@@ -80,15 +80,9 @@ export async function load() {
     }
 }
 
-async function getRank(title, year) {
-    const key = `rank:sjr:${year}:${title}`;
+async function computeRank(venueFullName, year) {
     try {
-        let response = await cache.get(key);
-        if (response) {
-            return response;
-        }
         const db = await getDB();
-
         if (year < config.start) {
             year = config.start;
         }
@@ -97,13 +91,14 @@ async function getRank(title, year) {
         }
         const collection = db.collection(year.toString());
         const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);
-        const titleNormalized = normalizeTitle(title);
+        const titleNormalized = normalizeTitle(venueFullName);
         const result = documents.map(item => {
             const title1 = normalizeTitle(item.Title);
             const distance = levenshtein(title1, titleNormalized);
             return { data: item, distance: distance };
         }).filter(item => item.distance <= 3).sort((a, b) => a.distance - b.distance);
 
+        let response;
         if (result.length > 0) {
             const elt = result[0];
             const rank = elt.data['BestQuartile'];
@@ -114,29 +109,43 @@ async function getRank(title, year) {
         } else {
             response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
         }
-        await cache.set(key, response);
         return response;
     } catch (error) {
         console.error('Error during levenshtein computation', error);
-        throw error;
+        return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
     } 
 }
 
 
 
 export async function controllerRank(req, res) {
-    const year = decodeURIComponent(req.query.year);
-    const title = decodeURIComponent(req.query.title);
+    const ref = 'db/journals/' + req.params[0];
+    const year = req.query.year;
 
-    console.log(`Request to rank ${title} in ${year} ...`);
-
-    if (!year || !title) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters year and/or acronym' });
+    if (!year) {
+        res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
         return;
     }
 
-    const rank = await getRank(title, year);
-    res.json(rank);
+    try {
+        const rank = await getRank(ref, year);
+        res.json(rank);
+    } catch (error) {
+        console.error('Error during rank computation', error);
+        res.status(400).json({ error: 'Internal Server Error', message: error.message });
+    }
 }
 
+async function getRank(ref, year) {
+    const key = `rank:${year}:${ref}`;
+  
+    let rank = await cache.get(key);
+    if (rank === null) {
+      const venueFullName = await getVenueFullName(ref);
+      rank = await computeRank(venueFullName, year);
+      cache.set(key, rank);
+    }
+    return rank;
+}
+  
 export default { load }

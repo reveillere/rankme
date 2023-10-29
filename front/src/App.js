@@ -10,7 +10,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 // Custom Components
 import AuthorSearch from './component/Search';
 import { Author } from './component/Author';
-import Test from './Test';
 import About from './component/About'; 
 
 // Styles and Other
@@ -23,15 +22,6 @@ import './utils.js';
 
 function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
-
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
 
   const handleAboutOpen = () => {
     setAboutDialogOpen(true);
@@ -52,23 +42,9 @@ function App() {
               </Typography>
               <Button color="inherit" component={Link} to="/">      <SearchIcon />
               </Button>
-              <IconButton color="inherit" onClick={handleMenuOpen}>
-                <SettingsIcon /> 
-              </IconButton>
             </Box>
             <Button color="inherit" onClick={handleAboutOpen}>About</Button>
           </Toolbar>
-
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-          >
-            <MenuItem onClick={() => {
-              localStorage.clear();
-              handleMenuClose();
-            }}>Clear Cache</MenuItem>
-          </Menu>
         </AppBar>
 
         <About open={aboutDialogOpen} onClose={handleAboutClose} />
@@ -77,7 +53,6 @@ function App() {
         <Routes>
           <Route path="/" element={<AuthorSearch />} />
           <Route path="/author/*" element={<Author />} />
-          <Route path="/test/" element={<Test />} />
         </Routes>
       </div>
     </Router>

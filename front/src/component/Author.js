@@ -7,6 +7,8 @@ import { CircularProgress, Tab, Tabs, Button } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
@@ -32,6 +34,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 });
 
 Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
+const theme = createTheme();
 
 
 export function Author() {
@@ -52,7 +55,19 @@ export function Author() {
   }, [pid]);
 
   if (author === null)
-    return (<CircularProgress />)
+    return (
+<Box style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh' // prend toute la hauteur de la fenêtre
+}}>
+        <CircularProgress color="primary" />
+        <span style={{ color: theme.palette.primary.main }}>
+            Loading...
+        </span></Box>
+    
+    )
       ;
 
   const publications = getPublications(author);
@@ -83,63 +98,60 @@ function AuthorShow({ author, publications }) {
   useEffect(() => {
     const rankable = (pub) => pub.type === 'inproceedings' || pub.type === 'article';
 
-    const rankPublication = async (pub, index) => {
-      try {
-        if (rankable(pub)) {
-          console.log(`Ranking ${pub.type} ...`);
-          if (!pub.hasOwnProperty('fullName')) {
-            if (pub.dblp.fullName) {
-              console.log('\tUsing dblp title...');
-              pub.fullName = pub.dblp.fullName;
-            } else {
-              console.log('\tGetting venue title from CorePortal...');
-              pub.fullName = await getVenueTitle(pub);
-            }
-          }
-
-          if (!pub.hasOwnProperty('rank')) {
-            if (pub.dblp.rank) {
-              console.log('\tUsing dblp rank...');
-              pub.rank = pub.dblp.rank;
-            } else {
-              if (pub.type === 'inproceedings') {
-                console.log('\tRaning using CorePortal rank...');
-                pub.rank = await CorePortal.rank(pub.venue, pub.fullName, pub.dblp.year);
-              } else if (pub.type === 'article') {
-                console.log('\tRaning using SjrPortal rank...');
-                pub.rank = await SjrPortal.rank(pub.fullName, pub.dblp.year);
-              }
-            }
-          }
-        } else {
-          return;
-        }
-
-        setRankedPublications(prev => {
-          const newPublications = [...prev];
-          newPublications[index] = pub;
-          return newPublications;
-        });
-
-      } catch (error) {
-        console.error(`Error ranking ${pub.type}:`, error);
-      }
-    };
-
     const rankPublications = async () => {
       setUpdateCompleted(false);
       setUpdateInProgress(true);
 
-      const total = publications.length;
+      const total = publications.length * 2;
       let current = 0;
 
-      const rankAndProgress = async (pub, index) => {
-        await rankPublication(pub, index);
+      const makeProgress = () => {
         current++;
         setUpdateCurrentCompleted(Math.floor(current / total * 100));
+      }
+
+      const rankPublication = async (pub, index) => {
+        try {
+          if (rankable(pub)) {
+            if (!pub.hasOwnProperty('fullName')) {
+              if (pub.dblp.fullName) {
+                pub.fullName = pub.dblp.fullName;
+              } else {
+                pub.fullName = await getVenueTitle(pub);
+              }
+            }
+            makeProgress();
+
+            if (!pub.hasOwnProperty('rank')) {
+              if (pub.dblp.rank) {
+                pub.rank = pub.dblp.rank;
+              } else {
+                if (pub.type === 'inproceedings') {
+                  pub.rank = await CorePortal.rank(pub.venue, pub.dblp.url, pub.dblp.year);
+                } else if (pub.type === 'article') {
+                  pub.rank = await SjrPortal.rank(pub.dblp.url, pub.dblp.year);
+                }
+              }
+            }
+            makeProgress();
+
+          } else {
+            makeProgress(); makeProgress();
+            return;
+          }
+  
+          setRankedPublications(prev => {
+            const newPublications = [...prev];
+            newPublications[index] = pub;
+            return newPublications;
+          });
+  
+        } catch (error) {
+          console.error(`Error ranking ${pub.type}:`, error);
+        }
       };
 
-      await Promise.all(publications.map(rankAndProgress));
+      await Promise.all(publications.map(rankPublication));
 
       setUpdateInProgress(false);
       setUpdateCompleted(true);
