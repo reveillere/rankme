@@ -14,9 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
 const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
 
-const mongoURI = 'mongodb://localhost:27017';
 
-const client = new MongoClient(mongoURI);
 
 const downloadFile = async () => {
     const response = await fetch(DBLP_XML_URL);
@@ -113,18 +111,16 @@ const decompressFile = async () => {
 };
 
 
+const BATCH_SIZE = 10000;
+
+
+const mongoURI = 'mongodb://localhost:27017';
+const client = new MongoClient(mongoURI);
+
 
 const processXML = async (filePath) => {
-    const BATCH_SIZE = 1000;  
-
     await client.connect();
     const db = client.db("dblp");
-
-    const articlesCollection = db.collection('articles');
-    const inproceedingsCollection = db.collection('inproceedings');
-
-    await inproceedingsCollection.deleteMany({});
-    await articlesCollection.deleteMany({});
 
     const parser = sax.createStream(true);
     const fileStream = createReadStream(filePath);
@@ -133,29 +129,47 @@ const processXML = async (filePath) => {
     let currentNode = null;
     let currentObject = {};
     let lastNodeName = null;
-    let articlesBatch = [];
-    let inproceedingsBatch = [];
+    const validNodes = ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'mastersthesis', 'www', 'person', 'data'];
 
-    const insertBatch = async (collection, batch) => {
-        for (const doc of batch) {
-            try {
-                await collection.insertOne(doc);
-            } catch (err) {
-                if (err.code !== 11000) {  // Si ce n'est pas une erreur de doublon
-                    throw err;
-                }
-                // Si c'est une erreur de doublon, l'ignorer
-            }
+    for (let nodeType of validNodes) {
+        const collection = db.collection(nodeType);
+        await collection.deleteMany({});
+    }
+
+    // Création des files d'attente pour chaque type de nœud
+    const queues = validNodes.reduce((acc, nodeName) => {
+        acc[nodeName] = [];
+        return acc;
+    }, {});
+
+    const processingQueues = new Set();
+
+    const insertBatch = async (collectionName, batch) => {
+        const collection = db.collection(collectionName);
+        console.log(`\nInserting ${batch.length} documents in  ${collectionName}...`);
+        await collection.insertMany(batch);
+    };
+
+    const processInsertionQueue = async (nodeType) => {
+        if (processingQueues.has(nodeType)) {
+            return;
         }
-        batch.length = 0;  // Vider le batch après l'insertion
+        processingQueues.add(nodeType);
+        
+        const queue = queues[nodeType];
+        while (queue.length > BATCH_SIZE) {
+            const batch = queue.splice(0, BATCH_SIZE);
+            await insertBatch(nodeType, batch);
+        }
+        
+        processingQueues.delete(nodeType);
     };
 
     parser.on('opentag', (node) => {
-        if (node.name === 'inproceedings' || node.name === 'article') {
+        if (validNodes.includes(node.name)) {
             currentNode = node.name;
             currentObject = {
-                ...node.attributes,
-                _id: uuidv4()  
+                _id: uuidv4()
             };
         } else if (currentNode) {
             lastNodeName = node.name;
@@ -165,28 +179,18 @@ const processXML = async (filePath) => {
 
     parser.on('text', (text) => {
         if (lastNodeName && currentObject.hasOwnProperty(lastNodeName)) {
-            currentObject[lastNodeName] += text.trim(); 
+            currentObject[lastNodeName] += text.trim();
         }
     });
 
-    parser.on('closetag', async (nodeName) => {
-        if ((nodeName === 'inproceedings' && currentNode === 'inproceedings') ||
-            (nodeName === 'article' && currentNode === 'article')) {
+    parser.on('closetag', (nodeName) => {
+        if (validNodes.includes(nodeName) && currentNode === nodeName) {
+            queues[currentNode].push(currentObject);
             
-            // Ne pas ajouter à la batch si le champ url contient un #
-            if (!currentObject.url || !currentObject.url.includes('#')) {
-                if (nodeName === 'inproceedings') {
-                    inproceedingsBatch.push(currentObject);
-                    if (inproceedingsBatch.length >= BATCH_SIZE) {
-                        await insertBatch(inproceedingsCollection, inproceedingsBatch);
-                    }
-                } else {
-                    articlesBatch.push(currentObject);
-                    if (articlesBatch.length >= BATCH_SIZE) {
-                        await insertBatch(articlesCollection, articlesBatch);
-                    }
-                }
+            if (queues[currentNode].length >= BATCH_SIZE) {
+                processInsertionQueue(currentNode);
             }
+
             currentNode = null;
             currentObject = {};
         }
@@ -202,8 +206,11 @@ const processXML = async (filePath) => {
     });
 
     fileStream.on('end', async () => {
-        await insertBatch(articlesCollection, articlesBatch);
-        await insertBatch(inproceedingsCollection, inproceedingsBatch);
+        for (let nodeType of validNodes) {
+            if (queues[nodeType].length > 0) {
+                await processInsertionQueue(nodeType);
+            }
+        }
         console.log('\nProcessing completed!');
         client.close();
     });
@@ -235,6 +242,7 @@ const main = async () => {
             console.log('File has not been updated. No need to download.');
         }
         processXML('./dblp.xml');
+
     } catch (error) {
         console.error('Error:', error.message);
     }
