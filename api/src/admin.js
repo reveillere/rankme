@@ -16,9 +16,9 @@ function printProgress(msg = 'Progression') {
     let lastLoggedPercentage = -1; 
     return function(current, total) {
         const percentage = ((current / total) * 100).toFixed(2);
-        if (percentage % 5 === 0 && percentage !== lastLoggedPercentage) {
+        if (percentage % 1 === 0 && percentage !== lastLoggedPercentage) {
             lastLoggedPercentage = percentage;
-            console.log(`${msg}: ${percentage}%\r`);
+            console.log(`${msg}: ${percentage}%`);
         }
     }
 }
@@ -127,7 +127,7 @@ const processXML = async (filePath) => {
     let currentObject = {};
     let lastNodeName = null;
     const validNodes = ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'mastersthesis', 'www', 'person', 'data'];
-    const pp = printProgress('Copy to DB');
+    const pp = printProgress('Copying to DB');
 
     for (let nodeType of validNodes) {
         const collection = db.collection(nodeType);
@@ -144,7 +144,6 @@ const processXML = async (filePath) => {
 
     const insertBatch = async (collectionName, batch) => {
         const collection = db.collection(collectionName);
-        console.log(`\nInserting ${batch.length} documents in  ${collectionName}...`);
         await collection.insertMany(batch);
     };
 
@@ -300,10 +299,10 @@ export const extractVenues = async () => {
             console.log('MD5 verification passed!');
             await decompressFile();
             await processXML('/data/dblp.xml');
+            await venueLookup();
         } else {
-            console.log('File has not been updated. No need to download.');
+            console.log('File has not been updated. Nothing to do.');
         }
-        await venueLookup();
     } catch (error) {
         console.error('Error:', error.message);
     }
