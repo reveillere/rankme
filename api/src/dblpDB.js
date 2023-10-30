@@ -277,7 +277,7 @@ async function venueLookup() {
 }
 
 
-const main = async () => {
+export const extractVenues = async () => {
     try {
         const currentMD5 = await getCurrentMD5();
         const storedMD5 = await getStoredMD5();
@@ -301,11 +301,3 @@ const main = async () => {
         console.error('Error:', error.message);
     }
 };
-
-// main();
-
-async function main2() {
-    await venueLookup();
-}
-
-main()

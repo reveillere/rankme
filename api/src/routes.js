@@ -12,6 +12,9 @@ router.get('/dblp/venue/*', dblp.controllerVenue);
 router.get('/rank/db/conf/*', core.controllerRank);
 router.get('/rank/db/journals/*', sjr.controllerRank);
 
+import { extractVenues } from './dblpDB.js';
+router.get('/admin/venues', async (req, res) => { extractVenues(); res.json({}); });
+
 export default router;
 
 
