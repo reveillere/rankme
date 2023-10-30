@@ -287,10 +287,9 @@ async function venueLookup() {
 
 export const extractVenues = async () => {
     try {
-        // const currentMD5 = await getCurrentMD5();
+        const currentMD5 = await getCurrentMD5();
         const storedMD5 = await getStoredMD5();
-        const currentMD5 = "NOP";
-
+        
         if (storedMD5 !== currentMD5) {
             console.log('File has been updated. Downloading...');
 
