@@ -294,7 +294,9 @@ const main = async () => {
         } else {
             console.log('File has not been updated. No need to download.');
         }
-        // processXML('./dblp.xml');
+        await processXML('./dblp.xml');
+        await venueLookup();
+        console.log('FINITO!!!!');
     } catch (error) {
         console.error('Error:', error.message);
     }
@@ -306,4 +308,4 @@ async function main2() {
     await venueLookup();
 }
 
-main2()
+main()
