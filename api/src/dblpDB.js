@@ -9,12 +9,19 @@ import { writeFile, readFile } from 'fs/promises';
 import { Parser } from 'xml2js';
 import sax from 'sax';
 import { v4 as uuidv4 } from 'uuid';
+import { getClient } from './db.js';
 
 
 const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
 const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
 
-
+function printProgress(current, total, msg='Progression') {
+    const percentage = ((current / total) * 100).toFixed(2);
+    process.stdout.write(`${msg}: ${percentage}%\r`);
+    // process.stdout.clearLine();
+    //         process.stdout.cursorTo(0);
+    //         process.stdout.write(`Download progress: ${percentage}%`);
+}
 
 const downloadFile = async () => {
     const response = await fetch(DBLP_XML_URL);
@@ -26,10 +33,7 @@ const downloadFile = async () => {
     await new Promise((resolve, reject) => {
         response.body.on('data', (chunk) => {
             downloadedSize += chunk.length;
-            const percentage = ((downloadedSize / totalSize) * 100).toFixed(2);
-            process.stdout.clearLine();
-            process.stdout.cursorTo(0);
-            process.stdout.write(`Download progress: ${percentage}%`);
+            printProgress(downloadedSize, totalSize, 'Download');
         });
 
         pipeline(response.body, writer, (err) => {
@@ -51,13 +55,13 @@ const getCurrentMD5 = async () => {
 
 const storeMD5 = async (md5Value) => {
     await writeFile('./localMD5.txt', md5Value, 'utf-8');
-  };
-  
-  const getStoredMD5 = async () => {
+};
+
+const getStoredMD5 = async () => {
     try {
-      return await readFile('./localMD5.txt', 'utf-8');
+        return await readFile('./localMD5.txt', 'utf-8');
     } catch (error) {
-      return null;  
+        return null;
     }
 };
 
@@ -97,13 +101,9 @@ const decompressFile = async () => {
             else resolve();
         });
 
-        // Sur chaque morceau de données lues (et non décompressées), mettez à jour le pourcentage
         reader.on('data', (chunk) => {
             readSize += chunk.length;
-            const percentage = ((readSize / totalSize) * 100).toFixed(2);
-            process.stdout.clearLine();
-            process.stdout.cursorTo(0);
-            process.stdout.write(`Decompression progress: ${percentage}%`);
+            printProgress(readSize, totalSize, 'Decompression');
         });
     });
 
@@ -114,11 +114,8 @@ const decompressFile = async () => {
 const BATCH_SIZE = 10000;
 
 
-const mongoURI = 'mongodb://localhost:27017';
-const client = new MongoClient(mongoURI);
-
-
 const processXML = async (filePath) => {
+    const client = getClient();
     await client.connect();
     const db = client.db("dblp");
 
@@ -155,13 +152,13 @@ const processXML = async (filePath) => {
             return;
         }
         processingQueues.add(nodeType);
-        
+
         const queue = queues[nodeType];
         while (queue.length > BATCH_SIZE) {
             const batch = queue.splice(0, BATCH_SIZE);
             await insertBatch(nodeType, batch);
         }
-        
+
         processingQueues.delete(nodeType);
     };
 
@@ -186,7 +183,7 @@ const processXML = async (filePath) => {
     parser.on('closetag', (nodeName) => {
         if (validNodes.includes(nodeName) && currentNode === nodeName) {
             queues[currentNode].push(currentObject);
-            
+
             if (queues[currentNode].length >= BATCH_SIZE) {
                 processInsertionQueue(currentNode);
             }
@@ -198,10 +195,7 @@ const processXML = async (filePath) => {
 
     fileStream.on('data', (chunk) => {
         readSize += chunk.length;
-        const percentage = ((readSize / totalSize) * 100).toFixed(2);
-        process.stdout.clearLine();
-        process.stdout.cursorTo(0);
-        process.stdout.write(`Processing dblp: ${percentage}%`);
+        printProgress(readSize, totalSize, 'Copy to DB');
         parser.write(chunk);
     });
 
@@ -220,6 +214,67 @@ const processXML = async (filePath) => {
     });
 };
 
+import { getVenueFullName } from './dblp.js';
+
+async function venueLookup() {
+    const BATCH_SIZE = 100;
+    try {
+        console.log(`Processing proceedings, extracting venues ...`);
+        const client = await getClient();
+
+        await client.connect();
+        const db = client.db("dblp");
+        const proceedings = db.collection('proceedings');
+        const venues = db.collection('venues');
+        venues.deleteMany({});
+
+        const filter = {
+            'url': {
+                '$regex': '^db/conf.*\.html$'
+            }
+        }
+
+        // Obtenez le nombre total d'enregistrements
+        const totalRecords = await proceedings.countDocuments(filter);
+        console.log(`Number of records to process: ${totalRecords}`);
+        const cursor = proceedings.find(filter);
+
+        let n = 0;
+        let batch = [];
+
+        printProgress(n, totalRecords, "Extracting venue");
+        while (await cursor.hasNext()) {
+            const doc = await cursor.next();
+            let venue = await getVenueFullName(doc.url);
+            if (venue === "") {
+                venue = doc.title;
+            }
+
+            batch.push({
+                _id: doc._id,
+                url: doc.url,
+                venue: venue
+            });
+
+            if (batch.length >= BATCH_SIZE) {
+                await venues.insertMany(batch);
+                n += batch.length;
+                batch = []; 
+                printProgress(n, totalRecords, "Extracting venue");
+            }
+        }
+
+        if (batch.length > 0) {
+            await venues.insertMany(batch);
+            n += batch.length;
+            printProgress(n, totalRecords, "Extracting venue");
+        }
+
+        console.log(`\nProcessing completed!`);
+    } catch (err) {
+        console.error("Error during processing of proceedings", err);
+    }
+}
 
 
 const main = async () => {
@@ -239,11 +294,16 @@ const main = async () => {
         } else {
             console.log('File has not been updated. No need to download.');
         }
-        processXML('./dblp.xml');
-
+        // processXML('./dblp.xml');
     } catch (error) {
         console.error('Error:', error.message);
     }
 };
 
-main();
+// main();
+
+async function main2() {
+    await venueLookup();
+}
+
+main2()

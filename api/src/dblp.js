@@ -1,7 +1,6 @@
 import xml2js from 'xml2js';
 import * as cache from './cache.js';
 import sax from "sax";
-import { getClient } from './db.js';
 
 const BASE = 'https://dblp.org';
 
@@ -138,7 +137,7 @@ export async function searchAuthor(searchQuery) {
 // ****************************************************************************************************
 
 
-async function searchTitle(ref) {
+export async function searchTitle(ref) {
     return new Promise((resolve, reject) => {
         const parser = sax.createStream(true);
         let titleFound = false;
@@ -226,7 +225,7 @@ export async function getVenueFullName(ref) {
         try {
             title = await searchTitle(ref);
         } catch (err) {
-            title = "NO TITLE FOUND";
+            title = "";
         }
         cache.set(key, title); 
     }
