@@ -15,7 +15,7 @@ const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
 function printProgress(msg = 'Progression') {
     let lastLoggedPercentage = -1; 
     return function(current, total) {
-        const percentage = ((current / total) * 100).toFixed(2);
+        const percentage = ((current / total) * 100).toFixed(0);
         if (percentage % 1 === 0 && percentage !== lastLoggedPercentage) {
             lastLoggedPercentage = percentage;
             console.log(`${msg}: ${percentage}%`);
@@ -162,55 +162,58 @@ const processXML = async (filePath) => {
         processingQueues.delete(nodeType);
     };
 
-    parser.on('opentag', (node) => {
-        if (validNodes.includes(node.name)) {
-            currentNode = node.name;
-            currentObject = {
-                _id: uuidv4()
-            };
-        } else if (currentNode) {
-            lastNodeName = node.name;
-            currentObject[lastNodeName] = '';
-        }
-    });
-
-    parser.on('text', (text) => {
-        if (lastNodeName && currentObject.hasOwnProperty(lastNodeName)) {
-            currentObject[lastNodeName] += text.trim();
-        }
-    });
-
-    parser.on('closetag', (nodeName) => {
-        if (validNodes.includes(nodeName) && currentNode === nodeName) {
-            queues[currentNode].push(currentObject);
-
-            if (queues[currentNode].length >= BATCH_SIZE) {
-                processInsertionQueue(currentNode);
+    return new Promise(async (resolve, reject) => {
+        parser.on('opentag', (node) => {
+            if (validNodes.includes(node.name)) {
+                currentNode = node.name;
+                currentObject = {
+                    _id: uuidv4()
+                };
+            } else if (currentNode) {
+                lastNodeName = node.name;
+                currentObject[lastNodeName] = '';
             }
+        });
 
-            currentNode = null;
-            currentObject = {};
-        }
-    });
-
-    fileStream.on('data', (chunk) => {
-        readSize += chunk.length;
-        pp(readSize, totalSize);
-        parser.write(chunk);
-    });
-
-    fileStream.on('end', async () => {
-        for (let nodeType of validNodes) {
-            if (queues[nodeType].length > 0) {
-                await processInsertionQueue(nodeType);
+        parser.on('text', (text) => {
+            if (lastNodeName && currentObject.hasOwnProperty(lastNodeName)) {
+                currentObject[lastNodeName] += text.trim();
             }
-        }
-        console.log('\nProcessing completed!');
-        client.close();
-    });
+        });
 
-    fileStream.on('error', (error) => {
-        console.error('Error reading the file:', error.message);
+        parser.on('closetag', (nodeName) => {
+            if (validNodes.includes(nodeName) && currentNode === nodeName) {
+                queues[currentNode].push(currentObject);
+
+                if (queues[currentNode].length >= BATCH_SIZE) {
+                    processInsertionQueue(currentNode);
+                }
+
+                currentNode = null;
+                currentObject = {};
+            }
+        });
+
+        fileStream.on('data', (chunk) => {
+            readSize += chunk.length;
+            pp(readSize, totalSize);
+            parser.write(chunk);
+        });
+
+        fileStream.on('end', async () => {
+            for (let nodeType of validNodes) {
+                if (queues[nodeType].length > 0) {
+                    await processInsertionQueue(nodeType);
+                }
+            }
+            console.log('\nProcessing completed!');
+            resolve();
+        });
+
+        fileStream.on('error', (error) => {
+            console.error('Error reading the file:', error.message);
+            reject(error);
+        });
     });
 };
 
