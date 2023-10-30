@@ -2,6 +2,7 @@ import express from 'express';
 import * as dblp from './dblp.js';
 import * as core from './corePortal.js';
 import * as sjr from './sjrPortal.js';
+import * as admin from './admin.js';
 
 const router = express.Router();
     
@@ -12,8 +13,7 @@ router.get('/dblp/venue/*', dblp.controllerVenue);
 router.get('/rank/db/conf/*', core.controllerRank);
 router.get('/rank/db/journals/*', sjr.controllerRank);
 
-import { extractVenues } from './dblpDB.js';
-router.get('/admin/venues', async (req, res) => { extractVenues(); res.json({}); });
+router.get('/admin/venues', admin.controllerVenues);
 
 export default router;
 

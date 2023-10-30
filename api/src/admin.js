@@ -1,26 +1,26 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
-import { MongoClient } from 'mongodb';
-import { parseStringPromise } from 'xml2js';
 import { pipeline } from 'stream';
 import gunzip from 'gunzip-maybe';
 import { createWriteStream, statSync, createReadStream } from 'fs';
 import { writeFile, readFile } from 'fs/promises';
-import { Parser } from 'xml2js';
 import sax from 'sax';
 import { v4 as uuidv4 } from 'uuid';
 import { getClient } from './db.js';
-
+import { getVenueFullName } from './dblp.js';
 
 const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
 const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
 
-function printProgress(current, total, msg='Progression') {
-    const percentage = ((current / total) * 100).toFixed(2);
-    process.stdout.write(`${msg}: ${percentage}%\r`);
-    // process.stdout.clearLine();
-    //         process.stdout.cursorTo(0);
-    //         process.stdout.write(`Download progress: ${percentage}%`);
+function printProgress(msg = 'Progression') {
+    let lastLoggedPercentage = -1; 
+    return function(current, total) {
+        const percentage = ((current / total) * 100).toFixed(2);
+        if (percentage % 5 === 0 && percentage !== lastLoggedPercentage) {
+            lastLoggedPercentage = percentage;
+            console.log(`${msg}: ${percentage}%\r`);
+        }
+    }
 }
 
 const downloadFile = async () => {
@@ -28,12 +28,12 @@ const downloadFile = async () => {
     const totalSize = Number(response.headers.get('content-length'));
     let downloadedSize = 0;
 
-    const writer = createWriteStream('./dblp.xml.gz');
-
+    const writer = createWriteStream('/data/dblp.xml.gz');
+    const pp = printProgress('Download');
     await new Promise((resolve, reject) => {
         response.body.on('data', (chunk) => {
             downloadedSize += chunk.length;
-            printProgress(downloadedSize, totalSize, 'Download');
+            pp(downloadedSize, totalSize);
         });
 
         pipeline(response.body, writer, (err) => {
@@ -54,12 +54,12 @@ const getCurrentMD5 = async () => {
 };
 
 const storeMD5 = async (md5Value) => {
-    await writeFile('./localMD5.txt', md5Value, 'utf-8');
+    await writeFile('/data/localMD5.txt', md5Value, 'utf-8');
 };
 
 const getStoredMD5 = async () => {
     try {
-        return await readFile('./localMD5.txt', 'utf-8');
+        return await readFile('/data/localMD5.txt', 'utf-8');
     } catch (error) {
         return null;
     }
@@ -67,7 +67,7 @@ const getStoredMD5 = async () => {
 
 const verifyMD5 = async (md5Expected) => {
     const hash = crypto.createHash('md5');
-    const fileStream = createReadStream('./dblp.xml.gz');
+    const fileStream = createReadStream('/data/dblp.xml.gz');
 
     await new Promise((resolve, reject) => {
         fileStream.on('data', (chunk) => {
@@ -88,11 +88,11 @@ const verifyMD5 = async (md5Expected) => {
 
 
 const decompressFile = async () => {
-    const totalSize = statSync('./dblp.xml.gz').size;  // obtenir la taille du fichier gz
+    const totalSize = statSync('/data/dblp.xml.gz').size;  // obtenir la taille du fichier gz
     let readSize = 0;
-
-    const reader = createReadStream('./dblp.xml.gz');
-    const writer = createWriteStream('./dblp.xml');
+    const pp = printProgress('Decompression')
+    const reader = createReadStream('/data/dblp.xml.gz');
+    const writer = createWriteStream('/data/dblp.xml');
     const unzip = gunzip();
 
     await new Promise((resolve, reject) => {
@@ -103,7 +103,7 @@ const decompressFile = async () => {
 
         reader.on('data', (chunk) => {
             readSize += chunk.length;
-            printProgress(readSize, totalSize, 'Decompression');
+            pp(readSize, totalSize);
         });
     });
 
@@ -115,7 +115,7 @@ const BATCH_SIZE = 10000;
 
 
 const processXML = async (filePath) => {
-    const client = getClient();
+    const client = await getClient();
     await client.connect();
     const db = client.db("dblp");
 
@@ -127,6 +127,7 @@ const processXML = async (filePath) => {
     let currentObject = {};
     let lastNodeName = null;
     const validNodes = ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'mastersthesis', 'www', 'person', 'data'];
+    const pp = printProgress('Copy to DB');
 
     for (let nodeType of validNodes) {
         const collection = db.collection(nodeType);
@@ -195,7 +196,7 @@ const processXML = async (filePath) => {
 
     fileStream.on('data', (chunk) => {
         readSize += chunk.length;
-        printProgress(readSize, totalSize, 'Copy to DB');
+        pp(readSize, totalSize);
         parser.write(chunk);
     });
 
@@ -214,10 +215,10 @@ const processXML = async (filePath) => {
     });
 };
 
-import { getVenueFullName } from './dblp.js';
 
 async function venueLookup() {
     const BATCH_SIZE = 100;
+    const pp = printProgress('Venue lookup');
     try {
         console.log(`Processing proceedings, extracting venues ...`);
         const client = await getClient();
@@ -226,7 +227,6 @@ async function venueLookup() {
         const db = client.db("dblp");
         const proceedings = db.collection('proceedings');
         const venues = db.collection('venues');
-        venues.deleteMany({});
 
         const filter = {
             'url': {
@@ -240,11 +240,17 @@ async function venueLookup() {
         const cursor = proceedings.find(filter);
 
         let n = 0;
+        let updated = 0;
         let batch = [];
 
-        printProgress(n, totalRecords, "Extracting venue");
+        pp(n, totalRecords);
         while (await cursor.hasNext()) {
             const doc = await cursor.next();
+            const existingVenue = await venues.findOne({ url: doc.url });
+            if (existingVenue) {
+                n++
+                continue;
+            }
             let venue = await getVenueFullName(doc.url);
             if (venue === "") {
                 venue = doc.title;
@@ -259,18 +265,20 @@ async function venueLookup() {
             if (batch.length >= BATCH_SIZE) {
                 await venues.insertMany(batch);
                 n += batch.length;
+                updated += batch.length;
                 batch = []; 
-                printProgress(n, totalRecords, "Extracting venue");
+                pp(n, totalRecords);
             }
         }
 
         if (batch.length > 0) {
             await venues.insertMany(batch);
             n += batch.length;
-            printProgress(n, totalRecords, "Extracting venue");
+            updated += batch.length;
+            pp(n, totalRecords);
         }
 
-        console.log(`\nProcessing completed!`);
+        console.log(`${updated} venues extracted!`);
     } catch (err) {
         console.error("Error during processing of proceedings", err);
     }
@@ -279,8 +287,9 @@ async function venueLookup() {
 
 export const extractVenues = async () => {
     try {
-        const currentMD5 = await getCurrentMD5();
+        // const currentMD5 = await getCurrentMD5();
         const storedMD5 = await getStoredMD5();
+        const currentMD5 = "NOP";
 
         if (storedMD5 !== currentMD5) {
             console.log('File has been updated. Downloading...');
@@ -291,13 +300,17 @@ export const extractVenues = async () => {
             await storeMD5(currentMD5);
             console.log('MD5 verification passed!');
             await decompressFile();
+            await processXML('/data/dblp.xml');
         } else {
             console.log('File has not been updated. No need to download.');
         }
-        await processXML('./dblp.xml');
         await venueLookup();
-        console.log('FINITO!!!!');
     } catch (error) {
         console.error('Error:', error.message);
     }
 };
+
+export async function controllerVenues(req, res) {
+    res.send("Launching extraction of venues ...");
+    extractVenues();
+}

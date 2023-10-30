@@ -17,6 +17,7 @@ services:
       - REDIS_URI=redis://redis:6379/
     volumes:
       - ./api/log:/app/log
+      - api-data:/app/data
 
   redis:
     <<: *common-service
@@ -68,3 +69,4 @@ services:
 volumes:
   db-data:
   redis-data:
+  api-data:

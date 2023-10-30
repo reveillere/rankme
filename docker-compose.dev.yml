@@ -19,6 +19,8 @@ services:
     volumes:
       - ./api/src:/app/src
       - ./api/log:/app/log
+      - api-data:/data
+
 
 
   front:
@@ -66,4 +68,4 @@ services:
 volumes:
   db-data:
   redis-data:
-
+  api-data:
