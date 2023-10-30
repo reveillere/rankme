@@ -7,7 +7,7 @@ const createRedisClient = (() => {
 
     return async function getClient() {
         if (!client) {
-            client = createClient({ url: REDIS_URI });
+            client = createClient({ url: 'redis://redis:6379' });
             client.on('error', err => {
                 console.log('Redis Client Error', err);
                 // Reset client if you want to handle reconnection on next call
