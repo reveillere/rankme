@@ -75,7 +75,6 @@ export async function load() {
   console.log('Loading core sources ...');
   const sources = await getSources();
   for (const source of sources) {
-    console.log(`Fetching: ${source.source}`);
     await getSource(source.source);
   }
 }
