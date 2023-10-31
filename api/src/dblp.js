@@ -230,14 +230,14 @@ export async function getVenueFullName(ref) {
         try {
             const doc = await venues.findOne({ 'url': ref });
             if (doc) {
-                console.log(`\x1b[34m[Venues DB]\x1b[0m Found ${doc.venue} for ${ref}`);
+                console.log(`[Venue] get: ${ref} => \x1b[32mHIT\x1b[0m`);
                 title = doc.venue;
             } else {
-                console.log(`\x1b[34m[Venues DB]\x1b[0m Not found ${ref}`);
+                console.log(`[Venue] get: ${ref} => \x1b[31mMISS\x1b[0m`);
                 title = await searchTitle(ref);
                 if (title) {
                     await venues.insertOne({ 'url': ref, 'venue': title });
-                    console.log(`\x1b[34m[Venues DB]\x1b[0m Inserted ${title} for ${ref}`);
+                    console.log(`\x1b[34m[Venue] set:\x1b[0m ${ref}`);
                 }
             }
         } catch (err) {
