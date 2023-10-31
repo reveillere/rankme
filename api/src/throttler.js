@@ -5,7 +5,7 @@ const MAX_RETRIES = 5;
 
 const limiter = new Bottleneck({
   maxConcurrent: 1,
-  minTime: 300 
+  minTime: 1000 
 });
 
 async function fetch(url, options = {}, retries = MAX_RETRIES) {
