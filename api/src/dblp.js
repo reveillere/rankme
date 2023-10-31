@@ -1,6 +1,7 @@
 import xml2js from 'xml2js';
 import * as cache from './cache.js';
 import sax from "sax";
+import { getClient } from './db.js';
 
 const BASE = 'https://dblp.org';
 
@@ -90,8 +91,7 @@ export async function controllerSearch(req, res) {
 async function getSearchAuthor(searchQuery) {
     const key = `dblp:search:${searchQuery}`;
 
-    // let results = await cache.get(key);
-    let results = null;
+    let results = await cache.get(key);
     if (results == null) {
         console.log(`Search: [${searchQuery}]`)
         const exactMatches = await searchAuthor(searchQuery.replace(/ +/g, '$ ') + '$');
@@ -217,14 +217,31 @@ export async function searchTitle(ref) {
     });
 }
 
+
 export async function getVenueFullName(ref) {
     const key = `dblp:venue:${ref}`;
+
+    const client = await getClient();
+    const db = client.db("dblp");
+    const venues = db.collection('venues');
 
     let title = await cache.get(key);
     if (title == null) {
         try {
-            title = await searchTitle(ref);
+            const doc = await venues.findOne({ 'url': ref });
+            if (doc) {
+                console.log(`\x1b[34m[Venues DB]\x1b[0m Found ${doc.venue} for ${ref}`);
+                title = doc.venue;
+            } else {
+                console.log(`\x1b[34m[Venues DB]\x1b[0m Not found ${ref}`);
+                title = await searchTitle(ref);
+                if (title) {
+                    await venues.insertOne({ 'url': ref, 'venue': title });
+                    console.log(`\x1b[34m[Venues DB]\x1b[0m Inserted ${title} for ${ref}`);
+                }
+            }
         } catch (err) {
+            console.log(`\x1b[34m[Venues]\x1b[0m Error in venue lookup ${err} ...`);
             title = "";
         }
         cache.set(key, title); 
@@ -232,6 +249,7 @@ export async function getVenueFullName(ref) {
 
     return title;
 }
+
 
 
 export async function controllerVenue(req, res) {

@@ -259,7 +259,6 @@ async function venueLookup() {
             }
 
             batch.push({
-                _id: doc._id,
                 url: doc.url,
                 venue: venue
             });
@@ -306,8 +305,6 @@ export const extractVenues = async () => {
         } else {
             console.log('File has not been updated. Nothing to do.');
         }
-
-        await venueLookup();
 
     } catch (error) {
         console.error('Error:', error.message);
