@@ -129,10 +129,13 @@ const processXML = async (filePath) => {
     const validNodes = ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'mastersthesis', 'www', 'person', 'data'];
     const pp = printProgress('Copying to DB');
 
+    console.log('Processing started, remove all previous data...');
+
     for (let nodeType of validNodes) {
         const collection = db.collection(nodeType);
         await collection.deleteMany({});
     }
+    console.log('Previous data removed!');
 
     // Création des files d'attente pour chaque type de nœud
     const queues = validNodes.reduce((acc, nodeName) => {
@@ -218,73 +221,54 @@ const processXML = async (filePath) => {
 };
 
 
-async function venueLookup() {
-    const BATCH_SIZE = 100;
-    const pp = printProgress('Venue lookup');
+async function venueLookup(collection, filter) {
+    const db = client.db('dblp');
+    const venueUrls = new Set();
+    const pp = printProgress(`Venues lookup from ${collection}`);
+
     try {
-        console.log(`Processing proceedings, extracting venues ...`);
-        const client = await getClient();
-
-        await client.connect();
-        const db = client.db("dblp");
-        const proceedings = db.collection('proceedings');
-        const venues = db.collection('venues');
-
-        const filter = {
-            'url': {
-                '$regex': '^db/conf.*\.html$'
-            }
+        console.log("Fetching venue URLs...");
+        for await (const doc of db.collection('venues').find({})) {
+            venueUrls.add(doc.url);
         }
 
-        // Obtenez le nombre total d'enregistrements
-        const totalRecords = await proceedings.countDocuments(filter);
-        console.log(`Number of records to process: ${totalRecords}`);
-        const cursor = proceedings.find(filter);
+        const totalDocs = await db.collection(collection).countDocuments(); 
+        console.log(`Total entries to process: ${totalDocs}`);
 
-        let n = 0;
-        let updated = 0;
-        let batch = [];
+        const confsCursor = db.collection(collection).find({});
+        let processed = 0;
+        let count = 0;
 
-        pp(n, totalRecords);
-        while (await cursor.hasNext()) {
-            const doc = await cursor.next();
-            const existingVenue = await venues.findOne({ url: doc.url });
-            if (existingVenue) {
-                n++
-                continue;
+        for await (const doc of confsCursor) {
+            if (doc.url && doc.url.startsWith(filter)) {
+                const url = doc.url.split('#')[0];
+                if (!venueUrls.has(url)) {
+                    count++;
+                    venueUrls.add(url);
+                    let venue = await getVenueFullName(url);
+                    if (venue === "") {
+                        venue = doc.title;
+                    }
+
+                    try {
+                        await db.collection('venues').insertOne({
+                            "url": url,
+                            "venue": venue
+                        });
+                    } catch (insertError) {
+                        console.error("An error occurred during insertion:", insertError);
+                    }
+                }
             }
-            let venue = await getVenueFullName(doc.url);
-            if (venue === "") {
-                venue = doc.title;
-            }
-
-            batch.push({
-                url: doc.url,
-                venue: venue
-            });
-
-            if (batch.length >= BATCH_SIZE) {
-                await venues.insertMany(batch);
-                n += batch.length;
-                updated += batch.length;
-                batch = []; 
-                pp(n, totalRecords);
-            }
+            processed++;
+            pp(processed, totalDocs);
         }
 
-        if (batch.length > 0) {
-            await venues.insertMany(batch);
-            n += batch.length;
-            updated += batch.length;
-            pp(n, totalRecords);
-        }
-
-        console.log(`${updated} venues extracted!`);
-    } catch (err) {
-        console.error("Error during processing of proceedings", err);
+        console.log(`\n${count} elements for lookup.`);
+    } catch (error) {
+        console.error("An error occurred:", error);
     }
 }
-
 
 export const extractVenues = async () => {
     try {
@@ -301,10 +285,14 @@ export const extractVenues = async () => {
             console.log('MD5 verification passed!');
             await decompressFile();
             await processXML('/data/dblp.xml');
-            await venueLookup();
+            await venueLookup('inproceedings', 'db/conf/');
+            await venueLookup('article', 'db/journals/');
         } else {
             console.log('File has not been updated. Nothing to do.');
         }
+
+        await processXML('/data/dblp.xml');
+        await venueLookup('inproceedings', 'db/conf/');
 
     } catch (error) {
         console.error('Error:', error.message);
