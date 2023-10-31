@@ -222,6 +222,8 @@ const processXML = async (filePath) => {
 
 
 async function venueLookup(collection, filter) {
+    const client = await getClient();
+    await client.connect();
     const db = client.db('dblp');
     const venueUrls = new Set();
     const pp = printProgress(`Venues lookup from ${collection}`);
@@ -267,6 +269,8 @@ async function venueLookup(collection, filter) {
         console.log(`\n${count} elements for lookup.`);
     } catch (error) {
         console.error("An error occurred:", error);
+    } finally {
+        client.close();
     }
 }
 
