@@ -230,7 +230,7 @@ export async function getVenueFullName(ref) {
         try {
             const doc = await venues.findOne({ 'url': ref });
             if (doc) {
-                console.log(`[Venue] get: ${ref} => \x1b[32mHIT\x1b[0m`);
+                // console.log(`[Venue] get: ${ref} => \x1b[32mHIT\x1b[0m`);
                 title = doc.venue;
             } else {
                 console.log(`[Venue] get: ${ref} => \x1b[31mMISS\x1b[0m`);
