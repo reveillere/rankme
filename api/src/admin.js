@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { pipeline } from 'stream';
 import gunzip from 'gunzip-maybe';
 import { createWriteStream, statSync, createReadStream } from 'fs';
-import { writeFile, readFile } from 'fs/promises';
+import { writeFile, readFile, mkdir } from 'fs/promises';
 import sax from 'sax';
 import { v4 as uuidv4 } from 'uuid';
 import { getClient } from './db.js';
@@ -28,7 +28,7 @@ const downloadFile = async () => {
     const totalSize = Number(response.headers.get('content-length'));
     let downloadedSize = 0;
 
-    const writer = createWriteStream('/data/dblp.xml.gz');
+    const writer = createWriteStream('/data/dblp/dblp.xml.gz');
     const pp = printProgress('Download');
     await new Promise((resolve, reject) => {
         response.body.on('data', (chunk) => {
@@ -54,12 +54,12 @@ const getCurrentMD5 = async () => {
 };
 
 const storeMD5 = async (md5Value) => {
-    await writeFile('/data/localMD5.txt', md5Value, 'utf-8');
+    await writeFile('/data/dblp/localMD5.txt', md5Value, 'utf-8');
 };
 
 const getStoredMD5 = async () => {
     try {
-        return await readFile('/data/localMD5.txt', 'utf-8');
+        return await readFile('/data/dblp/localMD5.txt', 'utf-8');
     } catch (error) {
         return null;
     }
@@ -67,7 +67,7 @@ const getStoredMD5 = async () => {
 
 const verifyMD5 = async (md5Expected) => {
     const hash = crypto.createHash('md5');
-    const fileStream = createReadStream('/data/dblp.xml.gz');
+    const fileStream = createReadStream('/data/dblp/dblp.xml.gz');
 
     await new Promise((resolve, reject) => {
         fileStream.on('data', (chunk) => {
@@ -91,8 +91,8 @@ const decompressFile = async () => {
     const totalSize = statSync('/data/dblp.xml.gz').size;  // obtenir la taille du fichier gz
     let readSize = 0;
     const pp = printProgress('Decompression')
-    const reader = createReadStream('/data/dblp.xml.gz');
-    const writer = createWriteStream('/data/dblp.xml');
+    const reader = createReadStream('/data/dblp/dblp.xml.gz');
+    const writer = createWriteStream('/data/dblp/dblp.xml');
     const unzip = gunzip();
 
     await new Promise((resolve, reject) => {
@@ -266,7 +266,7 @@ async function venueLookup(collection, filter) {
             pp(processed, totalDocs);
         }
 
-        console.log(`\n${count} elements for lookup.`);
+        console.log(`\n${count} elements inserted in venues.`);
     } catch (error) {
         console.error("An error occurred:", error);
     } finally {
@@ -276,9 +276,12 @@ async function venueLookup(collection, filter) {
 
 export const extractVenues = async () => {
     try {
+        await mkdir('/data/dblp', { recursive: true });
+
         const currentMD5 = await getCurrentMD5();
         const storedMD5 = await getStoredMD5();
         
+
         if (storedMD5 !== currentMD5) {
             console.log('File has been updated. Downloading...');
 
@@ -288,15 +291,14 @@ export const extractVenues = async () => {
             await storeMD5(currentMD5);
             console.log('MD5 verification passed!');
             await decompressFile();
-            await processXML('/data/dblp.xml');
+            await processXML('/data/dblp/dblp.xml');
             await venueLookup('inproceedings', 'db/conf/');
             await venueLookup('article', 'db/journals/');
         } else {
             console.log('File has not been updated. Nothing to do.');
         }
 
-        await processXML('/data/dblp.xml');
-        await venueLookup('inproceedings', 'db/conf/');
+    await venueLookup('article', 'db/journals/');
 
     } catch (error) {
         console.error('Error:', error.message);

@@ -3,44 +3,56 @@ import HTMLParser from 'node-html-parser';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
 import { getVenueFullName } from './dblp.js';
+import { writeFile, readFile, mkdir } from 'fs/promises';
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
 export const querySource = '?search=&by=all&do=Export&source=';
 
 const RANKS = ['A*', 'A', 'B', 'C'];
 
-
 import fetch from './throttler.js';
+import { read } from 'fs';
+
+let sources = null;
 
 async function getSources() {
-  const key = 'core:sources';
-  const sources = await cache.get(key);
-  if (sources) {
-    return sources;
+  if (sources == null) {
+    sources = await fetchSources();
   }
+  return sources;
+}
 
-  // cache miss
+async function fetchSources() {
   const resp = await fetch(BASE);
   const html = await resp.text();
   const dom = HTMLParser.parse(html);
   const options = dom.querySelectorAll('select[name=source] option').map(o => o.rawText);
   const yearRegex = /\d+/g;
-  const data = [];
+  let sources = [];
   options.forEach(item => {
     const trimmedItem = item.trim();
     if (trimmedItem === 'All') return;
     const matches = trimmedItem.match(yearRegex) || [];
     matches.forEach(match => {
       if (match.length === 4) {
-        data.push({
+        sources.push({
           year: parseInt(match, 10),
           source: trimmedItem
         });
       }
     });
   });
-  await cache.set(key, data);
-  return data;
+  return sources;
+}
+
+
+async function readJSON(path) {
+  try {
+    const data = await readFile(path, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    return null;
+  }
 }
 
 // Returns the list of availables sources on Core Portal
@@ -57,25 +69,52 @@ export async function controllerSources(req, res) {
  
 // Returns the source  for a given source
 async function getSource(id) {
-  const url = `${BASE}/?search=&by=all&do=Export&source=${id}`;
   const key = `core:source:${id}`;
-  const source = await cache.get(key);
+  let source = await cache.get(key);
   if (source) {
     return source;
   }
+  source = readJSON(SOURCE(id));
+  await cache.set(key, source);
+  return source;
+}
+
+async function fetchSource(id) {
+  const url = `${BASE}/?search=&by=all&do=Export&source=${id}`;
   const resp = await fetch(url);
   const text = await resp.text();
   const data = await parseRankSource(text);
-  await cache.set(key, data);
   return data;
 }
 
+const SOURCES = '/data/core/sources.json';
+const SOURCE = (id) => `/data/core/source_${id}.json`;
+
 
 export async function load() {
-  console.log('Loading core sources ...');
-  const sources = await getSources();
-  for (const source of sources) {
-    await getSource(source.source);
+  try {
+    console.log('Loading core sources ...');
+    await mkdir('/data/core', { recursive: true });
+
+    const sources = await fetchSources();
+    let storedSources = await readJSON(SOURCES);
+    if (JSON.stringify(sources) === JSON.stringify(storedSources)) {
+      console.log('No update needed');
+    } else {
+      console.log('Updating sources ...');
+      await writeFile(SOURCES, JSON.stringify(sources), 'utf-8');
+      for (const source of sources) {
+        const data = await fetchSource(source.source); 
+        await writeFile(SOURCE(source.source), JSON.stringify(data), 'utf-8');
+      }
+    }
+
+    for (const source of sources) {
+      await getSource(source.source);
+    }
+    console.log('Core sources loaded');
+  } catch (error) {
+    console.error('Error loading core sources', error);
   }
 }
 
@@ -95,6 +134,11 @@ export async function controllerSource(req, res) {
   }
 }
 
+
+
+
+// ************************************************************************************
+// ************************************************************************************
 
 
 
