@@ -11,7 +11,6 @@ export const querySource = '?search=&by=all&do=Export&source=';
 const RANKS = ['A*', 'A', 'B', 'C'];
 
 import fetch from './throttler.js';
-import { read } from 'fs';
 
 let sources = null;
 
@@ -51,6 +50,7 @@ async function readJSON(path) {
     const data = await readFile(path, 'utf-8');
     return JSON.parse(data);
   } catch (error) {
+    console.error(`[core] Error reading JSON file : ${path}`, error);
     return null;
   }
 }
@@ -61,7 +61,7 @@ export async function controllerSources(req, res) {
     const sources = await getSources();
     res.json(sources);
   } catch (e) {
-    console.error('Error fetching sources: ', e);
+    console.error('[core] Error fetching sources: ', e);
     res.status(500).json({ error: 'Internal Server Error', message: e.message });
   }
 }
@@ -74,7 +74,8 @@ async function getSource(id) {
   if (source) {
     return source;
   }
-  source = readJSON(SOURCE(id));
+  console.log(`[core] Source ${id} not in cache, reading from file ...`)
+  source = await readJSON(SOURCE(id));
   await cache.set(key, source);
   return source;
 }
@@ -93,28 +94,25 @@ const SOURCE = (id) => `/data/core/source_${id}.json`;
 
 export async function load() {
   try {
-    console.log('Loading core sources ...');
+    console.log('[core] Loading sources ...');
     await mkdir('/data/core', { recursive: true });
 
-    const sources = await fetchSources();
+    sources = await fetchSources();
     let storedSources = await readJSON(SOURCES);
     if (JSON.stringify(sources) === JSON.stringify(storedSources)) {
-      console.log('No update needed');
+      console.log('[core] No update needed');
     } else {
-      console.log('Updating sources ...');
+      console.log('[core] Updating sources ...');
       await writeFile(SOURCES, JSON.stringify(sources), 'utf-8');
       for (const source of sources) {
         const data = await fetchSource(source.source); 
         await writeFile(SOURCE(source.source), JSON.stringify(data), 'utf-8');
       }
+      console.log('[core] Sources loaded');
     }
 
-    for (const source of sources) {
-      await getSource(source.source);
-    }
-    console.log('Core sources loaded');
   } catch (error) {
-    console.error('Error loading core sources', error);
+    console.error('[core] Error loading sources', error);
   }
 }
 
@@ -129,7 +127,7 @@ export async function controllerSource(req, res) {
     const source = await getSource(id);
     res.json(source);
   } catch (e) {
-    console.error('Error fetching source: ', e);
+    console.error('[core] Error fetching source: ', e);
     res.status(500).json({ error: 'Internal Server Error', message: e.message });
   }
 }
@@ -162,7 +160,7 @@ async function parseRankSource(txt) {
       rank: item.rank
     })).filter(item => item.id !== "");
   } catch (e) {
-    console.error('Fetch Error: ', e);
+    console.error('[core] Fetch Error: ', e);
     throw e;
   }
 }
@@ -182,7 +180,7 @@ export async function controllerRank(req, res) {
     const rank = await getRank(acronym.toUpperCase(), ref, year);
     res.json(rank);
   } catch (error) {
-    console.error('Error during rank computation', error);
+    console.error('[core] Error during rank computation', error);
     res.status(400).json({ error: 'Internal Server Error', message: error.message });
   }
 }
@@ -206,7 +204,7 @@ async function computeRank(acronym, venueFullName, year) {
   const foundItem = sortedList.find(item => item.year <= year);
   const sourceKey = foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
   const source = await getSource(sourceKey);
-
+  
   const candidates = source.filter(conf => conf.acronym === acronym);
   const sanitizedRank = (rank, exact, score) => RANKS.includes(rank) ?
     { value: rank, msg: `${sourceKey}`, exact: exact, score: score } :

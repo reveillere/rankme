@@ -22,8 +22,7 @@ const createRedisClient = (() => {
 export async function get(key) {
     const redisClient = await createRedisClient();
     const cachedResponse = await redisClient.get(key);
-    if (!cachedResponse)
-        console.log('[redis] get:', key, '=>', cachedResponse ? '\x1b[32mHIT\x1b[0m' : '\x1b[31mMISS\x1b[0m');
+    console.log('[redis] get:', key, '=>', cachedResponse ? '\x1b[32mHIT\x1b[0m' : '\x1b[31mMISS\x1b[0m');
     return JSON.parse(cachedResponse);
 }
 
