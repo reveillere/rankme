@@ -197,6 +197,10 @@ function AuthorShow({ author, publications }) {
   return (
     <div className='App'>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {isFilterActive || <div style={{ marginLeft: '50px', marginRight: '100px', marginTop: '40px' }}>
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />
+        </div>}
+        
         <div id='foo' style={{ textAlign: 'center' }}>
           <h1>Records of {trimLastDigits(author.name)}</h1>
           <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>

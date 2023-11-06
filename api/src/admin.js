@@ -309,3 +309,133 @@ export async function controllerVenues(req, res) {
     res.send("Launching extraction of venues ...");
     extractVenues();
 }
+
+
+
+
+
+// *******************************************************************************************************
+// *******************************************************************************************************
+
+
+
+const processXMLbis = async (filePath) => {
+    const client = await getClient();
+    await client.connect();
+    const db = client.db("test");
+
+    const parser = sax.createStream(true);
+    const fileStream = createReadStream(filePath);
+    const totalSize = statSync(filePath).size;
+    let readSize = 0;
+    let currentNode = null;
+    let currentObject = {};
+    let lastNodeName = null;
+    const validNodes = ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'phdthesis', 'mastersthesis', 'www', 'person', 'data'];
+    const pp = printProgress('Copying to DB');
+
+    console.log('Processing started, remove all previous data...');
+
+    for (let nodeType of validNodes) {
+        const collection = db.collection(nodeType);
+        await collection.deleteMany({});
+    }
+    console.log('Previous data removed!');
+
+    // Création des files d'attente pour chaque type de nœud
+    const queues = validNodes.reduce((acc, nodeName) => {
+        acc[nodeName] = [];
+        return acc;
+    }, {});
+
+    const processingQueues = new Set();
+
+    const insertBatch = async (collectionName, batch) => {
+        const collection = db.collection(collectionName);
+        await collection.insertMany(batch);
+    };
+
+    const processInsertionQueue = async (nodeType) => {
+        if (processingQueues.has(nodeType)) {
+            return;
+        }
+        processingQueues.add(nodeType);
+
+        const queue = queues[nodeType];
+        while (queue.length > BATCH_SIZE) {
+            const batch = queue.splice(0, BATCH_SIZE);
+            console.log("batch : ", batch)
+            await insertBatch(nodeType, batch);
+        }
+
+        processingQueues.delete(nodeType);
+    };
+
+    return new Promise(async (resolve, reject) => {
+        parser.on('opentag', (node) => {
+            if (validNodes.includes(node.name)) {
+                console.log("node.name : ", node.name);
+                currentNode = node.name;
+                currentObject = {
+                    _id: uuidv4()
+                };
+            } else if (currentNode) {
+                lastNodeName = node.name;
+                currentObject[lastNodeName] = '';
+            }
+        });
+
+        parser.on('text', (text) => {
+            if (lastNodeName && currentObject.hasOwnProperty(lastNodeName)) {
+                currentObject[lastNodeName] += text.trim();
+            }
+        });
+
+        parser.on('closetag', (nodeName) => {
+            if (validNodes.includes(nodeName) && currentNode === nodeName) {
+                console.log('close tag : ', nodeName);
+                console.log(currentObject);
+                queues[currentNode].push(currentObject);
+
+                if (queues[currentNode].length >= BATCH_SIZE) {
+                    processInsertionQueue(currentNode);
+                }
+
+                currentNode = null;
+                currentObject = {};
+            }
+        });
+
+        fileStream.on('data', (chunk) => {
+            readSize += chunk.length;
+            pp(readSize, totalSize);
+            parser.write(chunk);
+        });
+
+        fileStream.on('end', async () => {
+            for (let nodeType of validNodes) {
+                if (queues[nodeType].length > 0) {
+                    await processInsertionQueue(nodeType);
+                }
+            }
+            console.log('\nProcessing completed!');
+            client.close();
+            resolve();
+        });
+
+        fileStream.on('error', (error) => {
+            console.error('Error reading the file:', error.message);
+            reject(error);
+        });
+    });
+};
+
+export async function test() {
+    try {
+        const path = "./dblp_mini.xml";
+        await processXMLbis(path);
+    } catch (error) {
+        console.error('Error:', error.message);
+    }
+}
+
