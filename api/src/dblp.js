@@ -57,12 +57,12 @@ export async function getFetchAuthor(authorPID) {
     let author = await cache.get(key);
     if (author == null) {
         author = await getAuthor(authorPID, key);
-        cache.set(key, author); 
+        cache.set(key, author, 60 * 60 * 24); 
     }
 
     const updates = await updateAuthor(author);
     if (updates > 0)
-        cache.set(key, author); 
+        cache.set(key, author, 60 * 60 * 24); 
     return author
 }
 
@@ -99,7 +99,7 @@ async function getSearchAuthor(searchQuery) {
         const combined = exactMatches.concat(likelyMatches);
         results = combined.filter((value, index, self) => 
             self.findIndex(item => item.pid === value.pid) === index
-        );        cache.set(key, results); 
+        );        cache.set(key, results, 60 * 60 * 24); 
     }
     return results
 }
