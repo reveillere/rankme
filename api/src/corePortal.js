@@ -95,7 +95,7 @@ const SOURCE = (id) => `/data/core/source_${id}.json`;
 export async function load() {
   try {
     console.log('[core] Loading sources ...');
-    await mkdir('/data/core', { recursive: true });
+    // await mkdir('/data/core', { recursive: true });
 
     sources = await fetchSources();
     let storedSources = await readJSON(SOURCES);
