@@ -27,12 +27,13 @@ export async function get(key) {
 } 
 
 export async function set(key, value, ttl = null) {
-    console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key, 'with TTL:', ttl);
     const redisClient = await createRedisClient();
     
     if (ttl) {
+        console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key, 'with TTL = ', ttl);
         await redisClient.set(key, JSON.stringify(value), { 'EX': ttl });
     } else {
+        console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key);
         await redisClient.set(key, JSON.stringify(value));
     }
 }
