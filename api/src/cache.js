@@ -31,7 +31,7 @@ export async function set(key, value, ttl = null) {
     const redisClient = await createRedisClient();
     
     if (ttl) {
-        await redisClient.set(key, JSON.stringify(value), 'EX', ttl);
+        await redisClient.set(key, JSON.stringify(value), { 'EX': ttl });
     } else {
         await redisClient.set(key, JSON.stringify(value));
     }

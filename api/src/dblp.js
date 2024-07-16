@@ -62,7 +62,7 @@ export async function getFetchAuthor(authorPID) {
 
     const updates = await updateAuthor(author);
     if (updates > 0)
-        cache.set(key, author, 60 * 60 * 24); 
+        cache.set(key, author, 60 * 60 * 24); // 1day
     return author
 }
 
