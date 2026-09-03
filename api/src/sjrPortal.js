@@ -65,7 +65,6 @@ export async function load() {
         }
     } catch (error) {
         console.error('Error during connection or insertion:', error);
-        throw error;
     }
 }
 
