@@ -1,11 +1,10 @@
-/* eslint-disable react/prop-types */
 import React from 'react';
 import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
 
-export function Publications({ author, data }) {
+export function Publications({ author, data, onOpenAuthor }) {
   const pubs = [...data].sort((a, b) => b.year - a.year);
   const typeCounts = data.reduce((acc, curr) => {
     acc[curr.type] = (acc[curr.type] || 0) + 1;
@@ -50,7 +49,10 @@ export function Publications({ author, data }) {
                         .map((a, i) => (
                           <span key={i} className="link">
                             {a.$.pid !== author.pid ? (
-                              <a href={`/author/${a.$.pid}`}>
+                              <a href="#" onClick={(e) => {
+                                e.preventDefault();
+                                onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
+                              }}>
                                 {trimLastDigits(a._)}
                               </a>
                             ) : (

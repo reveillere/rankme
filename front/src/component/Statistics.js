@@ -1,5 +1,4 @@
 import { Bar, Pie } from 'react-chartjs-2';
-import { dblpCategories } from '../dblp';
 
 
 
@@ -34,14 +33,14 @@ function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccess
   return <Pie options={options} data={datas} />;
 }
 
-export function CategoriesPieChart({ records, selected }) {
+export function CategoriesPieChart({ records, selected, categories }) {
   return (
-    <PieChart 
-      records={records} 
-      selected={selected} 
+    <PieChart
+      records={records}
+      selected={selected}
       fieldAccessor={(pub) => pub.type}
-      labelAccessor={(key) => dblpCategories[key].name} 
-      colorAccessor={(key) => dblpCategories[key].color}
+      labelAccessor={(key) => categories[key].name}
+      colorAccessor={(key) => categories[key].color}
     />
   );
 }
@@ -61,7 +60,7 @@ export function RanksPieChart({ records, selected, ranks }) {
 
 
 
-function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
+function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor, yearAccessor }) {
   const options = {
     responsive: false,
     scales: {
@@ -89,8 +88,9 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
     },
   };
   
-  const [startYear, endYear] = records.reduce(([min, max], record) => {
-    const year = record.dblp.year;
+  const recordsWithYear = records.filter(record => yearAccessor(record) != null);
+  const [startYear, endYear] = recordsWithYear.reduce(([min, max], record) => {
+    const year = yearAccessor(record);
     return [Math.min(min, year), Math.max(max, year)];
   }, [Number.MAX_SAFE_INTEGER, Number.MIN_SAFE_INTEGER]);
   const dataByYear = {};
@@ -100,9 +100,9 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
   for (let year = startYear; year <= endYear; year++) {
     dataByYear[year] = {};
   }
-  
-  for (let pub of records) {
-    const year = pub.dblp.year;
+
+  for (let pub of recordsWithYear) {
+    const year = yearAccessor(pub);
 
     if (selected[fieldAccessor(pub)]) {
       dataByYear[year][fieldAccessor(pub)] = (dataByYear[year][fieldAccessor(pub)] || 0) + 1;
@@ -125,26 +125,28 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
 }
 
 
-export function CategoriesByYearChart({ records, selected }) {
+export function CategoriesByYearChart({ records, selected, categories, yearAccessor }) {
   return (
     <ByYearChart
       records={records}
       selected={selected}
       fieldAccessor={(pub) => pub.type}
-      labelAccessor={(key) => dblpCategories[key].name} 
-      colorAccessor={(key) => dblpCategories[key].color}
+      labelAccessor={(key) => categories[key].name}
+      colorAccessor={(key) => categories[key].color}
+      yearAccessor={yearAccessor}
     />
   );
 }
 
-export function RanksByYearChart({ records, selected, ranks }) {
+export function RanksByYearChart({ records, selected, ranks, yearAccessor }) {
   return (
     <ByYearChart
       records={records}
       selected={selected}
       fieldAccessor={(pub) => pub.rank?.value}
-      labelAccessor={(key) => ranks[key].name} 
+      labelAccessor={(key) => ranks[key].name}
       colorAccessor={(key) => ranks[key].color}
+      yearAccessor={yearAccessor}
     />
   );
 }

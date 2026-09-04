@@ -16,7 +16,7 @@ GET http://localhost:8080/api/dblp/venue/db/conf/middleware/index.html
 GET http://localhost:8080/api/dblp/venue/db/journals/stvr/index.html
 
 ### Conference rank
-GET http://localhost:8080/api/rank/db/conf/middleware/middleware2021.html?year=2021&acronym=middleware
+GET http://localhost:8080/api/rank/db/conf/middleware/middleware2022.html?year=2022&acronym=middleware
 
 ### Journal rank
 GET http://localhost:8080/api/rank/db/journals/stvr/stvr32.html?year=2022
@@ -26,9 +26,16 @@ GET http://localhost:8080/api/rank/db/conf/icst/icst2020.html?year=2020&acronym=
 
 
 
+###
+GET http://localhost:8080/api/admin/venues
 
 
 
+### TEST rank2
+POST http://localhost:8080/api/rank/db/conf2
+Content-Type: application/json
 
-### TEST DBLP
-GET https://dblp.org/search/author/api/?format=json&q=david$+lo$&c=0
+{
+  "fullName": "13th International Middleware Conference (MIDDLEWARE)",
+  "year": "2012"
+}

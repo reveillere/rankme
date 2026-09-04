@@ -16,5 +16,8 @@ module.exports = {
       'warn',
       { allowConstantExport: true },
     ],
+    // This project doesn't use (or install) prop-types; the rule was
+    // erroring on every component before lint had ever actually been run.
+    'react/prop-types': 'off',
   },
 }

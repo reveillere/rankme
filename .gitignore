@@ -6,6 +6,11 @@ log/
 api/dblp.xml.gz
 api/dblp.xml
 api/localMD5.txt
+/scimagojr-data/
+/db-dump/
+/redis-dump.rdb
+/backups/
+.idea/
 
 # dependencies
 front/node_modules

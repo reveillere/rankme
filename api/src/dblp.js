@@ -10,6 +10,63 @@ import fetch from './throttler.js';
 const ensureArray = obj => Array.isArray(obj) ? obj : (obj ? [obj] : []);
 
 
+// Normalize the raw dblpperson.r publication list into a flat, uniform shape.
+export function normalizePublications(author) {
+    try {
+        const publications = ensureArray(author?.dblpperson?.r);
+        const result = [];
+
+        for (const publication of publications) {
+            const publicationObject = {};
+            if (publication.inproceedings) {
+                publicationObject.type = 'inproceedings';
+                publicationObject.authors = ensureArray(publication?.inproceedings?.author);
+                publicationObject.venue = publication.inproceedings.booktitle;
+                publicationObject.dblp = publication.inproceedings;
+            } else if (publication.article) {
+                publicationObject.type = (publication.article.$?.publtype === 'informal') ? 'informal' : 'article';
+                publicationObject.authors = ensureArray(publication?.article?.author);
+                publicationObject.venue = publication.article.journal
+                publicationObject.dblp = publication.article;
+            } else if (publication.proceedings) {
+                publicationObject.type = 'proceedings';
+                publicationObject.authors = ensureArray(publication?.proceedings?.editor);
+                publicationObject.venue = publication.proceedings.booktitle
+                publicationObject.dblp = publication.proceedings;
+            } else if (publication.book) {
+                if (publication.book?.$?.publtype === 'habil') {
+                    publicationObject.venue = publication.book.school
+                    publicationObject.authors = ensureArray(publication?.book?.author);
+                } else {
+                    publicationObject.venue = publication.book.publisher;
+                    publicationObject.authors = ensureArray(publication?.book?.editor);
+                }
+                publicationObject.type = 'book';
+                publicationObject.dblp = publication.book;
+            } else if (publication.incollection) {
+                publicationObject.type = 'incollection';
+                publicationObject.authors = ensureArray(publication?.incollection?.author);
+                publicationObject.venue = publication.incollection.booktitle;
+                publicationObject.dblp = publication.incollection;
+            } else if (publication.phdthesis) {
+                publicationObject.type = 'book';
+                publicationObject.authors = ensureArray(publication?.phdthesis?.author);
+                publicationObject.venue = 'PhD Thesis';
+                publicationObject.dblp = publication.phdthesis;
+            }
+
+            if (Object.keys(publicationObject).length > 0) {
+                result.push(publicationObject);
+            }
+        }
+
+        return result;
+    } catch (error) {
+        console.error('Error normalizing publications:', error);
+        return [];
+    }
+}
+
 export async function updateAuthor(author) {
     let update = 0;
     const publications = ensureArray(author?.dblpperson?.r);
@@ -57,7 +114,7 @@ export async function getFetchAuthor(authorPID) {
     let author = await cache.get(key);
     if (author == null) {
         author = await getAuthor(authorPID, key);
-        cache.set(key, author, 60 * 60 * 24); 
+        cache.set(key, author, 60 * 60 * 24); // 1 day
     }
 
     const updates = await updateAuthor(author);
@@ -99,7 +156,7 @@ async function getSearchAuthor(searchQuery) {
         const combined = exactMatches.concat(likelyMatches);
         results = combined.filter((value, index, self) => 
             self.findIndex(item => item.pid === value.pid) === index
-        );        cache.set(key, results, 60 * 60 * 24); 
+        );        cache.set(key, results, 60 * 60 * 24); // 1 day
     }
     return results
 }

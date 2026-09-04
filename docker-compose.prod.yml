@@ -1,5 +1,3 @@
-version: "3.3"
-
 x-common-service: &common-service
   restart: always
 
@@ -18,31 +16,82 @@ services:
     volumes:
       - ./api/log:/app/log
       - api-data:/data
+      - ./scimagojr-data:/data/scimagojr
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:80/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
 
   redis:
     <<: *common-service
-    image: redis:latest
+    image: redis:7.4-alpine
     volumes:
       - redis-data:/data
       - ./redis.conf:/usr/local/etc/redis/redis.conf
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # redis.conf caps redis itself at maxmemory 500mb; this leaves it
+          # headroom for its own process overhead rather than matching exactly.
+          memory: 768M
+          cpus: "1.0"
 
- 
+
 
   front:
     <<: *common-service
     build:
       context: front/
       dockerfile: ./Dockerfile.prod
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
   mongo:
     <<: *common-service
-    image: mongo:latest
+    image: mongo:8.0
     volumes:
       - db-data:/data/db
-    command: ["--quiet",  "--logpath=/data/db/mongod.log" ]
+    # wiredTigerCacheSizeGB pinned explicitly: mongod otherwise sizes its
+    # cache off host RAM regardless of the container's cgroup limit below,
+    # and would eventually get OOM-killed as its working set grew into that
+    # gap. 256MB is generous for the ~73MB this app actually stores
+    # (scimagojr + dblp venues + admin/CORE data).
+    command: ["--quiet",  "--logpath=/data/db/mongod.log", "--wiredTigerCacheSizeGB=0.25"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
 
-  
 
 
   reverseproxy:
@@ -61,6 +110,17 @@ services:
         read_only: true
     ports:
       - 443:443
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:443/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
 
 

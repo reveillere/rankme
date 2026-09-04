@@ -4,10 +4,12 @@ import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
 import { getVenueFullName }  from './dblp.js';
 import { getClient } from './db.js';
+import { readFile } from 'fs/promises';
 
 let config = null;
 
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
+const CSV_DIR = '/data/scimagojr';
 
 
 
@@ -32,6 +34,24 @@ async function parseCSV(txt) {
     }
 }
 
+// Load year data from a locally provided CSV file (see CSV_DIR), falling
+// back to fetching it from scimagojr.com if no local file is found.
+async function loadYearCSV(year) {
+    const localPath = `${CSV_DIR}/${year}.csv`;
+    try {
+        const csvData = await readFile(localPath, 'utf-8');
+        console.log(`[sjr] Loading local CSV file: ${localPath}`);
+        return await parseCSV(csvData);
+    } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+    }
+
+    console.log(`Fetching: ${BASE}${year}`);
+    const resp = await fetch(`${BASE}${year}`);
+    const csvData = await resp.text();
+    return await parseCSV(csvData);
+}
+
 // Initialize the database
 export async function load() {
     console.log('Loading scimagojr database ...');
@@ -41,7 +61,7 @@ export async function load() {
 
         // Load the configuration parameters
         const collection = db.collection("config");
-        const newConfig = { start: 1999, end: 2022 };
+        const newConfig = { start: 1999, end: 2025 };
         config = await collection.findOne({});
         if (config) {
             await collection.updateOne({}, { $set: newConfig });
@@ -55,12 +75,13 @@ export async function load() {
             const collection = db.collection(collectionName);
             const count = await collection.countDocuments();
             if (count === 0) {
-                console.log(`Fetching: ${BASE}${year}`);
-                const resp = await fetch(`${BASE}${year}`);
-                const csvData = await resp.text();
-                const jsonObj = await parseCSV(csvData);
-                await collection.insertMany(jsonObj);
-                console.log(`${jsonObj.length} elements inserted into sjr:${collectionName}.`);
+                try {
+                    const jsonObj = await loadYearCSV(year);
+                    await collection.insertMany(jsonObj);
+                    console.log(`${jsonObj.length} elements inserted into sjr:${collectionName}.`);
+                } catch (error) {
+                    console.error(`[sjr] Error loading year ${year}:`, error.message);
+                }
             }
         }
     } catch (error) {
@@ -126,9 +147,9 @@ export async function controllerRank(req, res) {
     }
 }
 
-async function getRank(ref, year) {
+export async function getRank(ref, year) {
     const key = `rank:${year}:${ref}`;
-  
+
     let rank = await cache.get(key);
     if (rank === null) {
       const venueFullName = await getVenueFullName(ref);
@@ -137,5 +158,40 @@ async function getRank(ref, year) {
     }
     return rank;
 }
-  
+
+
+
+// ************************************************************************************
+// ************************************************************************************
+// Rank by full journal name directly (no dblp ref available, e.g. HAL publications)
+
+
+
+export async function controllerRank2(req, res) {
+    const { fullName, year } = req.body;
+    if (!year || !fullName) {
+        res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
+        return;
+    }
+
+    try {
+        const rank = await getRankByFullName(fullName, year);
+        res.json(rank);
+    } catch (error) {
+        console.error('Error during rank computation', error);
+        res.status(400).json({ error: 'Internal Server Error', message: error.message });
+    }
+}
+
+export async function getRankByFullName(fullName, year) {
+    const key = `rank:${year}:sjr:${fullName}`;
+
+    let rank = await cache.get(key);
+    if (rank === null) {
+        rank = await computeRank(fullName, year);
+        cache.set(key, rank);
+    }
+    return rank;
+}
+
 export default { load }

@@ -1,5 +1,5 @@
  
-FROM nginx
+FROM nginx:stable-alpine
 
 COPY nginx.conf.dev /etc/nginx/nginx.conf
 

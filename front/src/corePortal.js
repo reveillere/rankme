@@ -8,10 +8,4 @@ export const ranks = {
 };
 
 
-export async function rank(acronym, ref, year) {
-    const url = `/api/rank/${ref.split('#')[0]}?acronym=${encodeURIComponent(acronym)}&year=${year}`;
-    const resp = await fetch(url);
-    return await resp.json();
-}
-
-export default { ranks, rank };
+export default { ranks };

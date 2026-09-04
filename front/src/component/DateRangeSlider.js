@@ -94,6 +94,11 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
                 setDisplayMarks(calculateMarks(interval));
             }
         }
+        // Deliberately mount-only: re-running on every render (which is what
+        // including calculateMarks, recreated each render, would do) would
+        // re-measure and reset marks continuously instead of just once after
+        // the initial layout.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handleReset = () => {

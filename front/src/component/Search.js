@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useRef } from 'react';
 
 // Material-UI Components and Icons
 import Paper from '@mui/material/Paper';
@@ -13,65 +12,135 @@ import ListItemText from '@mui/material/ListItemText';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 
 // Styles and Other
 import '../App.css';
 
 // API Functions
-import { searchAuthor } from '../dblp';
+import { searchAuthor as searchAuthorDblp } from '../dblp';
+import { searchAuthor as searchAuthorHal } from '../hal';
+import { getCachedSearch, setCachedSearch } from '../searchCache';
+
+const MIN_QUERY_LENGTH = 2;
+const DEBOUNCE_MS = 400;
+
+const SOURCES = {
+    dblp: {
+        label: 'DBLP',
+        heading: 'Search author on DBLP',
+        search: searchAuthorDblp,
+        toTab: (elt) => ({ type: 'dblp-author', id: `dblp:${elt.pid}`, label: elt.author, pid: elt.pid }),
+    },
+    hal: {
+        label: 'HAL',
+        heading: 'Search author on HAL',
+        search: searchAuthorHal,
+        toTab: (elt) => ({ type: 'hal-author', id: `hal:${elt.id}`, label: elt.author, halId: elt.id, authorName: elt.author }),
+    },
+};
 
 
 
 
-
-export default function AuthorSearch() {
+// searchRequest: optional { source, text } set by a caller (e.g. a HAL
+// co-author link with no known idHal) to prefill and immediately run a
+// search, switching to the given source if needed.
+export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
+    const [source, setSource] = useState('dblp');
+    const [query, setQuery] = useState('');
     const [queryResult, setQueryResult] = useState([]);
     const [queryStatus, setQueryStatus] = useState('ready');
+    const debounceRef = useRef();
+    const requestIdRef = useRef(0);
+
+    const runSearch = async (src, text) => {
+        const trimmed = text.trim();
+        if (trimmed.length < MIN_QUERY_LENGTH) {
+            requestIdRef.current++;
+            setQueryResult([]);
+            setQueryStatus('ready');
+            return;
+        }
+
+        const requestId = ++requestIdRef.current;
+        const cacheKey = `search:${src}:${trimmed.toLowerCase()}`;
+        const cached = getCachedSearch(cacheKey);
+        if (Array.isArray(cached)) {
+            setQueryResult(cached);
+            setQueryStatus('resolved');
+            return;
+        }
+
+        setQueryStatus('pending');
+        try {
+            const data = await SOURCES[src].search(encodeURI(trimmed));
+            if (requestId !== requestIdRef.current) return; // a newer search superseded this one
+            if (!Array.isArray(data)) {
+                // The API returned an error payload (e.g. { error: ... }) rather
+                // than results — never cache or render that as a result list.
+                console.error('Unexpected search response', data);
+                setQueryResult([]);
+                setQueryStatus('error');
+                return;
+            }
+            setQueryResult(data);
+            setQueryStatus('resolved');
+            setCachedSearch(cacheKey, data);
+        } catch (err) {
+            if (requestId !== requestIdRef.current) return;
+            console.error('Search failed', err);
+            setQueryResult([]);
+            setQueryStatus('error');
+        }
+    };
+
+    useEffect(() => {
+        if (!searchRequest) return;
+        setSource(searchRequest.source);
+        setQuery(searchRequest.text);
+        runSearch(searchRequest.source, searchRequest.text);
+    }, [searchRequest]);
+
+    const handleSourceChange = (event, newSource) => {
+        setSource(newSource);
+        runSearch(newSource, query);
+    };
+
+    const handleInputChange = (value) => {
+        setQuery(value);
+
+        if (debounceRef.current) {
+            clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+            runSearch(source, value);
+        }, DEBOUNCE_MS);
+    };
 
     return (
         <div className='App'>
-            <h1>Search author on DBLP</h1>
-            <AuthorSearchForm queryResult={queryResult} setResult={setQueryResult} setStatus={setQueryStatus} />
-            <AuthorSearchResults queryResult={queryResult} queryStatus={queryStatus} />
+            <h1>{SOURCES[source].heading}</h1>
+            <Tabs value={source} onChange={handleSourceChange} centered style={{ marginBottom: '20px' }}>
+                {Object.entries(SOURCES).map(([key, { label }]) => (
+                    <Tab key={key} value={key} label={label} />
+                ))}
+            </Tabs>
+            <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} />
+            <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />
         </div>
     );
 }
 
 
-function AuthorSearchForm({ queryResult, setResult, setStatus }) {
+function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAuthor }) {
 
     const inputRef = useRef();
-    const debounceRef = useRef();
 
     useEffect(() => {
         inputRef.current.focus();
     }, []);
-
-
-    const processQuery = async value => {
-        if (value !== '') {
-            setStatus('pending');
-            const data = await searchAuthor(encodeURI(value));
-            setResult(data);
-            setStatus('resolved');
-        }
-    }
-
-    const handleInputChange = e => {
-        const value = e.target.value;
-
-        // Clear any existing timeout
-        if (debounceRef.current) {
-            clearTimeout(debounceRef.current);
-        }
-
-        // Set a new timeout
-        debounceRef.current = setTimeout(() => {
-            processQuery(value);
-        }, 300);  // <-- 300ms delay
-    }
-
-    const navigate = useNavigate();
 
     return (
         <Paper
@@ -79,8 +148,7 @@ function AuthorSearchForm({ queryResult, setResult, setStatus }) {
             onSubmit={e => {
                 e.preventDefault();
                 if (queryResult && queryResult.length === 1) {
-                    const pid = queryResult[0].pid;
-                    navigate(`/author/${pid}`);
+                    onOpenAuthor(SOURCES[source].toTab(queryResult[0]));
                 }
             }}
             sx={{ p: '2px 4px', display: 'flex', marginBottom: '40px', alignItems: 'center', width: 400 }}
@@ -93,7 +161,8 @@ function AuthorSearchForm({ queryResult, setResult, setStatus }) {
                 sx={{ ml: 1, flex: 1 }}
                 placeholder="Author name"
                 inputProps={{ 'aria-label': 'Author name' }}
-                onChange={e => handleInputChange(e)}
+                value={query}
+                onChange={e => onInputChange(e.target.value)}
             />
         </Paper>
     );
@@ -103,21 +172,15 @@ function AuthorSearchForm({ queryResult, setResult, setStatus }) {
 
 
 
-function AuthorSearchResults({ queryResult, queryStatus }) {
-
-
-    const navigate = useNavigate();
-    const gotoPublications = (url) => {
-        navigate(`/author/${url}`);
-    };
+function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor }) {
 
     const Results = () => {
         if (queryResult.length !== 0) {
             const listItems = queryResult.map((elt, i) => (
                 <div key={i}>
                     <ListItem disablePadding>
-                        <ListItemButton>
-                            <div onClick={() => gotoPublications(elt.pid)} style={{ minWidth: '500px', textDecoration: 'none' }}>
+                        <ListItemButton onClick={() => onOpenAuthor(SOURCES[source].toTab(elt))}>
+                            <div style={{ minWidth: '500px' }}>
                                 <ListItemText
                                     primary={<span style={{ fontWeight: 'bold' }}>{elt.author}</span>}
                                     secondary={
@@ -130,7 +193,6 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
                                         </>
                                     }
                                 />
-
                             </div>
                         </ListItemButton>
                     </ListItem>
@@ -160,6 +222,7 @@ function AuthorSearchResults({ queryResult, queryStatus }) {
                 </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
+            {queryStatus === 'error' && <div>Search failed, please try again.</div>}
         </div>
     );
 }

@@ -26,14 +26,21 @@ export async function get(key) {
     return JSON.parse(cachedResponse);
 } 
 
+// Caching is best-effort: callers frequently fire this without awaiting it,
+// so a Redis error here must never surface as an unhandled rejection and
+// crash the process.
 export async function set(key, value, ttl = null) {
-    const redisClient = await createRedisClient();
-    
-    if (ttl) {
-        console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key, 'with TTL = ', ttl);
-        await redisClient.set(key, JSON.stringify(value), { 'EX': ttl });
-    } else {
-        console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key);
-        await redisClient.set(key, JSON.stringify(value));
+    try {
+        const redisClient = await createRedisClient();
+
+        if (ttl) {
+            console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key, 'with TTL = ', ttl);
+            await redisClient.set(key, JSON.stringify(value), { 'EX': ttl });
+        } else {
+            console.log('\x1b[33m%s\x1b[0m', '[redis] set:', key);
+            await redisClient.set(key, JSON.stringify(value));
+        }
+    } catch (error) {
+        console.error('[redis] set failed for key', key, ':', error.message);
     }
 }

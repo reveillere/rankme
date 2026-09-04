@@ -1,27 +1,34 @@
 export function normalizeTitle(line) {
   const wordsToRemove = ['acm', 'ieee', 'international', 'national', 'IFIP']
-      .concat(['symposium', 'conference', 'workshop', 'proceedings', 'chapter', 'association'])
-      .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
-      .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
+    .concat(['proceedings', 'chapter', 'association'])
+    .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
+    .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
 
 
   const regex = new RegExp(`\\b(?<!-)(?:${wordsToRemove.join('|')})(?!-)\\b`, 'gi');
 
   return line
-      .replace(/\(.*?\)/g, '')  // remove content in parentheses
-      .replace(/['",&]/g, '')  // remove quotes, & and commas
-      .replace(/\//g, ' ')  // replace slashes with spaces
-      .replace(/:\s/g, ' ')  // replace colons followed by a space word with a space
-      .replace(regex, '')  // remove specific words and prepositions
-      .replace(/\d+\w*/g, '')  // remove numbers
-      .replace(/-\s/g, ' ')  // replace hyphens followed by a space word with a space
-      .toLowerCase() // convert to lowercase
-      .split(/\s+/) // split by whitespace
-      .filter(Boolean); // remove empty strings
+    .replace(/\(.*?\)/g, '')  // remove content in parentheses
+    .replace(/['"]/g, '')  // remove quotes, & and commas
+    .replace(/\//g, ' ')  // replace slashes with spaces
+    .replace(/:\s/g, ' ')  // replace colons followed by a space word with a space
+    .replace(regex, '')  // remove specific words and prepositions
+    .replace(/\d+\w*/g, '')  // remove numbers
+    .replace(/-\s/g, ' ')  // replace hyphens followed by a space word with a space
+    .toLowerCase() // convert to lowercase
+    .replace(/,/g, ' ') // replace commas with spaces
+    .replace(/&/g, ' ') // replace & with spaces
+    .split(/\s+/) // split by whitespace
+    .filter(Boolean); // remove empty strings
 }
 
 
-export function levenshtein(str1, str2) {  
+// ***************************************************************************************
+// ***************************************************************************************
+// ***************************************************************************************
+
+
+export function levenshtein(str1, str2) {
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
 
   for (let i = 0; i <= str1.length; i += 1) matrix[0][i] = i;

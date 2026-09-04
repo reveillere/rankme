@@ -66,7 +66,7 @@ export async function controllerSources(req, res) {
   }
 }
 
- 
+
 // Returns the source  for a given source
 async function getSource(id) {
   const key = `core:source:${id}`;
@@ -105,7 +105,7 @@ export async function load() {
       console.log('[core] Updating sources ...');
       await writeFile(SOURCES, JSON.stringify(sources), 'utf-8');
       for (const source of sources) {
-        const data = await fetchSource(source.source); 
+        const data = await fetchSource(source.source);
         await writeFile(SOURCE(source.source), JSON.stringify(data), 'utf-8');
       }
       console.log('[core] Sources loaded');
@@ -175,7 +175,7 @@ export async function controllerRank(req, res) {
     res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
     return;
   }
-  
+
   try {
     const rank = await getRank(acronym.toUpperCase(), ref, year);
     res.json(rank);
@@ -185,7 +185,7 @@ export async function controllerRank(req, res) {
   }
 }
 
-async function getRank(acronym, ref, year) {
+export async function getRank(acronym, ref, year) {
   const key = `rank:${year}:${ref}`;
 
   let rank = await cache.get(key);
@@ -197,18 +197,30 @@ async function getRank(acronym, ref, year) {
   return rank;
 }
 
-async function computeRank(acronym, venueFullName, year) {
-  const titleNormalized = normalizeTitle(venueFullName);
+// Both computeRank (acronym-first, dblp path) and computeRank2 (fuzzy-only,
+// HAL path — no acronym available) need the same yearly source snapshot and
+// the same rank-message shaping; only the actual matching strategy differs.
+async function resolveSource(year) {
   const sources = await getSources();
   const sortedList = sources.sort((a, b) => b.year - a.year);
   const foundItem = sortedList.find(item => item.year <= year);
   const sourceKey = foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
   const source = await getSource(sourceKey);
-  
-  const candidates = source.filter(conf => conf.acronym === acronym);
-  const sanitizedRank = (rank, exact, score) => RANKS.includes(rank) ?
+  return { sourceKey, source };
+}
+
+function makeSanitizedRank(sourceKey) {
+  return (rank, exact, score) => RANKS.includes(rank) ?
     { value: rank, msg: `${sourceKey}`, exact: exact, score: score } :
     { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}`, exact: exact, score: score };
+}
+
+async function computeRank(acronym, venueFullName, year) {
+  const titleNormalized = normalizeTitle(venueFullName);
+  const { sourceKey, source } = await resolveSource(year);
+  const sanitizedRank = makeSanitizedRank(sourceKey);
+
+  const candidates = source.filter(conf => conf.acronym === acronym);
 
   let rank;
 
@@ -228,6 +240,70 @@ async function computeRank(acronym, venueFullName, year) {
     const entry = candidates[0];
     const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
     rank = sanitizedRank(entry.rank, true, score);
+  }
+  return rank;
+}
+
+
+
+// ************************************************************************************
+// ************************************************************************************
+
+
+
+export async function controllerRank2(req, res) {
+  const { fullName, year } = req.body
+  if (!year || !fullName) {
+    res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
+    return;
+  }
+
+  try {
+    const rank = await getRankByFullName(fullName, year);
+    res.json(rank);
+  } catch (error) {
+    console.error('[core] Error during rank computation', error);
+    res.status(400).json({ error: 'Internal Server Error', message: error.message });
+  }
+}
+
+export async function getRankByFullName(fullName, year) {
+  const key = `rank:${year}:core2:${fullName}`;
+
+  let rank = await cache.get(key);
+  if (rank === null) {
+    rank = await computeRank2(fullName, year);
+    cache.set(key, rank);
+  }
+  return rank;
+}
+
+
+
+
+
+async function computeRank2(venueFullName, year) {
+  const titleNormalized = normalizeTitle(venueFullName);
+  const { sourceKey, source } = await resolveSource(year);
+  const sanitizedRank = makeSanitizedRank(sourceKey);
+
+  let rank;
+
+  const scores = source.map(conf => ({ conf: conf, levenshtein: levenshtein(normalizeTitle(conf.acronym + ' ' + conf.title), titleNormalized) }));
+  const candidates = scores.filter(score => score.levenshtein <= 3);
+
+  if (candidates.length === 0) {
+    rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+  } else {
+    // print debug info for the first 5 candidates with the lowest levenshtein distance
+    const sortedCandidates = candidates.sort((a, b) => a.levenshtein - b.levenshtein);
+    console.log(`[ranking of ${venueFullName} => ${titleNormalized}] Found ${sortedCandidates.length} candidates in ${sourceKey}`);
+    for (let i = 0; i < Math.min(10, sortedCandidates.length); i++) {
+      console.log(`[ranking] ${i + 1}: ${sortedCandidates[i].conf.title} => ${normalizeTitle(sortedCandidates[i].conf.acronym + ' ' + sortedCandidates[i].conf.title)} (distance=${sortedCandidates[i].levenshtein})`);
+    }
+
+    const bestMatch = sortedCandidates[0];
+    rank = sanitizedRank(bestMatch.conf.rank, false, bestMatch.score);
   }
   return rank;
 }

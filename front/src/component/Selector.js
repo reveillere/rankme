@@ -2,7 +2,6 @@ import React from 'react';
 import { Checkbox, FormGroup, FormControlLabel } from '@mui/material';
 import CorePortal from '../corePortal';
 import SjrPortal from '../sjrPortal';
-import { dblpCategories } from '../dblp';
 
 function Selector({ records, selected, setSelected, data, filterKey }) {
   const [recordCountByType, setRecordCountByType] = React.useState([]);
@@ -13,6 +12,11 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
       [key]: records.filter(record => filterKey(record) === key).length
     }), {});
     setRecordCountByType(counts);
+    // Deliberately scoped to `records` only: this snapshots the counts as of
+    // the last data change, so the label can show "what it used to be
+    // selected" beside the live count — re-running on every `selected`
+    // toggle would erase that distinction.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records]);
 
   const handleSelectAll = () => {
@@ -80,10 +84,10 @@ export function RankSelector(props) {
 }
 
 
-export function CategoriesSelector(props) {
+export function CategoriesSelector({ categories, ...props }) {
   return (
     <div style={{ width: '400px' }}>
-      <Selector {...props} data={dblpCategories} filterKey={record => record.type} />
+      <Selector {...props} data={categories} filterKey={record => record.type} />
     </div>
   );
 }

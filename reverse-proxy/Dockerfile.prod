@@ -1,5 +1,5 @@
  
-FROM nginx
+FROM nginx:stable-alpine
 
 COPY nginx.conf.prod /etc/nginx/nginx.conf
 

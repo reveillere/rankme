@@ -1,28 +1,28 @@
-// React and React Router
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+// React
+import React, { useState, useEffect, useMemo } from 'react';
 
 // Material-UI Components and Icons
-import { CircularProgress, Tab, Tabs, Button } from '@mui/material';
-import FilterListIcon from '@mui/icons-material/FilterList';
+import { Tab, Tabs } from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import { createTheme } from '@mui/material/styles';
 
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
 
 // DBLP and CorePortal
-import { dblpCategories, fetchAuthor, getPublications, getVenueTitle } from '../dblp';
+import { dblpCategories, fetchAuthor } from '../dblp';
 import * as CorePortal from '../corePortal';
 import * as SjrPortal from '../sjrPortal';
+import { useRankedPublications } from '../useRankedPublications';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
 import { Publications } from './Publications';
 import { CategoriesPieChart, RanksPieChart, CategoriesByYearChart, RanksByYearChart } from './Statistics';
 import { RankSelector, CategoriesSelector } from './Selector';
+import { FilterButton } from './FilterButton';
+import { LoadingSpinner } from './LoadingSpinner';
+import { filterPublications } from '../filterPublications';
 
 // Utilities and Styles
 import { trimLastDigits } from '../utils';
@@ -34,13 +34,9 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 });
 
 Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
-const theme = createTheme();
 
-
-export function Author() {
+export function Author({ pid, onOpenAuthor }) {
   const [author, setAuthor] = useState(null);
-
-  const pid = useParams()['*'];
 
   useEffect(() => {
     const fetchData = async function () {
@@ -55,31 +51,41 @@ export function Author() {
   }, [pid]);
 
   if (author === null)
-    return (
-      <Box style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '100vh' // prend toute la hauteur de la fenêtre
-      }}>
-        <CircularProgress color="primary" />
-        <span style={{ color: theme.palette.primary.main }}>
-          Loading...
-        </span></Box>
+    return <LoadingSpinner />;
 
-    )
-      ;
-
-  const publications = getPublications(author);
-  return <AuthorShow author={author?.dblpperson?.$} publications={publications} />;
+  return <AuthorShow author={author?.dblpperson?.$} pid={pid} onOpenAuthor={onOpenAuthor} />;
 }
 
 
 
 
-function AuthorShow({ author, publications }) {
-  const minYear = Math.min(...publications.map(pub => pub.dblp.year));
-  const maxYear = Math.max(...publications.map(pub => pub.dblp.year));
+function AuthorShow({ author, pid, onOpenAuthor }) {
+  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}`);
+
+  if (failed && rankedPublications === null)
+    return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
+
+  if (rankedPublications === null)
+    return <LoadingSpinner />;
+
+  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} onOpenAuthor={onOpenAuthor} />;
+}
+
+
+
+
+const yearAccessor = pub => pub.dblp.year;
+
+function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor }) {
+  // Years are already known from the initial SSE `init` payload — only
+  // `.rank` fields arrive later — so this only needs recomputing when the
+  // publication count itself changes, not on every streamed rank update
+  // (which replaces the array reference on every tick).
+  const [minYear, maxYear] = useMemo(
+    () => [Math.min(...rankedPublications.map(yearAccessor)), Math.max(...rankedPublications.map(yearAccessor))],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rankedPublications.length]
+  );
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
   const [tabGraph, setTabGraph] = useState(0);
   const [tabSelect, setTabSelect] = useState(0);
@@ -88,99 +94,17 @@ function AuthorShow({ author, publications }) {
     ...Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
     ...Object.keys(SjrPortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
   });
-  const [rankedPublications, setRankedPublications] = useState([...publications]);
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
-  const [updateInProgress, setUpdateInProgress] = useState(false);
-  const [updateCompleted, setUpdateCompleted] = useState(false);
-  const [updateCompletedPercent, setUpdateCurrentCompleted] = useState(0);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
-    const rankable = (pub) => pub.type === 'inproceedings' || pub.type === 'article';
-
-    const rankPublications = async () => {
-      setUpdateCompleted(false);
-      setUpdateInProgress(true);
-
-      const total = publications.length * 2;
-      let current = 0;
-
-      const makeProgress = () => {
-        current++;
-        setUpdateCurrentCompleted(Math.floor(current / total * 100));
-      }
-
-      const rankPublication = async (pub, index) => {
-        try {
-          if (rankable(pub)) {
-            if (!pub.hasOwnProperty('fullName')) {
-              if (pub.dblp.fullName) {
-                pub.fullName = pub.dblp.fullName;
-              } else {
-                pub.fullName = await getVenueTitle(pub);
-              }
-            }
-            makeProgress();
-
-            if (!pub.hasOwnProperty('rank')) {
-              if (pub.dblp.rank) {
-                pub.rank = pub.dblp.rank;
-              } else {
-                if (pub.type === 'inproceedings') {
-                  pub.rank = await CorePortal.rank(pub.venue, pub.dblp.url, pub.dblp.year);
-                } else if (pub.type === 'article') {
-                  pub.rank = await SjrPortal.rank(pub.dblp.url, pub.dblp.year);
-                }
-              }
-            }
-            makeProgress();
-
-          } else {
-            makeProgress(); makeProgress();
-            return;
-          }
-
-          setRankedPublications(prev => {
-            const newPublications = [...prev];
-            newPublications[index] = pub;
-            return newPublications;
-          });
-
-        } catch (error) {
-          console.error(`Error ranking ${pub.type}:`, error);
-        }
-      };
-
-      await Promise.all(publications.map(rankPublication));
-
-      setUpdateInProgress(false);
-      setUpdateCompleted(true);
-    };
-
-    rankPublications();
-  }, []);
-
-
+    if (done) setShowCompleted(true);
+  }, [done]);
 
   useEffect(() => {
-    const publis = rankedPublications
-      .filter(pub => pub.dblp.year >= filterYears[0] && pub.dblp.year <= filterYears[1])
-      .filter(pub => filterCategories[pub.type])
-      .filter(pub => {
-        if (pub.type === 'inproceedings' || pub.type === 'article') {
-          if (pub.rank)
-            return filterRanks[pub.rank.value];
-          else
-            return true;
-        } else
-          return true;
-      });
-    setFilteredRecords(publis);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
   }, [rankedPublications, filterYears, filterCategories, filterRanks]);
-
-
-
-  if (!filteredRecords) return <div>Chargement...</div>;
 
   const handleTabGraph = (event, newValue) => {
     setTabGraph(newValue);
@@ -191,6 +115,7 @@ function AuthorShow({ author, publications }) {
   };
 
   const publicationsShown = filteredRecords.length;
+  const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
 
   const ranks = { ...CorePortal.ranks, ...SjrPortal.ranks };
 
@@ -198,13 +123,13 @@ function AuthorShow({ author, publications }) {
     <div className='App'>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {isFilterActive || <div style={{ marginLeft: '50px', marginRight: '100px', marginTop: '40px' }}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
         </div>}
-        
+
         <div id='foo' style={{ textAlign: 'center' }}>
           <h1>Records of {trimLastDigits(author.name)}</h1>
           <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
-            {publicationsShown === 0 ? 'No record found' : publicationsShown === publications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${publications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
+            {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
           </div>
         </div>
 
@@ -224,11 +149,11 @@ function AuthorShow({ author, publications }) {
       <Tab label="Stats by type" />
     </Tabs>
     <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-      {tabGraph === 0 && tabSelect === 0 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
-      {tabGraph === 0 && tabSelect === 1 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} />}
+      {tabGraph === 0 && tabSelect === 0 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />}
+      {tabGraph === 0 && tabSelect === 1 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} categories={dblpCategories} yearAccessor={yearAccessor} />}
 
       {tabGraph === 1 && tabSelect === 0 && <RanksPieChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
-      {tabGraph === 1 && tabSelect === 1 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} />}
+      {tabGraph === 1 && tabSelect === 1 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} categories={dblpCategories} />}
     </div>
   </div>
   <div style={{ width: '45%', display: 'flex', flexDirection: 'column', marginLeft: '10%', alignItems: 'center', boxSizing: 'border-box' }}>
@@ -237,7 +162,7 @@ function AuthorShow({ author, publications }) {
       <Tab label="Categories" />
     </Tabs>
     {tabSelect === 0 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}
-    {tabSelect === 1 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} />}
+    {tabSelect === 1 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} categories={dblpCategories} />}
   </div>
 </div>
 <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
@@ -246,14 +171,14 @@ function AuthorShow({ author, publications }) {
       }
 
       <div style={{ height: '50px' }}></div>
-      <Publications author={author} data={filteredRecords} />
+      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} />
 
       <Snackbar
         anchorOrigin={{
           vertical: 'bottom',
           horizontal: 'right',
         }}
-        open={updateInProgress}
+        open={!done}
       >
         <Alert severity="info" sx={{ width: '100%' }}>
           Update in progress ({updateCompletedPercent}%)
@@ -265,8 +190,8 @@ function AuthorShow({ author, publications }) {
           vertical: 'bottom',
           horizontal: 'right',
         }}
-        open={updateCompleted}
-        onClose={() => setUpdateCompleted(false)}
+        open={showCompleted}
+        onClose={() => setShowCompleted(false)}
         autoHideDuration={3000}
       >
         <Alert severity="success" sx={{ width: '100%' }}>
@@ -280,20 +205,3 @@ function AuthorShow({ author, publications }) {
 
 
 
-
-function FilterButton({ isFilterActive, setIsFilterActive }) {
-  const handleButtonClick = () => {
-    setIsFilterActive(!isFilterActive);
-  };
-
-  return (
-    <Button
-      variant={isFilterActive ? "contained" : "outlined"}
-      color="primary"
-      endIcon={<FilterListIcon />}
-      onClick={handleButtonClick}
-    >
-      Filter
-    </Button>
-  );
-}

@@ -35,16 +35,34 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_buffering off;
+            proxy_read_timeout 120s;
         }
         
-        listen [::]:443 ssl ipv6only=on; 
-        listen 443 ssl; 
-        ssl_certificate /etc/letsencrypt/live/rankme.fr/fullchain.pem; 
-        ssl_certificate_key /etc/letsencrypt/live/rankme.fr/privkey.pem; 
-        
+        listen [::]:443 ssl ipv6only=on;
+        listen 443 ssl;
+        ssl_certificate /etc/letsencrypt/live/rankme.fr/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/rankme.fr/privkey.pem;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+        ssl_prefer_server_ciphers off;
+
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        # front is a same-origin Vite bundle with no external scripts; MUI/emotion
+        # inject <style> at runtime, hence 'unsafe-inline' for style-src; the
+        # co-author avatar images are the one external resource (dblp.org).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dblp.org; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+
+        if ($http_user_agent ~* "Googlebot") {
+            return 403;
+        }
+
         if ($scheme != "https") {
             return 301 https://$host$request_uri;
-        } 
+        }
+
 
     }
 
