@@ -1,3 +1,13 @@
+import Bottleneck from 'bottleneck';
+
+// Ranking one publication is CPU/memory-bound (scanning and normalizing the
+// CORE/SJR candidate lists), not rate-limited like the DBLP/HAL fetches —
+// but launching every publication of an author at once via Promise.all with
+// no cap meant a prolific author (hundreds of publications) fired hundreds
+// of these concurrently, which OOM-killed the process. Bounding concurrency
+// keeps peak memory flat regardless of how many publications an author has.
+const ranking_limiter = new Bottleneck({ maxConcurrent: 8 });
+
 export function startSSE(res) {
     res.writeHead(200, {
         'Content-Type': 'text/event-stream',
@@ -24,7 +34,7 @@ export async function streamRankedItems(res, items, isRankable, computeRank) {
     sse.send('init', { publications: items, total: rankableIndices.length });
 
     let completed = 0;
-    await Promise.all(rankableIndices.map(async (index) => {
+    await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(async () => {
         try {
             const extra = await computeRank(items[index], index);
             completed++;
@@ -33,7 +43,7 @@ export async function streamRankedItems(res, items, isRankable, computeRank) {
             completed++;
             sse.send('error', { index, completed, total: rankableIndices.length, message: error.message });
         }
-    }));
+    })));
 
     sse.send('done', {});
     sse.end();
