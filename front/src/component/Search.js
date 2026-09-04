@@ -14,6 +14,9 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Button from '@mui/material/Button';
 
 // Styles and Other
 import '../App.css';
@@ -32,12 +35,18 @@ const SOURCES = {
         heading: 'Search author on DBLP',
         search: searchAuthorDblp,
         toTab: (elt) => ({ type: 'dblp-author', id: `dblp:${elt.pid}`, label: elt.author, pid: elt.pid }),
+        idLabel: 'PID',
+        idPlaceholder: 'e.g. 12/3456',
+        idToTab: (pid) => ({ type: 'dblp-author', id: `dblp:${pid}`, label: pid, pid }),
     },
     hal: {
         label: 'HAL',
         heading: 'Search author on HAL',
         search: searchAuthorHal,
         toTab: (elt) => ({ type: 'hal-author', id: `hal:${elt.id}`, label: elt.author, halId: elt.id, authorName: elt.author }),
+        idLabel: 'idHal',
+        idPlaceholder: 'e.g. jane-doe',
+        idToTab: (id) => ({ type: 'hal-author', id: `hal:${id}`, label: id, halId: id, authorName: undefined }),
     },
 };
 
@@ -49,6 +58,7 @@ const SOURCES = {
 // search, switching to the given source if needed.
 export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
     const [source, setSource] = useState('dblp');
+    const [mode, setMode] = useState('name'); // 'name' | 'id'
     const [query, setQuery] = useState('');
     const [queryResult, setQueryResult] = useState([]);
     const [queryStatus, setQueryStatus] = useState('ready');
@@ -99,13 +109,18 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
     useEffect(() => {
         if (!searchRequest) return;
         setSource(searchRequest.source);
+        setMode('name');
         setQuery(searchRequest.text);
         runSearch(searchRequest.source, searchRequest.text);
     }, [searchRequest]);
 
     const handleSourceChange = (event, newSource) => {
         setSource(newSource);
-        runSearch(newSource, query);
+        if (mode === 'name') runSearch(newSource, query);
+    };
+
+    const handleModeChange = (event, newMode) => {
+        if (newMode) setMode(newMode);
     };
 
     const handleInputChange = (value) => {
@@ -127,9 +142,60 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
                     <Tab key={key} value={key} label={label} />
                 ))}
             </Tabs>
-            <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} />
-            <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />
+            <ToggleButtonGroup value={mode} exclusive onChange={handleModeChange} size="small" style={{ marginBottom: '20px' }}>
+                <ToggleButton value="name">By name</ToggleButton>
+                <ToggleButton value="id">By {SOURCES[source].idLabel}</ToggleButton>
+            </ToggleButtonGroup>
+            {mode === 'name' ? (
+                <>
+                    <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} />
+                    <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />
+                </>
+            ) : (
+                <AuthorIdForm source={source} onOpenAuthor={onOpenAuthor} />
+            )}
         </div>
+    );
+}
+
+
+function AuthorIdForm({ source, onOpenAuthor }) {
+    const [id, setId] = useState('');
+    const inputRef = useRef();
+
+    // Switching source (DBLP <-> HAL) means a stale id from the other
+    // source is no longer meaningful — drop it rather than leave it
+    // sitting there ready to be submitted against the wrong source.
+    useEffect(() => {
+        setId('');
+        inputRef.current.focus();
+    }, [source]);
+
+    return (
+        <Paper
+            component="form"
+            onSubmit={e => {
+                e.preventDefault();
+                const trimmed = id.trim();
+                if (!trimmed) return;
+                onOpenAuthor(SOURCES[source].idToTab(trimmed));
+                setId('');
+            }}
+            sx={{ p: '2px 4px', display: 'flex', marginBottom: '40px', alignItems: 'center', width: 400 }}
+        >
+            <IconButton sx={{ p: '10px' }} aria-label="menu">
+                <AccountCircle />
+            </IconButton>
+            <InputBase
+                inputRef={inputRef}
+                sx={{ ml: 1, flex: 1 }}
+                placeholder={SOURCES[source].idPlaceholder}
+                inputProps={{ 'aria-label': `${SOURCES[source].idLabel} (${source})` }}
+                value={id}
+                onChange={e => setId(e.target.value)}
+            />
+            <Button type="submit" disabled={!id.trim()}>Open</Button>
+        </Paper>
     );
 }
 
@@ -190,6 +256,9 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
                                                     {affil}
                                                 </span>
                                             ))}
+                                            <span style={{ fontFamily: 'monospace', fontSize: '0.85em', color: 'gray', display: 'block' }}>
+                                                {SOURCES[source].idLabel}: {source === 'dblp' ? elt.pid : elt.id}
+                                            </span>
                                         </>
                                     }
                                 />
