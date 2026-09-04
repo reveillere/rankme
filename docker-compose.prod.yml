@@ -108,7 +108,12 @@ services:
         source: "/etc/letsencrypt"
         target: "/etc/letsencrypt"
         read_only: true
+      - type: bind
+        source: "./certbot-webroot"
+        target: "/var/www/certbot"
+        read_only: true
     ports:
+      - 80:80
       - 443:443
     healthcheck:
       test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "/dev/null", "https://127.0.0.1:443/"]

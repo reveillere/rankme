@@ -10,6 +10,7 @@ api/localMD5.txt
 /db-dump/
 /redis-dump.rdb
 /backups/
+/certbot-webroot/
 .idea/
 
 # dependencies

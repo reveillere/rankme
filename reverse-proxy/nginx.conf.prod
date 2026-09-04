@@ -25,6 +25,14 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Serves Let's Encrypt's HTTP-01 challenge files so certbot renew can
+        # run unattended (via the existing snap.certbot.renew.timer) instead
+        # of the DNS-manual flow this cert was originally issued with, which
+        # silently skips on every automated renewal attempt.
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/certbot;
+        }
+
         location ^~ /api/ {
             proxy_pass http://api/;
             proxy_http_version 1.1;
@@ -54,6 +62,14 @@ http {
         # inject <style> at runtime, hence 'unsafe-inline' for style-src; the
         # co-author avatar images are the one external resource (dblp.org).
         add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dblp.org; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+
+        # Two sequential ifs, evaluated in order: the acme-challenge path
+        # must never hit the https redirect below (nginx runs server-level
+        # ifs before location matching, so the redirect would otherwise fire
+        # first on every plain-HTTP validation request from Let's Encrypt).
+        if ($request_uri ~ ^/\.well-known/acme-challenge/) {
+            break;
+        }
 
         if ($http_user_agent ~* "Googlebot") {
             return 403;
