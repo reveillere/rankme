@@ -2,24 +2,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
 // Material-UI Components and Icons
-import { Tab, Tabs } from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
 
-// DBLP and CorePortal
-import { dblpCategories, fetchAuthor } from '../dblp';
-import * as CorePortal from '../corePortal';
-import * as SjrPortal from '../sjrPortal';
+// DBLP
+import { fetchAuthor } from '../dblp';
 import { useRankedPublications } from '../useRankedPublications';
+import { ranks, useFilterSettings } from '../FilterSettingsContext';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
 import { Publications } from './Publications';
-import { CategoriesPieChart, RanksPieChart, CategoriesByYearChart, RanksByYearChart } from './Statistics';
-import { RankSelector, CategoriesSelector } from './Selector';
+import { RanksByYearChart } from './Statistics';
+import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
@@ -87,13 +85,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
     [rankedPublications.length]
   );
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const [tabGraph, setTabGraph] = useState(0);
-  const [tabSelect, setTabSelect] = useState(0);
-  const [filterCategories, setFilterCategories] = React.useState(Object.keys(dblpCategories).reduce((acc, key) => ({ ...acc, [key]: true }), {}));
-  const [filterRanks, setFilterRanks] = React.useState({
-    ...Object.keys(CorePortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
-    ...Object.keys(SjrPortal.ranks).reduce((acc, key) => ({ ...acc, [key]: true }), {}),
-  });
+  const { filterRanks, filterCategoriesDblp } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -103,72 +95,30 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks]);
-
-  const handleTabGraph = (event, newValue) => {
-    setTabGraph(newValue);
-  };
-
-  const handleTabSelect = (event, newValue) => {
-    setTabSelect(newValue);
-  };
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories: filterCategoriesDblp, filterRanks }));
+  }, [rankedPublications, filterYears, filterCategoriesDblp, filterRanks]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
 
-  const ranks = { ...CorePortal.ranks, ...SjrPortal.ranks };
-
   return (
     <div className='App'>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {isFilterActive || <div style={{ marginLeft: '50px', marginRight: '100px', marginTop: '40px' }}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
-        </div>}
-
-        <div id='foo' style={{ textAlign: 'center' }}>
-          <h1>Records of {trimLastDigits(author.name)}</h1>
-          <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
-            {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
-          </div>
+      <div style={{ position: 'relative', textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
+        <h1>Records of {trimLastDigits(author.name)}</h1>
+        <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
+          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
-
-        <div style={{ marginLeft: '100px', marginTop: '40px' }}>
+        <div style={{ position: 'absolute', top: 0, right: '20px' }}>
           <FilterButton isFilterActive={isFilterActive} setIsFilterActive={setIsFilterActive} />
         </div>
-
       </div>
 
-      {isFilterActive &&
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
+        <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
+      </div>
 
-<>
-<div style={{ display: 'flex', justifyContent: 'space-between', margin: '10px 0 40px 0', height: '250px', boxSizing: 'border-box', overflow: 'hidden'  }}>
-  <div style={{ width: '45%', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
-    <Tabs value={tabGraph} onChange={handleTabGraph} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-      <Tab label="Stats by year" />
-      <Tab label="Stats by type" />
-    </Tabs>
-    <div style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-      {tabGraph === 0 && tabSelect === 0 && <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />}
-      {tabGraph === 0 && tabSelect === 1 && <CategoriesByYearChart records={filteredRecords} selected={filterCategories} categories={dblpCategories} yearAccessor={yearAccessor} />}
-
-      {tabGraph === 1 && tabSelect === 0 && <RanksPieChart records={filteredRecords} selected={filterRanks} ranks={ranks} />}
-      {tabGraph === 1 && tabSelect === 1 && <CategoriesPieChart records={filteredRecords} selected={filterCategories} categories={dblpCategories} />}
-    </div>
-  </div>
-  <div style={{ width: '45%', display: 'flex', flexDirection: 'column', marginLeft: '10%', alignItems: 'center', boxSizing: 'border-box' }}>
-    <Tabs value={tabSelect} onChange={handleTabSelect} aria-label="graph-type" centered style={{ marginBottom: '20px' }}>
-      <Tab label="Ranks" />
-      <Tab label="Categories" />
-    </Tabs>
-    {tabSelect === 0 && <RankSelector records={filteredRecords} selected={filterRanks} setSelected={setFilterRanks} />}
-    {tabSelect === 1 && <CategoriesSelector records={filteredRecords} selected={filterCategories} setSelected={setFilterCategories} categories={dblpCategories} />}
-  </div>
-</div>
-<DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />
-</>
-
-      }
+      {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
 
       <div style={{ height: '50px' }}></div>
       <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} />

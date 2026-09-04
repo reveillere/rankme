@@ -2,14 +2,16 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Material-UI Components and Icons
-import { AppBar, Toolbar, Typography, Button, Box, Tabs, Tab } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 // Custom Components
 import AuthorSearch from './component/Search';
 import { Author } from './component/Author';
 import { AuthorHal } from './component/AuthorHal';
 import About from './component/About';
+import { SettingsDialog } from './component/SettingsDialog';
 
 // Styles and Other
 import './App.css';
@@ -47,6 +49,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [tabs, setTabs] = useState(() => {
     const fromUrl = tabFromPath(location.pathname);
     return fromUrl.id === SEARCH_TAB_ID ? [fromUrl] : [{ id: SEARCH_TAB_ID, type: 'search' }, fromUrl];
@@ -110,10 +113,14 @@ function App() {
               </Typography>
             </Button>
           </Box>
+          <IconButton color="inherit" onClick={() => setSettingsDialogOpen(true)} aria-label="settings">
+            <SettingsIcon />
+          </IconButton>
         </Toolbar>
       </AppBar>
 
       <About open={aboutDialogOpen} onClose={handleAboutClose} />
+      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} />
 
       <Tabs
         value={activeTabId}

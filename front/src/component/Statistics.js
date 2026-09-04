@@ -1,64 +1,4 @@
-import { Bar, Pie } from 'react-chartjs-2';
-
-
-
-function PieChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor }) {
-  const options = {
-    responsive: false,
-    plugins: {
-      tooltip: {
-        enabled: true
-      },
-      legend: {
-        display: false,
-      }
-    }
-  };
-  
-  const selectedKeys = Object.keys(selected);
-  
-  const datas = {
-    labels: selectedKeys.map(key => labelAccessor(key)),
-    datasets: [
-      {
-        data: selectedKeys.map(key => records.filter(record => fieldAccessor(record) === key).length),
-        backgroundColor: selectedKeys.map(key => colorAccessor(key)),
-        borderColor: selectedKeys.map(key => colorAccessor(key)),
-        borderWidth: 1,
-      },
-    ],
-  };
-  
-
-  return <Pie options={options} data={datas} />;
-}
-
-export function CategoriesPieChart({ records, selected, categories }) {
-  return (
-    <PieChart
-      records={records}
-      selected={selected}
-      fieldAccessor={(pub) => pub.type}
-      labelAccessor={(key) => categories[key].name}
-      colorAccessor={(key) => categories[key].color}
-    />
-  );
-}
-
-export function RanksPieChart({ records, selected, ranks }) {
-  return (
-    <PieChart 
-      records={records} 
-      selected={selected} 
-      fieldAccessor={(pub) => pub.rank?.value}
-      labelAccessor={(key) => ranks[key].name} 
-      colorAccessor={(key) => ranks[key].color}
-    />
-  );
-}
-
-
-
+import { Bar } from 'react-chartjs-2';
 
 function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor, yearAccessor }) {
   const options = {
@@ -87,7 +27,7 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
       },
     },
   };
-  
+
   const recordsWithYear = records.filter(record => yearAccessor(record) != null);
   const [startYear, endYear] = recordsWithYear.reduce(([min, max], record) => {
     const year = yearAccessor(record);
@@ -117,25 +57,11 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
 
   const data = {
     labels,
-    datasets, 
+    datasets,
   };
 
   return <Bar data={data} options={options} />;
-  
-}
 
-
-export function CategoriesByYearChart({ records, selected, categories, yearAccessor }) {
-  return (
-    <ByYearChart
-      records={records}
-      selected={selected}
-      fieldAccessor={(pub) => pub.type}
-      labelAccessor={(key) => categories[key].name}
-      colorAccessor={(key) => categories[key].color}
-      yearAccessor={yearAccessor}
-    />
-  );
 }
 
 export function RanksByYearChart({ records, selected, ranks, yearAccessor }) {

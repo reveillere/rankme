@@ -4,9 +4,15 @@ import CorePortal from '../corePortal';
 import SjrPortal from '../sjrPortal';
 
 function Selector({ records, selected, setSelected, data, filterKey }) {
-  const [recordCountByType, setRecordCountByType] = React.useState([]);
+  // `records` is omitted when this selector is used as a global setting
+  // (e.g. the settings dialog) rather than scoped to one author's
+  // publications — in that case there's nothing to count against, so just
+  // render the plain labels.
+  const showCounts = records !== undefined;
+  const [recordCountByType, setRecordCountByType] = React.useState({});
 
   React.useEffect(() => {
+    if (!showCounts) return;
     const counts = Object.keys(selected).reduce((acc, key) => ({
       ...acc,
       [key]: records.filter(record => filterKey(record) === key).length
@@ -45,15 +51,19 @@ function Selector({ records, selected, setSelected, data, filterKey }) {
                 style={{ color: value.color }}
               />}
             label={
-              <span style={{ color: selected[key] ? 'inherit' : 'lightgray' }}>
-              {(() => {
-                  let count = records.filter(record => filterKey(record) === key).length;
-                  if (selected[key])
-                    return `${value.name} (${count})`
-                  else
-                    return `${value.name} (${recordCountByType[key]})`
-                })()}
-              </span>
+              showCounts ? (
+                <span style={{ color: selected[key] ? 'inherit' : 'lightgray' }}>
+                {(() => {
+                    let count = records.filter(record => filterKey(record) === key).length;
+                    if (selected[key])
+                      return `${value.name} (${count})`
+                    else
+                      return `${value.name} (${recordCountByType[key]})`
+                  })()}
+                </span>
+              ) : (
+                <span style={{ color: selected[key] ? 'inherit' : 'lightgray' }}>{value.name}</span>
+              )
             }
             onChange={() => setSelected({ ...selected, [key]: !selected[key] })}
             style={{ margin: 0, width: '100%', fontSize: '0.8rem' }}
