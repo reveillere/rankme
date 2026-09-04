@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 // Material-UI Components and Icons
 import { AppBar, Toolbar, Typography, Button, Box, Tabs, Tab } from '@mui/material';
@@ -17,10 +18,40 @@ import './utils.js';
 
 const SEARCH_TAB_ID = 'search';
 
+// The URL is the source of truth for which author page is open, so a link
+// to it can be shared/reloaded. Kept deliberately simple (regex match on
+// the raw pathname, not a <Routes>/<Route> tree) since every tab is already
+// mounted at once and toggled via display:none/block to preserve its state
+// across switches — real route matching would fight that.
+function tabPath(tab) {
+  if (tab.type === 'dblp-author') return `/dblp/${tab.pid}`;
+  if (tab.type === 'hal-author') return `/hal/${tab.halId}`;
+  return '/';
+}
+
+function tabFromPath(pathname) {
+  let m = pathname.match(/^\/dblp\/(.+)$/);
+  if (m) {
+    const pid = decodeURIComponent(m[1]);
+    return { type: 'dblp-author', id: `dblp:${pid}`, pid, label: pid };
+  }
+  m = pathname.match(/^\/hal\/(.+)$/);
+  if (m) {
+    const halId = decodeURIComponent(m[1]);
+    return { type: 'hal-author', id: `hal:${halId}`, halId, authorName: undefined, label: halId };
+  }
+  return { id: SEARCH_TAB_ID, type: 'search' };
+}
+
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
-  const [tabs, setTabs] = useState([{ id: SEARCH_TAB_ID, type: 'search' }]);
-  const [activeTabId, setActiveTabId] = useState(SEARCH_TAB_ID);
+  const [tabs, setTabs] = useState(() => {
+    const fromUrl = tabFromPath(location.pathname);
+    return fromUrl.id === SEARCH_TAB_ID ? [fromUrl] : [{ id: SEARCH_TAB_ID, type: 'search' }, fromUrl];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => tabFromPath(location.pathname).id);
   const [searchRequest, setSearchRequest] = useState(null);
 
   const handleAboutOpen = () => setAboutDialogOpen(true);
@@ -30,6 +61,25 @@ function App() {
     setTabs(prev => (prev.some(t => t.id === tab.id) ? prev : [...prev, tab]));
     setActiveTabId(tab.id);
   };
+
+  // Active tab -> URL (opening/switching/closing tabs all funnel through
+  // activeTabId, so this alone keeps the address bar in sync).
+  useEffect(() => {
+    const activeTab = tabs.find(t => t.id === activeTabId);
+    if (!activeTab) return;
+    const path = tabPath(activeTab);
+    if (location.pathname !== path) navigate(path);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabId, tabs]);
+
+  // URL -> tabs/active tab, for browser back/forward and for opening a
+  // shared link directly. Each setter bails out on an unchanged value, so
+  // this can't fight the effect above once they agree.
+  useEffect(() => {
+    const fromUrl = tabFromPath(location.pathname);
+    setTabs(prev => (prev.some(t => t.id === fromUrl.id) ? prev : [...prev, fromUrl]));
+    setActiveTabId(fromUrl.id);
+  }, [location.pathname]);
 
   // Used when a co-author has no known id on the target source: switch to
   // the Search tab, prefill and immediately run a search for their name.
