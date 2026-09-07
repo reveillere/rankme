@@ -154,7 +154,10 @@ export async function getRank(ref, year) {
     if (rank === null) {
       const venueFullName = await getVenueFullName(ref);
       rank = await computeRank(venueFullName, year);
-      cache.set(key, rank);
+      // TTL'd (not permanent): a transient miss — e.g. this year's
+      // scimagojr collection still being populated by load() at startup —
+      // would otherwise get cached as "no ranking found" forever.
+      cache.set(key, rank, 60 * 60 * 24);
     }
     return rank;
 }
@@ -189,7 +192,7 @@ export async function getRankByFullName(fullName, year) {
     let rank = await cache.get(key);
     if (rank === null) {
         rank = await computeRank(fullName, year);
-        cache.set(key, rank);
+        cache.set(key, rank, 60 * 60 * 24);
     }
     return rank;
 }
