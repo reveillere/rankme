@@ -125,7 +125,7 @@ function App() {
           <Box display="flex" alignItems="center">
             <Button color="inherit" onClick={handleAboutOpen} style={{ textTransform: 'none' }}>
               <Typography variant="h6">
-                rankme
+                About
               </Typography>
             </Button>
           </Box>

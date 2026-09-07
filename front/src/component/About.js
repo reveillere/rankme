@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import pkg from '../../package.json';
 
 export const HIDE_ON_START_KEY = 'rankme:hideAboutOnStart';
 
@@ -28,8 +29,11 @@ function About({ open, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'baseline', gap: 1, fontWeight: 800 }}>
         rankme
+        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
+          v{pkg.version}
+        </Typography>
       </DialogTitle>
       <DialogActions style={{ position: 'absolute', right: '8px', top: '8px', padding: '8px' }}>
         <IconButton onClick={onClose}>
@@ -49,16 +53,6 @@ function About({ open, onClose }) {
           <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4).
           A venue with no match in either source is shown as Unranked rather than left out.
         </Typography>
-        <Typography variant="body1" gutterBottom>
-          Each author page charts publications by rank over time. Use <strong>Filter by year</strong> to narrow the
-          year range, and the settings icon (<em>⚙</em>) in the top bar to choose which ranks and publication
-          categories are taken into account everywhere — that choice applies across every open author page.
-        </Typography>
-        <Typography variant="body1" gutterBottom>
-          The <strong>Teams</strong> tab groups several DBLP or HAL authors together into one merged,
-          deduplicated ranking — handy for a lab or a research group.
-        </Typography>
-
         <Box
           sx={{
             display: 'flex',

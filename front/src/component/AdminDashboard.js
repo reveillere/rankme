@@ -39,6 +39,12 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'rankme — admin';
+    return () => { document.title = previousTitle; };
+  }, []);
+
   const fetchStats = useCallback(async (currentToken) => {
     try {
       const resp = await fetch('/api/admin/stats', { headers: { 'X-Admin-Token': currentToken } });
