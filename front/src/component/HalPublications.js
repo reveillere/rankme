@@ -1,5 +1,6 @@
 import React from 'react';
 import Tooltip from '@mui/material/Tooltip';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getHalCategory } from '../hal';
 
 // Extracted from AuthorHal.js so Team.js can reuse the exact same rendering
@@ -53,14 +54,15 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
                 <span className='title'>{item.title}</span>
                 <span className='link'>
                   <span className='venue'>
-                    {item.url ? (
-                      <a href={item.url} target="_blank" rel="noreferrer">
-                        {item.venue || category.name}
-                      </a>
-                    ) : (
-                      item.venue || category.name
-                    )}
+                    {item.venue || category.name}
                   </span>
+                  {item.url && (
+                    <Tooltip title="View on HAL" placement="bottom">
+                      <a href={item.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                        <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+                      </a>
+                    </Tooltip>
+                  )}
                 </span>
               </cite>
             </li>
