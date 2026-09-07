@@ -85,7 +85,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
     [rankedPublications.length]
   );
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategoriesDblp } = useFilterSettings();
+  const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -95,8 +95,8 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories: filterCategoriesDblp, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategoriesDblp, filterRanks]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;

@@ -11,9 +11,13 @@ import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
+import { getHalCategory } from '../hal';
 import '../App.css';
 
 const yearAccessor = pub => pub.year;
+// HAL's own type codes (ART, COMM, ...) aren't the shared category
+// vocabulary — cssClass maps each one to its dblp-bucket equivalent.
+const categoryKeyAccessor = pub => getHalCategory(pub.type).cssClass;
 
 const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
@@ -51,7 +55,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   const minYear = knownYears.length ? Math.min(...knownYears) : currentYear;
   const maxYear = knownYears.length ? Math.max(...knownYears) : currentYear;
   const [filterYears, setFilterYears] = useState([minYear, maxYear]);
-  const { filterRanks, filterCategoriesHal } = useFilterSettings();
+  const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -61,8 +65,8 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories: filterCategoriesHal, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategoriesHal, filterRanks]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;

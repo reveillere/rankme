@@ -10,6 +10,7 @@ import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScal
 import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
+import { getHalCategory } from '../hal';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
@@ -31,6 +32,9 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
 
 const yearAccessorFor = source => (source === 'hal' ? (pub => pub.year) : (pub => pub.dblp.year));
+// HAL's own type codes aren't the shared category vocabulary — cssClass
+// maps each one to its dblp-bucket equivalent (see filterPublications.js).
+const categoryKeyAccessorFor = source => (source === 'hal' ? (pub => getHalCategory(pub.type).cssClass) : (pub => pub.type));
 
 export function Team({ teamId, onOpenAuthor, onSearchAuthor }) {
   const team = getTeam(teamId);
@@ -66,6 +70,7 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor }) {
 function TeamContent({ team, publications: rankedPublications, progress, done, onOpenAuthor, onSearchAuthor }) {
   const isHal = team.source === 'hal';
   const yearAccessor = useMemo(() => yearAccessorFor(team.source), [team.source]);
+  const categoryKeyAccessor = useMemo(() => categoryKeyAccessorFor(team.source), [team.source]);
   const selfIds = useMemo(() => team.members.map(m => m.id), [team]);
 
   const [minYear, maxYear] = useMemo(() => {
@@ -76,8 +81,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length, team.source]);
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategoriesDblp, filterCategoriesHal } = useFilterSettings();
-  const filterCategories = isHal ? filterCategoriesHal : filterCategoriesDblp;
+  const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -87,8 +91,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor, categoryKeyAccessor]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;

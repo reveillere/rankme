@@ -6,18 +6,15 @@ import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 
-import { dblpCategories } from '../dblp';
-import { halCategories } from '../hal';
 import { RankSelector, CategoriesSelector } from './Selector';
-import { useFilterSettings } from '../FilterSettingsContext';
+import { categories, useFilterSettings } from '../FilterSettingsContext';
 import CorePortal from '../corePortal';
 import SjrPortal from '../sjrPortal';
 
 export function SettingsDialog({ open, onClose }) {
   const {
     filterRanks, setFilterRanks,
-    filterCategoriesDblp, setFilterCategoriesDblp,
-    filterCategoriesHal, setFilterCategoriesHal,
+    filterCategories, setFilterCategories,
   } = useFilterSettings();
 
   // Ranks and the categories they apply to are two sides of the same
@@ -26,8 +23,8 @@ export function SettingsDialog({ open, onClose }) {
   // its counterpart is entirely empty.
   const hasAnyCoreRank = Object.keys(CorePortal.ranks).some(key => filterRanks[key]);
   const hasAnyJournalRank = Object.keys(SjrPortal.ranks).some(key => filterRanks[key]);
-  const hasAnyConfCategory = !!filterCategoriesDblp.inproceedings || !!filterCategoriesHal.COMM;
-  const hasAnyJournalCategory = !!filterCategoriesDblp.article || !!filterCategoriesHal.ART;
+  const hasAnyConfCategory = !!filterCategories.inproceedings;
+  const hasAnyJournalCategory = !!filterCategories.article;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -43,28 +40,14 @@ export function SettingsDialog({ open, onClose }) {
 
         <Divider style={{ margin: '24px 0' }} />
 
-        <Typography variant="subtitle1" gutterBottom>DBLP categories</Typography>
+        <Typography variant="subtitle1" gutterBottom>Publication categories</Typography>
         <CategoriesSelector
-          selected={filterCategoriesDblp}
-          setSelected={setFilterCategoriesDblp}
-          categories={dblpCategories}
+          selected={filterCategories}
+          setSelected={setFilterCategories}
+          categories={categories}
           disabledKeys={[
             ...(hasAnyCoreRank ? [] : ['inproceedings']),
             ...(hasAnyJournalRank ? [] : ['article']),
-          ]}
-          disabledReason="Select at least one matching rank to use this category"
-        />
-
-        <Divider style={{ margin: '24px 0' }} />
-
-        <Typography variant="subtitle1" gutterBottom>HAL categories</Typography>
-        <CategoriesSelector
-          selected={filterCategoriesHal}
-          setSelected={setFilterCategoriesHal}
-          categories={halCategories}
-          disabledKeys={[
-            ...(hasAnyCoreRank ? [] : ['COMM']),
-            ...(hasAnyJournalRank ? [] : ['ART']),
           ]}
           disabledReason="Select at least one matching rank to use this category"
         />
