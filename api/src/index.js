@@ -20,9 +20,18 @@ app.use(express.json());
 app.use(metrics.middleware);
 app.use(router);
 
-app.listen(port, async () => {
+// Loaded before the server starts accepting connections, not in the
+// listen() callback: listen() already binds the port and starts serving
+// requests before that callback fires, so a rank lookup landing during
+// load() would previously see an empty/partial collection and — since the
+// result got cached — stay wrong long after loading finished.
+async function start() {
   await sjr.load();
   await core.load();
-  console.log(`Server is running ...`);
-});
+  app.listen(port, () => {
+    console.log(`Server is running ...`);
+  });
+}
+
+start();
 
