@@ -58,7 +58,7 @@ services:
 
   mongo:
     <<: *common-service
-    image: mongo:8.0
+    image: mongo:8.2
     volumes:
       - ./db-dump:/data/db-dump
       - db-data:/data/db

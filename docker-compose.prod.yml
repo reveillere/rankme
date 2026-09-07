@@ -74,7 +74,10 @@ services:
 
   mongo:
     <<: *common-service
-    image: mongo:8.0
+    # 8.2, not 8.0: 8.0 refuses to start on Linux kernel >= 6.19
+    # (https://jira.mongodb.org/browse/SERVER-121912), which recent
+    # Ubuntu images already ship.
+    image: mongo:8.2
     volumes:
       - db-data:/data/db
     # wiredTigerCacheSizeGB pinned explicitly: mongod otherwise sizes its
