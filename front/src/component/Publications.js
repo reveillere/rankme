@@ -3,6 +3,7 @@ import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
+import { RankBadge } from './RankBadge';
 
 export function Publications({ author, data, onOpenAuthor, selfPids }) {
   const pids = selfPids || [author.pid];
@@ -41,7 +42,7 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
                 </div>
                 <div className="nr">[{nr}]</div>
                 <div className="rank">
-                {item.rank && <Tooltip title={<div>{item.rank.msg}</div>} placement="bottom"><span>{item.rank.value}</span></Tooltip>}
+                <RankBadge rank={item.rank} />
                 </div>
                 <cite className='data'>
                   {

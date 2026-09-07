@@ -2,6 +2,7 @@ import { getFetchAuthor, normalizePublications, getVenueFullName } from './dblp.
 import * as core from './corePortal.js';
 import * as sjr from './sjrPortal.js';
 import { getAuthorPublications } from './hal.js';
+import * as crossref from './crossref.js';
 import { streamRankedItems } from './ranking.js';
 
 export async function controllerDblpAuthor(req, res) {
@@ -37,11 +38,36 @@ export async function controllerHalAuthor(req, res) {
         await streamRankedItems(
             res, publications,
             pub => pub.type === 'COMM' || pub.type === 'ART',
-            async (pub) => ({
-                rank: pub.type === 'COMM'
-                    ? await core.getRankByFullName(pub.venue, pub.year)
-                    : await sjr.getRankByFullName(pub.venue, pub.year),
-            }),
+            async (pub) => {
+                // HAL's own venue field is free text typed by the depositor
+                // at submission time, but very often already ends with its
+                // own "(ACRONYM)" -- e.g. "... (DAIS)" -- which is free to
+                // extract and, paired with the venue text it came from, is
+                // an internally consistent source for acronym-first CORE
+                // matching. Crossref (when a DOI is available) can offer a
+                // cleaner acronym HAL doesn't expose at all; when it does,
+                // its acronym and full name are used as a pair too, since
+                // for some records (Springer/LNCS proceedings especially)
+                // Crossref's full name alone collapses to a single generic
+                // word ("Middleware 2012") that coincidentally fuzzy-matches
+                // unrelated CORE entries once stripped of its own acronym.
+                let venue = pub.venue;
+                let acronym = crossref.extractTrailingAcronym(pub.venue);
+                if (pub.doi) {
+                    const info = await crossref.getVenueInfo(pub.doi);
+                    if (info?.acronym) {
+                        venue = info.fullName || venue;
+                        acronym = info.acronym;
+                    }
+                }
+
+                const rank = pub.type === 'COMM'
+                    ? (acronym
+                        ? await core.getRankByAcronymAndFullName(acronym, venue, pub.year)
+                        : await core.getRankByFullName(venue, pub.year))
+                    : await sjr.getRankByFullName(venue, pub.year);
+                return { rank };
+            },
             `hal:${id}`
         );
     } catch (error) {

@@ -25,6 +25,11 @@ const dblp_scrape_limiter = new Bottleneck({
   minTime: 2500
 });
 
+const crossref_limiter = new Bottleneck({
+  maxConcurrent: 2,
+  minTime: 200
+});
+
 let scrapeFailureStreak = 0;
 let scrapeCooldownUntil = 0;
 const SCRAPE_FAILURE_THRESHOLD = 5;
@@ -59,6 +64,8 @@ async function fetch(url, options = {}) {
         priority = { priority: 1 };
       }
     }
+  } else if (url.startsWith('https://api.crossref.org/')) {
+    limiter = crossref_limiter;
   }
 
   // Retries stay inside this single scheduled task: recursing back through
@@ -125,6 +132,7 @@ export function status() {
       default: default_limiter.counts(),
       dblp: dblp_limiter.counts(),
       dblpScrape: dblp_scrape_limiter.counts(),
+      crossref: crossref_limiter.counts(),
     },
     scrape: {
       failureStreak: scrapeFailureStreak,

@@ -212,10 +212,16 @@ async function resolveSource(year) {
   return { sourceKey, source };
 }
 
+// matchTitle: the CORE entry's own title, shown alongside the source year so
+// a fuzzy or acronym-tiebreak match can be sanity-checked from the tooltip
+// instead of only trusting the resulting rank.
 function makeSanitizedRank(sourceKey) {
-  return (rank, exact, score) => RANKS.includes(rank) ?
-    { value: rank, msg: `${sourceKey}`, exact: exact, score: score } :
-    { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}`, exact: exact, score: score };
+  return (rank, exact, score, matchTitle) => {
+    const matchInfo = matchTitle ? ` — matched "${matchTitle}"` : '';
+    return RANKS.includes(rank) ?
+      { value: rank, msg: `${sourceKey}${matchInfo}`, exact: exact, score: score } :
+      { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}${matchInfo}`, exact: exact, score: score };
+  };
 }
 
 async function computeRank(acronym, venueFullName, year) {
@@ -231,18 +237,18 @@ async function computeRank(acronym, venueFullName, year) {
     const exactMatch = source.find(conf => levenshtein(normalizeTitle(conf.title), titleNormalized) === 0);
 
     if (exactMatch) {
-      rank = sanitizedRank(exactMatch.rank, false, 0);
+      rank = sanitizedRank(exactMatch.rank, true, 0, exactMatch.title);
     } else {
       rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
     }
   } else if (candidates.length > 1) {
     let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(normalizeTitle(conf.title), titleNormalized) }));
     let bestMatch = scores.reduce((min, current) => current.score < min.score ? current : min, scores[0]);
-    rank = sanitizedRank(bestMatch.conf.rank, false, bestMatch.score);
+    rank = sanitizedRank(bestMatch.conf.rank, bestMatch.score === 0, bestMatch.score, bestMatch.conf.title);
   } else {
     const entry = candidates[0];
     const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
-    rank = sanitizedRank(entry.rank, true, score);
+    rank = sanitizedRank(entry.rank, true, score, entry.title);
   }
   return rank;
 }
@@ -281,6 +287,20 @@ export async function getRankByFullName(fullName, year) {
   return rank;
 }
 
+// Same acronym-first strategy as the DBLP path's getRank, but for callers
+// (HAL, via Crossref) that already have an acronym and full name in hand
+// instead of a dblp ref to resolve one from.
+export async function getRankByAcronymAndFullName(acronym, fullName, year) {
+  const key = `rank:${year}:core2acro:${acronym}:${fullName}`;
+
+  let rank = await cache.get(key);
+  if (rank === null) {
+    rank = await computeRank(acronym.toUpperCase(), fullName, year);
+    cache.set(key, rank, 60 * 60 * 24);
+  }
+  return rank;
+}
+
 
 
 
@@ -292,8 +312,32 @@ async function computeRank2(venueFullName, year) {
 
   let rank;
 
+  // No acronym to anchor on here (HAL gave none, neither did Crossref), so
+  // this is matching on title words alone against the *entire* ranking
+  // database -- the riskiest path (see e.g. "IEEE Conference on Pervasive
+  // Computing and Applications" coincidentally matching "... and
+  // Communications" (PERCOM) at distance 2). Capped tighter than the
+  // acronym-first path's implicit tolerance to cut down on that kind of
+  // same-topic-different-conference false positive.
+  const MAX_FUZZY_DISTANCE = 2;
+
+  // This is WORD-level edit distance (each "character" is a whole word,
+  // compared by exact equality), not textual similarity -- any single
+  // unrelated word is a substitution (cost 1) away from any other, so a
+  // short normalized query is trivially within MAX_FUZZY_DISTANCE of nearly
+  // every CORE entry of similar length regardless of actual relatedness.
+  // E.g. ['compas'] -> ['acmmm','multimedia'] is just "substitute compas
+  // for acmmm, insert multimedia" = distance 2, no matter how unrelated
+  // "Compas" and "ACM Multimedia" actually are. Scaling the allowed
+  // distance to the query's own length (so a majority of its words must
+  // genuinely line up) guards against this regardless of query length,
+  // instead of only blocking the single-word extreme of it.
+  if (titleNormalized.length < 2) {
+    return { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+  }
+  const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
   const scores = source.map(conf => ({ conf: conf, levenshtein: levenshtein(normalizeTitle(conf.acronym + ' ' + conf.title), titleNormalized) }));
-  const candidates = scores.filter(score => score.levenshtein <= 3);
+  const candidates = scores.filter(score => score.levenshtein <= maxAllowedDistance);
 
   if (candidates.length === 0) {
     rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
@@ -306,7 +350,7 @@ async function computeRank2(venueFullName, year) {
     }
 
     const bestMatch = sortedCandidates[0];
-    rank = sanitizedRank(bestMatch.conf.rank, false, bestMatch.score);
+    rank = sanitizedRank(bestMatch.conf.rank, bestMatch.levenshtein === 0, bestMatch.levenshtein, bestMatch.conf.title);
   }
   return rank;
 }

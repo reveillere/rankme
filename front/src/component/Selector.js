@@ -44,13 +44,13 @@ export function Selector({ records, selected, setSelected, data, filterKey, disa
   }, [records]);
 
   const handleSelectAll = () => {
-    const allSelected = Object.keys(selected).reduce((acc, key) => ({ ...acc, [key]: true }), {});
-    setSelected(allSelected);
+    const updates = Object.keys(data).reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    setSelected({ ...selected, ...updates });
   };
 
   const handleUnselectAll = () => {
-    const noneSelected = Object.keys(selected).reduce((acc, key) => ({ ...acc, [key]: false }), {});
-    setSelected(noneSelected);
+    const updates = Object.keys(data).reduce((acc, key) => ({ ...acc, [key]: false }), {});
+    setSelected({ ...selected, ...updates });
   };
 
   return (

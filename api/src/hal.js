@@ -96,7 +96,7 @@ function parseAuthors(doc) {
 
 async function fetchAuthorPublications(id) {
     const filter = id.startsWith('form:') ? `authIdForm_i:${id.slice(5)}` : `authIdHal_s:${id}`;
-    const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s';
+    const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s';
     const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=1000&wt=json&fl=${fields}&sort=${encodeURIComponent('publicationDateY_i desc')}`;
 
     const resp = await fetch(url);
@@ -109,6 +109,7 @@ async function fetchAuthorPublications(id) {
         type: doc.docType_s,
         year: doc.publicationDateY_i,
         venue: doc.conferenceTitle_s || doc.journalTitle_s || null,
+        doi: doc.doiId_s || null,
         authors: parseAuthors(doc),
         url: doc.uri_s,
     }));

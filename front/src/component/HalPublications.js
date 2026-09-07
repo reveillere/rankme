@@ -2,6 +2,7 @@ import React from 'react';
 import Tooltip from '@mui/material/Tooltip';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getHalCategory } from '../hal';
+import { RankBadge } from './RankBadge';
 
 // Extracted from AuthorHal.js so Team.js can reuse the exact same rendering
 // for a HAL-sourced team, parameterized by selfIds (the whole team's HAL
@@ -25,7 +26,7 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
                 <img alt="paper" src="https://dblp.org/img/n.png" />
               </div>
               <div className="rank">
-                {item.rank && <Tooltip title={<div>{item.rank.msg}</div>} placement="bottom"><span>{item.rank.value}</span></Tooltip>}
+                <RankBadge rank={item.rank} />
               </div>
               <cite className='data'>
                 {item.authors.length > 0

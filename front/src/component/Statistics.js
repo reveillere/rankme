@@ -49,7 +49,7 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
     }
   }
 
-  const datasets = Object.keys(selected).map(key => ({
+  const datasets = Object.keys(selected).filter(key => selected[key]).map(key => ({
     label: labelAccessor(key),
     data: labels.map(year => dataByYear[year][key] || 0),
     backgroundColor: colorAccessor(key),

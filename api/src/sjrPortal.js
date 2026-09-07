@@ -103,11 +103,24 @@ async function computeRank(venueFullName, year) {
         const collection = db.collection(year.toString());
         const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);
         const titleNormalized = normalizeTitle(venueFullName);
+        // No acronym concept for journals, so this is always matching on
+        // title words alone against the whole scimagojr list -- same false
+        // positive risk as CORE's fuzzy-only path, so kept just as tight.
+        const MAX_FUZZY_DISTANCE = 2;
+        // Same rationale as CORE's fuzzy-only path: word-level edit distance
+        // is trivially small between any two short, unrelated title word
+        // lists, so a single normalized word can't be fuzzy-matched safely
+        // at all, and longer queries still need the allowed distance scaled
+        // to their own length rather than a flat cap.
+        if (titleNormalized.length < 2) {
+            return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
+        }
+        const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
         const result = documents.map(item => {
             const title1 = normalizeTitle(item.Title);
             const distance = levenshtein(title1, titleNormalized);
             return { data: item, distance: distance };
-        }).filter(item => item.distance <= 3).sort((a, b) => a.distance - b.distance);
+        }).filter(item => item.distance <= maxAllowedDistance).sort((a, b) => a.distance - b.distance);
 
         let response;
         if (result.length > 0) {
@@ -116,7 +129,7 @@ async function computeRank(venueFullName, year) {
             if (rank === '-') {
                 response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
             } else
-                response = { value: rank, msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})` };
+                response = { value: rank, msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})`, exact: elt.distance === 0, score: elt.distance };
         } else {
             response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
         }
