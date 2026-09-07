@@ -1,9 +1,27 @@
 import React from 'react';
-import { Checkbox, FormGroup, FormControlLabel, Tooltip } from '@mui/material';
+import { Checkbox, FormGroup, FormControlLabel, Tooltip, Button, Box } from '@mui/material';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
+import RemoveDoneIcon from '@mui/icons-material/RemoveDone';
 import CorePortal from '../corePortal';
 import SjrPortal from '../sjrPortal';
 
-function Selector({ records, selected, setSelected, data, filterKey, disabledKeys = [], disabledReason }) {
+// Shared by every checkbox list in the settings dialog (categories, and
+// each rank sub-list nested under one) instead of each rolling its own
+// plain-text links.
+export function SelectAllControls({ onSelectAll, onDeselectAll, size = 'small' }) {
+  return (
+    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+      <Button size={size} startIcon={<DoneAllIcon fontSize="small" />} onClick={onSelectAll} sx={{ textTransform: 'none' }}>
+        Select all
+      </Button>
+      <Button size={size} startIcon={<RemoveDoneIcon fontSize="small" />} onClick={onDeselectAll} sx={{ textTransform: 'none' }}>
+        Deselect all
+      </Button>
+    </Box>
+  );
+}
+
+export function Selector({ records, selected, setSelected, data, filterKey, disabledKeys = [], disabledReason }) {
   // `records` is omitted when this selector is used as a global setting
   // (e.g. the settings dialog) rather than scoped to one author's
   // publications — in that case there's nothing to count against, so just
@@ -81,11 +99,7 @@ function Selector({ records, selected, setSelected, data, filterKey, disabledKey
           </div>
         );
       })}
-      <div style={{ marginTop: '10px', marginLeft: '10px' }}>
-        <a href="#" onClick={(e) => { e.preventDefault(); handleSelectAll(e); }} style={{ marginRight: '10px', cursor: 'pointer', textDecoration: 'underline' }}>select all</a>
-        |
-        <a href="#" onClick={(e) => { e.preventDefault(); handleUnselectAll(e); }} style={{ marginLeft: '10px', cursor: 'pointer', textDecoration: 'underline' }}>deselect all</a>
-      </div>
+      <SelectAllControls onSelectAll={handleSelectAll} onDeselectAll={handleUnselectAll} />
     </FormGroup>
   );
 }
