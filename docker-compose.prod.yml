@@ -13,6 +13,9 @@ services:
     environment:
       - MONGO_URI=mongodb://mongo:27017/
       - REDIS_URI=redis://redis:6379/
+      # From a .env file on the host, next to this compose file — never
+      # committed (see .gitignore). Generate with: openssl rand -hex 32
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
     volumes:
       - ./api/log:/app/log
       - api-data:/data

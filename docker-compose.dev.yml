@@ -13,7 +13,10 @@ services:
       - redis
     environment:
       - MONGO_URI=mongodb://mongo:27017/
-      - REDIS_URI=redis://redis:6379/  
+      - REDIS_URI=redis://redis:6379/
+      # Fixed for local convenience only — prod uses a real secret (see
+      # docker-compose.prod.yml).
+      - ADMIN_TOKEN=dev-admin-token
     volumes:
       - ./api/src:/app/src
       - ./api/log:/app/log

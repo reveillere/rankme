@@ -107,10 +107,10 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
 
     return (
         <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box sx={{ marginLeft: '20px', marginRight: '50px', width: '100px'}}>
+            <Box sx={{ marginLeft: '20px', marginRight: '50px', width: '90px'}}>
                 <TextField
                     id="standard-basic"
-                    label="Minimal range"
+                    label="Range"
                     defaultValue={minimalRange}
                     variant="standard"
                     type='number'
@@ -139,10 +139,11 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
                     aria-label="reset"
                     onClick={handleReset}
                     size="small"
-                >Reset
+                    sx={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem', textTransform: 'none' }}
+                >
                     <ReplayIcon fontSize="small" />
+                    Reset
                 </IconButton>
-
             </Box>
 
 

@@ -116,4 +116,22 @@ function recordScrapeFailure() {
   }
 }
 
+// Exposed for the admin dashboard: each limiter's .counts() (built into
+// Bottleneck, already a dependency) shows queue pressure without needing a
+// separate metrics system.
+export function status() {
+  return {
+    limiters: {
+      default: default_limiter.counts(),
+      dblp: dblp_limiter.counts(),
+      dblpScrape: dblp_scrape_limiter.counts(),
+    },
+    scrape: {
+      failureStreak: scrapeFailureStreak,
+      cooldownUntil: scrapeCooldownUntil || null,
+      coolingDown: Date.now() < scrapeCooldownUntil,
+    },
+  };
+}
+
 export default fetch;

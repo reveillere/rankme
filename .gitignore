@@ -40,7 +40,8 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
+# local env files (includes the prod ADMIN_TOKEN secret, see docker-compose.prod.yml)
+.env
 .env*.local
 
 # vercel

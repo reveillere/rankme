@@ -26,6 +26,7 @@ router.get('/rank/db/conf/*', core.controllerRank);
 router.get('/rank/db/journals/*', sjr.controllerRank);
 
 router.get('/admin/venues', admin.controllerVenues);
+router.get('/admin/stats', admin.requireAdminToken, admin.controllerStats);
 
 
 router.post('/rank/db/conf2', core.controllerRank2);

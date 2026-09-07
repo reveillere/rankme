@@ -17,6 +17,7 @@ import Tab from '@mui/material/Tab';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Button from '@mui/material/Button';
+import Typography from '@mui/material/Typography';
 
 // Styles and Other
 import '../App.css';
@@ -25,6 +26,9 @@ import '../App.css';
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getCachedSearch, setCachedSearch } from '../searchCache';
+import { getSearchHistory, clearSearchHistory } from '../searchHistory';
+import HistoryIcon from '@mui/icons-material/History';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 400;
@@ -137,7 +141,13 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
     return (
         <div className='App'>
             <h1>{SOURCES[source].heading}</h1>
-            <Tabs value={source} onChange={handleSourceChange} centered style={{ marginBottom: '20px' }}>
+            <Tabs
+                value={source}
+                onChange={handleSourceChange}
+                centered
+                style={{ marginBottom: '20px' }}
+                sx={{ '& .MuiTab-root': { textTransform: 'capitalize' } }}
+            >
                 {Object.entries(SOURCES).map(([key, { label }]) => (
                     <Tab key={key} value={key} label={label} />
                 ))}
@@ -149,7 +159,9 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
             {mode === 'name' ? (
                 <>
                     <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} />
-                    <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />
+                    {query.trim().length === 0
+                        ? <RecentSearches onOpenAuthor={onOpenAuthor} />
+                        : <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />}
                 </>
             ) : (
                 <AuthorIdForm source={source} onOpenAuthor={onOpenAuthor} />
@@ -293,5 +305,49 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
             {queryStatus === 'resolved' && <Results />}
             {queryStatus === 'error' && <div>Search failed, please try again.</div>}
         </div>
+    );
+}
+
+
+const HISTORY_SOURCE_LABEL = {
+    'dblp-author': 'DBLP',
+    'hal-author': 'HAL',
+    'team': 'Team',
+};
+
+function RecentSearches({ onOpenAuthor }) {
+    const [history, setHistory] = useState(() => getSearchHistory());
+
+    if (history.length === 0) return null;
+
+    const handleClear = () => {
+        clearSearchHistory();
+        setHistory([]);
+    };
+
+    return (
+        <Box sx={{ width: 500, maxWidth: '100%', margin: '0 auto', textAlign: 'left' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                    <HistoryIcon fontSize="small" />
+                    <Typography variant="subtitle2">Recent</Typography>
+                </Box>
+                <Button size="small" startIcon={<DeleteOutlineIcon fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
+                    Clear
+                </Button>
+            </Box>
+            <List dense disablePadding>
+                {history.map((entry) => (
+                    <ListItem key={entry.id} disablePadding>
+                        <ListItemButton onClick={() => onOpenAuthor(entry)}>
+                            <ListItemText
+                                primary={entry.label}
+                                secondary={HISTORY_SOURCE_LABEL[entry.type] || entry.type}
+                            />
+                        </ListItemButton>
+                    </ListItem>
+                ))}
+            </List>
+        </Box>
     );
 }

@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import crypto from 'crypto';
+import crypto from 'crypto'; // used for both the DBLP dump MD5 check and the admin token below
 import { pipeline } from 'stream';
 import gunzip from 'gunzip-maybe';
 import { createWriteStream, statSync, createReadStream } from 'fs';
@@ -8,6 +8,9 @@ import sax from 'sax';
 import { v4 as uuidv4 } from 'uuid';
 import { getClient } from './db.js';
 import { getVenueFullName } from './dblp.js';
+import * as cache from './cache.js';
+import * as metrics from './metrics.js';
+import * as throttler from './throttler.js';
 
 const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
 const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
@@ -308,6 +311,56 @@ export const extractVenues = async () => {
 export async function controllerVenues(req, res) {
     res.send("Launching extraction of venues ...");
     extractVenues();
+}
+
+
+
+
+// *******************************************************************************************************
+// Admin dashboard: a lightweight in-app alternative to a full
+// Prometheus/Grafana/Loki stack (deliberately not adding new always-on
+// services on a VM with a documented OOM history). No existing auth system
+// in this app, so a single shared-secret token is the pragmatic floor for a
+// prototype — not a claim of real access control.
+// *******************************************************************************************************
+
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || crypto.randomUUID();
+if (!process.env.ADMIN_TOKEN) {
+    console.log(`\x1b[35m[Admin]\x1b[0m No ADMIN_TOKEN set — generated one for this run: ${ADMIN_TOKEN}`);
+}
+
+export function requireAdminToken(req, res, next) {
+    const token = req.headers['x-admin-token'] || req.query.token;
+    if (token !== ADMIN_TOKEN) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+}
+
+export async function controllerStats(req, res) {
+    try {
+        const client = await getClient();
+        const db = client.db('dblp');
+
+        const [venuesCount, mongoOk, redisStatus] = await Promise.all([
+            db.collection('venues').countDocuments().catch(() => null),
+            db.admin().ping().then(() => true).catch(() => false),
+            cache.status(),
+        ]);
+
+        res.json({
+            process: {
+                uptimeSeconds: Math.round(process.uptime()),
+                memory: process.memoryUsage(),
+            },
+            metrics: metrics.snapshot(),
+            throttler: throttler.status(),
+            mongo: { ok: mongoOk, venuesCount },
+            redis: redisStatus,
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 }
 
 

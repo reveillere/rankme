@@ -4,7 +4,8 @@ import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
 
-export function Publications({ author, data, onOpenAuthor }) {
+export function Publications({ author, data, onOpenAuthor, selfPids }) {
+  const pids = selfPids || [author.pid];
   const pubs = [...data].sort((a, b) => b.year - a.year);
   const typeCounts = data.reduce((acc, curr) => {
     acc[curr.type] = (acc[curr.type] || 0) + 1;
@@ -25,14 +26,14 @@ export function Publications({ author, data, onOpenAuthor }) {
   return (
     <div>
       <ul className='publ-list'>
-        {pubs.map((item, index) => {
+        {pubs.map((item) => {
           const year = item.dblp.year;
           const displayYear = previousYear !== year;
           previousYear = year;
           const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
 
           return (
-            <React.Fragment key={index}>
+            <React.Fragment key={item.dblp.url}>
               {displayYear && <li className="year">{year}</li>}
               <li className={`entry ${item.type}`}>
                 <div className="box">
@@ -48,7 +49,7 @@ export function Publications({ author, data, onOpenAuthor }) {
                       ? item.authors
                         .map((a, i) => (
                           <span key={i} className="link">
-                            {a.$.pid !== author.pid ? (
+                            {!pids.includes(a.$.pid) ? (
                               <a href="#" onClick={(e) => {
                                 e.preventDefault();
                                 onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });

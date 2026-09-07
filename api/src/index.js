@@ -5,6 +5,7 @@ import router from './routes.js';
 import fs from 'fs';
 import * as sjr from './sjrPortal.js';
 import * as core from './corePortal.js'
+import * as metrics from './metrics.js';
 
 const accessLogStream = fs.createWriteStream('./log/access.log', { flags: 'a' });
 
@@ -16,6 +17,7 @@ const port = 80;
 app.use(cors());
 app.use(morgan('dev', { stream: accessLogStream }));
 app.use(express.json());
+app.use(metrics.middleware);
 app.use(router);
 
 app.listen(port, async () => {

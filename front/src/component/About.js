@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 // Material-UI Components and Icons
 import {
   Dialog,
@@ -7,14 +9,28 @@ import {
   Typography,
   IconButton,
   Link,
+  Box,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
+export const HIDE_ON_START_KEY = 'rankme:hideAboutOnStart';
 
 function About({ open, onClose }) {
+  const [dontShowAgain, setDontShowAgain] = useState(() => localStorage.getItem(HIDE_ON_START_KEY) === 'true');
+
+  const handleCheckboxChange = (e) => {
+    setDontShowAgain(e.target.checked);
+    localStorage.setItem(HIDE_ON_START_KEY, e.target.checked ? 'true' : 'false');
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle style={{ fontWeight: '800'}}>About RankMe</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, fontWeight: 800 }}>
+        rankme
+      </DialogTitle>
       <DialogActions style={{ position: 'absolute', right: '8px', top: '8px', padding: '8px' }}>
         <IconButton onClick={onClose}>
           <CloseIcon />
@@ -22,7 +38,7 @@ function About({ open, onClose }) {
       </DialogActions>
       <DialogContent>
         <Typography variant="body1" gutterBottom>
-          RankMe looks up an author on <Link href="https://dblp.org" target="_blank" rel="noreferrer">DBLP</Link> or{' '}
+          rankme looks up an author on <Link href="https://dblp.org" target="_blank" rel="noreferrer">DBLP</Link> or{' '}
           <Link href="https://hal.science" target="_blank" rel="noreferrer">HAL</Link>, pulls their publication list,
           and matches each venue against two independent ranking sources.
         </Typography>
@@ -34,15 +50,46 @@ function About({ open, onClose }) {
           A venue with no match in either source is shown as Unranked rather than left out.
         </Typography>
         <Typography variant="body1" gutterBottom>
-          Each author page charts publications by rank over time. Use <strong>Filter</strong> to narrow the year
-          range, and the settings icon (<em>⚙</em>) in the top bar to choose which ranks and publication
+          Each author page charts publications by rank over time. Use <strong>Filter by year</strong> to narrow the
+          year range, and the settings icon (<em>⚙</em>) in the top bar to choose which ranks and publication
           categories are taken into account everywhere — that choice applies across every open author page.
         </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Rank matching is automated and best-effort: venue names and acronyms don&apos;t always line up perfectly
-          across DBLP, HAL, CORE and Scimago, so occasional mismatches are expected.
+        <Typography variant="body1" gutterBottom>
+          The <strong>Teams</strong> tab groups several DBLP or HAL authors together into one merged,
+          deduplicated ranking — handy for a lab or a research group.
+        </Typography>
+
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1.5,
+            alignItems: 'flex-start',
+            mt: 2,
+            p: 1.5,
+            borderRadius: 2,
+            bgcolor: 'warning.light',
+            color: 'warning.contrastText',
+          }}
+        >
+          <InfoOutlinedIcon fontSize="small" sx={{ mt: '2px', flexShrink: 0 }} />
+          <Typography variant="body2">
+            Rank matching is automated and best-effort: venue names and acronyms don&apos;t always line up perfectly
+            across DBLP, HAL, CORE and Scimago, so occasional mismatches are expected. Use rankme as a starting point,
+            not a definitive assessment.
+          </Typography>
+        </Box>
+
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
+          Proudly built by one human manager and a small team of tireless AI developers — no coffee breaks, occasional hallucinations.
         </Typography>
       </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <FormControlLabel
+          control={<Checkbox size="small" checked={dontShowAgain} onChange={handleCheckboxChange} />}
+          label={<Typography variant="body2">Don&apos;t show this again</Typography>}
+          sx={{ mr: 'auto' }}
+        />
+      </DialogActions>
     </Dialog>
   );
 }

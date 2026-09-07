@@ -1,4 +1,3 @@
-// React
 import React, { useState, useEffect, useMemo } from 'react';
 
 // Material-UI Components and Icons
@@ -8,22 +7,20 @@ import MuiAlert from '@mui/material/Alert';
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
 
-// DBLP
-import { fetchAuthor } from '../dblp';
-import { useRankedPublications } from '../useRankedPublications';
+import { useMergedRankedPublications } from '../useMergedRankedPublications';
+import { getTeam } from '../teamStore';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
 import { Publications } from './Publications';
+import { HalPublications } from './HalPublications';
 import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
 
-// Utilities and Styles
-import { trimLastDigits } from '../utils';
 import 'react-datepicker/dist/react-datepicker.css';
 import '../App.css';
 
@@ -33,59 +30,54 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 
 Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
 
-export function Author({ pid, onOpenAuthor }) {
-  const [author, setAuthor] = useState(null);
+const yearAccessorFor = source => (source === 'hal' ? (pub => pub.year) : (pub => pub.dblp.year));
 
-  useEffect(() => {
-    const fetchData = async function () {
-      try {
-        const author = await fetchAuthor(pid);
-        setAuthor(author)
-      } catch (e) {
-        console.error(`Error fetching data for author ${pid}: `, e);
-      }
-    };
-    fetchData();
-  }, [pid]);
+export function Team({ teamId, onOpenAuthor, onSearchAuthor }) {
+  const team = getTeam(teamId);
 
-  if (author === null)
-    return <LoadingSpinner message="Fetching author from DBLP…" />;
+  if (!team) {
+    return <div style={{ textAlign: 'center', marginTop: '80px' }}>This team no longer exists.</div>;
+  }
 
-  return <AuthorShow author={author?.dblpperson?.$} pid={pid} onOpenAuthor={onOpenAuthor} />;
+  return <TeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />;
 }
 
+function TeamShow({ team, onOpenAuthor, onSearchAuthor }) {
+  const { publications: rankedPublications, progress, done, failed } = useMergedRankedPublications(team.source, team.members);
 
-
-
-function AuthorShow({ author, pid, onOpenAuthor }) {
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}`);
-
-  if (failed && rankedPublications === null)
-    return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
+  if (failed)
+    return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this team&apos;s members from {team.source === 'hal' ? 'HAL' : 'DBLP'}. Please try again later.</div>;
 
   if (rankedPublications === null)
-    return <LoadingSpinner message="Computing ranks…" progress={progress} />;
+    return <LoadingSpinner message={`Computing ranks for ${team.members.length} members…`} progress={progress} />;
 
-  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} onOpenAuthor={onOpenAuthor} />;
+  return (
+    <TeamContent
+      team={team}
+      publications={rankedPublications}
+      progress={progress}
+      done={done}
+      onOpenAuthor={onOpenAuthor}
+      onSearchAuthor={onSearchAuthor}
+    />
+  );
 }
 
+function TeamContent({ team, publications: rankedPublications, progress, done, onOpenAuthor, onSearchAuthor }) {
+  const isHal = team.source === 'hal';
+  const yearAccessor = useMemo(() => yearAccessorFor(team.source), [team.source]);
+  const selfIds = useMemo(() => team.members.map(m => m.id), [team]);
 
-
-
-const yearAccessor = pub => pub.dblp.year;
-
-function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor }) {
-  // Years are already known from the initial SSE `init` payload — only
-  // `.rank` fields arrive later — so this only needs recomputing when the
-  // publication count itself changes, not on every streamed rank update
-  // (which replaces the array reference on every tick).
-  const [minYear, maxYear] = useMemo(
-    () => [Math.min(...rankedPublications.map(yearAccessor)), Math.max(...rankedPublications.map(yearAccessor))],
+  const [minYear, maxYear] = useMemo(() => {
+    const knownYears = rankedPublications.map(yearAccessor).filter(year => year != null);
+    const currentYear = new Date().getFullYear();
+    if (knownYears.length === 0) return [currentYear, currentYear];
+    return [Math.min(...knownYears), Math.max(...knownYears)];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rankedPublications.length]
-  );
+  }, [rankedPublications.length, team.source]);
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategoriesDblp } = useFilterSettings();
+  const { filterRanks, filterCategoriesDblp, filterCategoriesHal } = useFilterSettings();
+  const filterCategories = isHal ? filterCategoriesHal : filterCategoriesDblp;
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -95,8 +87,8 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories: filterCategoriesDblp, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategoriesDblp, filterRanks]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -111,9 +103,9 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   return (
     <div className='App'>
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>Records of {trimLastDigits(author.name)}</h1>
+        <h1>Records of {team.name} ({team.members.length} members)</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
+          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
       </div>
 
@@ -129,25 +121,19 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
 
       <div style={{ height: '50px' }}></div>
-      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} />
 
-      <Snackbar
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        open={!done}
-      >
+      {isHal
+        ? <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+        : <Publications data={filteredRecords} onOpenAuthor={onOpenAuthor} selfPids={selfIds} />}
+
+      <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>
           Update in progress ({updateCompletedPercent}%)
         </Alert>
       </Snackbar>
 
       <Snackbar
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         open={showCompleted}
         onClose={() => setShowCompleted(false)}
         autoHideDuration={3000}
@@ -157,9 +143,5 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
         </Alert>
       </Snackbar>
     </div>
-
   );
 }
-
-
-

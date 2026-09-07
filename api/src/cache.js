@@ -44,3 +44,20 @@ export async function set(key, value, ttl = null) {
         console.error('[redis] set failed for key', key, ':', error.message);
     }
 }
+
+// For the admin dashboard: a quick health snapshot via the same singleton
+// client, rather than opening a separate connection.
+export async function status() {
+    try {
+        const redisClient = await createRedisClient();
+        const [pong, dbsize, info] = await Promise.all([
+            redisClient.ping(),
+            redisClient.dbSize(),
+            redisClient.info('memory'),
+        ]);
+        const usedMemory = info.match(/used_memory_human:([^\r\n]+)/)?.[1]?.trim() ?? null;
+        return { ok: pong === 'PONG', dbsize, usedMemory };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+}

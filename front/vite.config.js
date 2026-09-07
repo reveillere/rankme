@@ -20,6 +20,13 @@ export default defineConfig({
 
   optimizeDeps: {
     force: true,
+    // Pins @mui/material + @emotion as single coherent pre-bundles instead
+    // of letting esbuild discover them piecemeal through many separate
+    // `@mui/material/X` deep imports — with enough deep imports discovered
+    // in one optimize pass, esbuild's chunk-splitting can mis-wire the
+    // shared `styled` export across chunks ("styled_default is not a
+    // function" at runtime, from @mui/material/Popper and similar).
+    include: ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
     esbuildOptions: {
       loader: {
         '.js': 'jsx',

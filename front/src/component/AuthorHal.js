@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import Tooltip from '@mui/material/Tooltip';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 
-import { getHalCategory } from '../hal';
 import { useRankedPublications } from '../useRankedPublications';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
@@ -11,6 +9,7 @@ import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
+import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
 import '../App.css';
 
@@ -28,7 +27,7 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
   }
 
   if (rankedPublications === null) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner message="Computing ranks…" progress={progress} />;
   }
 
   return (
@@ -68,18 +67,19 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
 
-  const sorted = [...filteredRecords].sort((a, b) => (b.year || 0) - (a.year || 0));
-  let previousYear = null;
+  // Hiding the filter also clears it — otherwise the year range stays
+  // narrowed behind the scenes while the button looks inactive again.
+  const handleFilterActiveChange = (active) => {
+    setIsFilterActive(active);
+    if (!active) setFilterYears([minYear, maxYear]);
+  };
 
   return (
     <div className='App'>
-      <div style={{ position: 'relative', textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
+      <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
         <h1>HAL records{authorName ? ` of ${authorName}` : ''}</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
-        </div>
-        <div style={{ position: 'absolute', top: 0, right: '20px' }}>
-          <FilterButton isFilterActive={isFilterActive} setIsFilterActive={setIsFilterActive} />
         </div>
       </div>
 
@@ -88,68 +88,15 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 
+      <div style={{ margin: '0 0 20px 0' }}>
+        <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+      </div>
+
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
 
       <div style={{ height: '50px' }}></div>
 
-      <ul className='publ-list'>
-        {sorted.map((item) => {
-          const displayYear = previousYear !== item.year;
-          previousYear = item.year;
-          const category = getHalCategory(item.type);
-
-          return (
-            <React.Fragment key={item.docid}>
-              {displayYear && <li className="year">{item.year || '?'}</li>}
-              <li className={`entry ${category.cssClass}`}>
-                <div className="box">
-                  <img alt="paper" src="https://dblp.org/img/n.png" />
-                </div>
-                <div className="rank">
-                  {item.rank && <Tooltip title={<div>{item.rank.msg}</div>} placement="bottom"><span>{item.rank.value}</span></Tooltip>}
-                </div>
-                <cite className='data'>
-                  {item.authors.length > 0
-                    ? item.authors
-                        .map((a, i) => (
-                          <span key={i} className="link">
-                            {a.idHal && a.idHal === id ? (
-                              a.name
-                            ) : a.idHal ? (
-                              <a href="#" onClick={(e) => {
-                                e.preventDefault();
-                                onOpenAuthor({ type: 'hal-author', id: `hal:${a.idHal}`, label: a.name, halId: a.idHal, authorName: a.name });
-                              }}>
-                                {a.name}
-                              </a>
-                            ) : (
-                              <a href="#" onClick={(e) => { e.preventDefault(); onSearchAuthor('hal', a.name); }}>
-                                {a.name}
-                              </a>
-                            )}
-                          </span>
-                        ))
-                        .reduce((prev, curr) => [prev, ', ', curr])
-                    : <span>No Authors Listed</span>}
-                  <br />
-                  <span className='title'>{item.title}</span>
-                  <span className='link'>
-                    <span className='venue'>
-                      {item.url ? (
-                        <a href={item.url} target="_blank" rel="noreferrer">
-                          {item.venue || category.name}
-                        </a>
-                      ) : (
-                        item.venue || category.name
-                      )}
-                    </span>
-                  </span>
-                </cite>
-              </li>
-            </React.Fragment>
-          );
-        })}
-      </ul>
+      <HalPublications selfIds={[id]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
 
       <Snackbar
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

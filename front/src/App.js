@@ -10,8 +10,11 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import AuthorSearch from './component/Search';
 import { Author } from './component/Author';
 import { AuthorHal } from './component/AuthorHal';
-import About from './component/About';
+import { Team } from './component/Team';
+import Teams from './component/Teams';
+import About, { HIDE_ON_START_KEY } from './component/About';
 import { SettingsDialog } from './component/SettingsDialog';
+import { recordSearchHistory } from './searchHistory';
 
 // Styles and Other
 import './App.css';
@@ -19,6 +22,8 @@ import './utils.js';
 
 
 const SEARCH_TAB_ID = 'search';
+const TEAMS_TAB_ID = 'teams';
+const PERSISTENT_TABS = [{ id: SEARCH_TAB_ID, type: 'search' }, { id: TEAMS_TAB_ID, type: 'teams' }];
 
 // The URL is the source of truth for which author page is open, so a link
 // to it can be shared/reloaded. Kept deliberately simple (regex match on
@@ -28,6 +33,8 @@ const SEARCH_TAB_ID = 'search';
 function tabPath(tab) {
   if (tab.type === 'dblp-author') return `/dblp/${tab.pid}`;
   if (tab.type === 'hal-author') return `/hal/${tab.halId}`;
+  if (tab.type === 'team') return `/team/${tab.teamId}`;
+  if (tab.type === 'teams') return '/teams';
   return '/';
 }
 
@@ -42,17 +49,25 @@ function tabFromPath(pathname) {
     const halId = decodeURIComponent(m[1]);
     return { type: 'hal-author', id: `hal:${halId}`, halId, authorName: undefined, label: halId };
   }
+  m = pathname.match(/^\/team\/(.+)$/);
+  if (m) {
+    const teamId = decodeURIComponent(m[1]);
+    return { type: 'team', id: `team:${teamId}`, teamId, label: teamId };
+  }
+  if (pathname === '/teams') {
+    return { id: TEAMS_TAB_ID, type: 'teams' };
+  }
   return { id: SEARCH_TAB_ID, type: 'search' };
 }
 
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(() => localStorage.getItem(HIDE_ON_START_KEY) !== 'true');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [tabs, setTabs] = useState(() => {
     const fromUrl = tabFromPath(location.pathname);
-    return fromUrl.id === SEARCH_TAB_ID ? [fromUrl] : [{ id: SEARCH_TAB_ID, type: 'search' }, fromUrl];
+    return PERSISTENT_TABS.some(t => t.id === fromUrl.id) ? PERSISTENT_TABS : [...PERSISTENT_TABS, fromUrl];
   });
   const [activeTabId, setActiveTabId] = useState(() => tabFromPath(location.pathname).id);
   const [searchRequest, setSearchRequest] = useState(null);
@@ -63,6 +78,7 @@ function App() {
   const openAuthorTab = (tab) => {
     setTabs(prev => (prev.some(t => t.id === tab.id) ? prev : [...prev, tab]));
     setActiveTabId(tab.id);
+    recordSearchHistory(tab);
   };
 
   // Active tab -> URL (opening/switching/closing tabs all funnel through
@@ -109,7 +125,7 @@ function App() {
           <Box display="flex" alignItems="center">
             <Button color="inherit" onClick={handleAboutOpen} style={{ textTransform: 'none' }}>
               <Typography variant="h6">
-                RankMe
+                rankme
               </Typography>
             </Button>
           </Box>
@@ -128,6 +144,7 @@ function App() {
         variant="scrollable"
         scrollButtons="auto"
         style={{ borderBottom: '1px solid #ddd' }}
+        sx={{ '& .MuiTab-root': { textTransform: 'capitalize' } }}
       >
         {tabs.map(tab => (
           <Tab
@@ -136,6 +153,8 @@ function App() {
             label={
               tab.id === SEARCH_TAB_ID ? (
                 'Search'
+              ) : tab.id === TEAMS_TAB_ID ? (
+                'Teams'
               ) : (
                 <span title={tab.label} style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160 }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -156,8 +175,10 @@ function App() {
       {tabs.map(tab => (
         <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
           {tab.type === 'search' && <AuthorSearch onOpenAuthor={openAuthorTab} searchRequest={searchRequest} />}
+          {tab.type === 'teams' && <Teams onOpenAuthor={openAuthorTab} />}
           {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} />}
           {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} />}
+          {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} />}
         </div>
       ))}
     </div>
