@@ -1,4 +1,5 @@
 import Bottleneck from 'bottleneck';
+import * as activeStreams from './activeStreams.js';
 
 // Ranking one publication is CPU/memory-bound (scanning and normalizing the
 // CORE/SJR candidate lists), not rate-limited like the DBLP/HAL fetches —
@@ -7,6 +8,12 @@ import Bottleneck from 'bottleneck';
 // of these concurrently, which OOM-killed the process. Bounding concurrency
 // keeps peak memory flat regardless of how many publications an author has.
 const ranking_limiter = new Bottleneck({ maxConcurrent: 8 });
+
+// Exposed for the admin dashboard: job-level queue pressure, separate from
+// activeStreams' session-level ("how many browsers are waiting") view.
+export function status() {
+    return ranking_limiter.counts();
+}
 
 export function startSSE(res) {
     res.writeHead(200, {
@@ -28,23 +35,32 @@ export function startSSE(res) {
 // items: full publication list (sent as-is in `init`, unranked)
 // isRankable(item) -> bool
 // computeRank(item, index) -> Promise<object> (fields merged into the `rank` event)
-export async function streamRankedItems(res, items, isRankable, computeRank) {
+// label: optional human-readable id (e.g. "dblp:11/1262") shown in the
+// admin dashboard's "rankings in progress" list.
+export async function streamRankedItems(res, items, isRankable, computeRank, label = 'unknown') {
     const sse = startSSE(res);
     const rankableIndices = items.flatMap((item, i) => (isRankable(item) ? [i] : []));
-    sse.send('init', { publications: items, total: rankableIndices.length });
+    const total = rankableIndices.length;
+    sse.send('init', { publications: items, total });
 
-    let completed = 0;
-    await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(async () => {
-        try {
-            const extra = await computeRank(items[index], index);
-            completed++;
-            sse.send('rank', { index, completed, total: rankableIndices.length, ...extra });
-        } catch (error) {
-            completed++;
-            sse.send('error', { index, completed, total: rankableIndices.length, message: error.message });
-        }
-    })));
+    const streamId = activeStreams.register(label);
+    try {
+        let completed = 0;
+        await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(async () => {
+            try {
+                const extra = await computeRank(items[index], index);
+                completed++;
+                sse.send('rank', { index, completed, total, ...extra });
+            } catch (error) {
+                completed++;
+                sse.send('error', { index, completed, total, message: error.message });
+            }
+            activeStreams.updateProgress(streamId, completed, total);
+        })));
 
-    sse.send('done', {});
-    sse.end();
+        sse.send('done', {});
+        sse.end();
+    } finally {
+        activeStreams.unregister(streamId);
+    }
 }

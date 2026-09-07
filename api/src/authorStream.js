@@ -21,7 +21,8 @@ export async function controllerDblpAuthor(req, res) {
                         : sjr.getRank(ref, pub.dblp.year),
                 ]);
                 return { fullName, rank };
-            }
+            },
+            `dblp:${pid}`
         );
     } catch (error) {
         console.error('[authorStream] dblp error', error);
@@ -40,7 +41,8 @@ export async function controllerHalAuthor(req, res) {
                 rank: pub.type === 'COMM'
                     ? await core.getRankByFullName(pub.venue, pub.year)
                     : await sjr.getRankByFullName(pub.venue, pub.year),
-            })
+            }),
+            `hal:${id}`
         );
     } catch (error) {
         console.error('[authorStream] hal error', error);

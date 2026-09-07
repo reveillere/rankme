@@ -11,6 +11,8 @@ import { getVenueFullName } from './dblp.js';
 import * as cache from './cache.js';
 import * as metrics from './metrics.js';
 import * as throttler from './throttler.js';
+import * as ranking from './ranking.js';
+import * as activeStreams from './activeStreams.js';
 
 const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
 const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
@@ -355,6 +357,10 @@ export async function controllerStats(req, res) {
             },
             metrics: metrics.snapshot(),
             throttler: throttler.status(),
+            ranking: {
+                queue: ranking.status(),
+                activeStreams: activeStreams.list(),
+            },
             mongo: { ok: mongoOk, venuesCount },
             redis: redisStatus,
         });
