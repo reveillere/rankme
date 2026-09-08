@@ -53,7 +53,10 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
   }
 
   if (rankedPublications === null) {
-    return <LoadingSpinner message="Computing ranks…" progress={progress} />;
+    // Before `init` arrives, progress.total is still 0 -- that gap is HAL
+    // fetch time (can be a few seconds for a large structure), not ranking,
+    // so "Computing ranks" would be misleading.
+    return <LoadingSpinner message={progress.total > 0 ? 'Computing ranks…' : 'Loading publications from HAL…'} progress={progress} />;
   }
 
   return (
@@ -102,11 +105,6 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
-        {rankedPublications.length >= 1000 && (
-          <div style={{ fontSize: 'small', color: '#e07b00', marginTop: '0.5em' }}>
-            This structure may have more than 1000 records — only the 1000 most recent are shown.
-          </div>
-        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>

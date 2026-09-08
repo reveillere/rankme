@@ -10,21 +10,36 @@ http {
         error_log  /var/log/nginx/error.log;
         access_log /var/log/nginx/access.log;
 
+        # Docker's embedded DNS server: resolving api/front through a
+        # variable (below) forces nginx to re-resolve their container IPs
+        # on every request instead of caching whatever they were at nginx's
+        # own startup -- a static `proxy_pass http://api/;` only resolves
+        # once, so recreating the api/front containers without also
+        # restarting nginx silently leaves it pointing at a dead/stale IP.
+        resolver 127.0.0.11 valid=10s;
+
         location / {
-            proxy_pass http://front;
+            set $front_upstream front;
+            proxy_pass http://$front_upstream:80;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';
             proxy_set_header Host $host;
             proxy_cache_bypass $http_upgrade;
-            proxy_redirect off; 
+            proxy_redirect off;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
         location ^~ /api/ {
-            proxy_pass http://api/;
+            set $api_upstream api;
+            # proxy_pass can't strip the /api/ prefix itself once the
+            # upstream is a variable (a documented nginx quirk: URI
+            # rewriting via the trailing "/" only applies to a literal,
+            # statically-resolved proxy_pass target) -- so do it explicitly.
+            rewrite ^/api/(.*)$ /$1 break;
+            proxy_pass http://$api_upstream:80;
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection 'upgrade';

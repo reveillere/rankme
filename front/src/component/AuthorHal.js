@@ -31,7 +31,9 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
   }
 
   if (rankedPublications === null) {
-    return <LoadingSpinner message="Computing ranks…" progress={progress} />;
+    // Before `init` arrives, progress.total is still 0 -- that gap is HAL
+    // fetch time, not ranking, so "Computing ranks" would be misleading.
+    return <LoadingSpinner message={progress.total > 0 ? 'Computing ranks…' : 'Loading publications from HAL…'} progress={progress} />;
   }
 
   return (

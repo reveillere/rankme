@@ -99,13 +99,24 @@ async function fetchAuthorPublications(id) {
     return fetchPublicationsByFilter(filter);
 }
 
+// HAL's Solr backend silently caps `rows` at 10000 regardless of what's
+// requested (a large lab like LaBRI has 10000+ records, well past that), so
+// a single request can't fetch everything -- page through with `start`
+// until a page comes back short, which is the only sign of "no more data"
+// this API gives (numFound is somewhat unreliable/racy across pages).
+const PAGE_SIZE = 10000;
+
 async function fetchPublicationsByFilter(filter) {
     const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s';
-    const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=1000&wt=json&fl=${fields}&sort=${encodeURIComponent('publicationDateY_i desc')}`;
-
-    const resp = await fetch(url);
-    const data = await resp.json();
-    const docs = data?.response?.docs || [];
+    const docs = [];
+    for (let start = 0; ; start += PAGE_SIZE) {
+        const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=${PAGE_SIZE}&start=${start}&wt=json&fl=${fields}&sort=${encodeURIComponent('publicationDateY_i desc')}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        const page = data?.response?.docs || [];
+        docs.push(...page);
+        if (page.length < PAGE_SIZE) break;
+    }
 
     return docs.map(doc => ({
         docid: doc.docid,
@@ -224,10 +235,6 @@ export async function getStructurePublications(id) {
     return publications;
 }
 
-// Capped at 1000 like author lookups (see fetchPublicationsByFilter), newest
-// first -- an old or large lab can have tens of thousands of records, so
-// this deliberately trades completeness for not having to build real
-// pagination/streaming for what's meant to be a lightweight addition.
 async function fetchStructurePublications(structId) {
     return fetchPublicationsByFilter(`structId_i:${structId}`);
 }

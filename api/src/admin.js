@@ -399,7 +399,6 @@ export const extractVenues = async () => {
                 await downloadFile();
             }
             await verifyMD5(targetMD5);
-            await storeMD5(targetMD5);
             console.log('MD5 verification passed!');
             await decompressFile();
             await processXML('/data/dblp/dblp.xml');
@@ -408,6 +407,13 @@ export const extractVenues = async () => {
             // Journal articles already carry their own journal name
             // directly (doc.journal) -- no cross-collection lookup needed.
             await venueLookup('article', 'db/journals/', (doc) => doc.journal || null);
+            // Stored only once the whole pipeline has actually completed --
+            // storing it right after verifyMD5 (as this used to) marks the
+            // dump "done" even if the process crashes or is interrupted
+            // partway through venueLookup, so a later run would see
+            // storedMD5 === targetMD5 and skip re-processing entirely,
+            // silently leaving the venue index incomplete forever.
+            await storeMD5(targetMD5);
         }
     } catch (error) {
         console.error('Error:', error.message);

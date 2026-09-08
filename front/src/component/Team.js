@@ -53,7 +53,7 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor }) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this team&apos;s members from {team.source === 'hal' ? 'HAL' : 'DBLP'}. Please try again later.</div>;
 
   if (rankedPublications === null)
-    return <LoadingSpinner message={`Computing ranks for ${team.members.length} members…`} progress={progress} />;
+    return <LoadingSpinner message={progress.total > 0 ? `Computing ranks for ${team.members.length} members…` : `Loading publications for ${team.members.length} members…`} progress={progress} />;
 
   return (
     <TeamContent
