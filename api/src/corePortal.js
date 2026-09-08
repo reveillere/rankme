@@ -212,16 +212,127 @@ async function resolveSource(year) {
   return { sourceKey, source };
 }
 
-// matchTitle: the CORE entry's own title, shown alongside the source year so
-// a fuzzy or acronym-tiebreak match can be sanity-checked from the tooltip
-// instead of only trusting the resulting rank.
+// Structured result shape shared by every match branch below (and mirrored
+// by sjrPortal.js) so the front end can build one consistent tooltip/edit UI
+// for both CORE and SJR instead of parsing a human-readable message string.
+//   value:          the badge grade -- a RANKS entry, "Misc" (a real CORE
+//                    rank string outside RANKS, e.g. "Multiconference"), or
+//                    "Unranked"
+//   rawValue:        the original CORE rank string when value is "Misc"
+//   matchType:       'exact' | 'fuzzy' | 'ambiguous' | 'none'
+//   matchedTitle/Acronym/Id: identifies which CORE entry was matched, so a
+//                    user can review or override it
+//   distance:        word-level edit distance between the venue and the
+//                    matched title (informational only when matchType is
+//                    'exact', since that's already guaranteed correct by a
+//                    unique acronym or a literal title match)
+//   currentSource/currentValue: the SAME CORE entry's rank in the latest
+//                    available edition, when it differs from the one used
+//                    (rankings drift between editions)
 function makeSanitizedRank(sourceKey) {
-  return (rank, exact, score, matchTitle) => {
-    const matchInfo = matchTitle ? ` — matched "${matchTitle}"` : '';
-    return RANKS.includes(rank) ?
-      { value: rank, msg: `${sourceKey}${matchInfo}`, exact: exact, score: score } :
-      { value: "Misc", msg: `Ranked as ${rank} in ${sourceKey}${matchInfo}`, exact: exact, score: score };
+  return (entry, matchType, distance) => {
+    const isStandard = RANKS.includes(entry.rank);
+    return {
+      value: isStandard ? entry.rank : (entry.rank ? 'Misc' : 'Unranked'),
+      rawValue: isStandard ? null : (entry.rank || null),
+      source: sourceKey,
+      matchType,
+      matchedTitle: entry.title,
+      matchedAcronym: entry.acronym,
+      matchedId: entry.id,
+      distance,
+    };
   };
+}
+
+function unrankedResult(sourceKey) {
+  return { value: 'Unranked', rawValue: null, source: sourceKey, matchType: 'none', matchedTitle: null, matchedAcronym: null, matchedId: null, distance: null };
+}
+
+function ambiguousResult(sourceKey, tied) {
+  return {
+    value: 'Unranked', rawValue: null, source: sourceKey, matchType: 'ambiguous',
+    matchedTitle: null, matchedAcronym: null, matchedId: null, distance: null,
+    ambiguousWith: tied.map(t => ({ title: t.conf.title, acronym: t.conf.acronym, id: t.conf.id, value: t.conf.rank })),
+  };
+}
+
+// Best-effort: looks up the same CORE entry (by its stable numeric id, which
+// survives across yearly editions) in the most recent available edition, so
+// the tooltip can show "this venue is now ranked X" alongside the rank that
+// actually applied for the publication's own year. Silently gives up (the
+// cached rank stays usable, just without this extra) if anything's missing.
+// queryText is folded in here too (rather than at every call site) since
+// every branch of computeRank/computeRank2 funnels through this on its way
+// out -- it's what the front end needs, alongside matchedId, to key a
+// user's override to this exact (source edition, input text) pair.
+async function attachCurrentValue(rank, queryText) {
+  rank = { ...rank, queryText };
+  if (rank.matchedId == null) return rank;
+  try {
+    const sources = await getSources();
+    const latest = sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
+    if (!latest) return rank;
+    // Already looking at the latest edition -- its rank IS the current one,
+    // no extra lookup needed. Set unconditionally (not just when it turns
+    // out to differ) so the front end can always show "current rank"
+    // instead of only when there happens to be a discrepancy.
+    if (latest.source === rank.source) {
+      return { ...rank, currentSource: rank.source, currentValue: rank.value };
+    }
+    const latestSource = await getSource(latest.source);
+    const latestEntry = latestSource.find(c => c.id === rank.matchedId);
+    if (!latestEntry) return rank;
+    return {
+      ...rank,
+      currentSource: latest.source,
+      currentValue: RANKS.includes(latestEntry.rank) ? latestEntry.rank : (latestEntry.rank ? 'Misc' : 'Unranked'),
+    };
+  } catch (error) {
+    console.error('[core] Error attaching current value', error);
+    return rank;
+  }
+}
+
+// Free-text search over one edition's CORE entries, for the "change match"
+// picker: the user types a few characters, gets candidate titles/acronyms
+// back to pick from instead of only ever seeing the one automatic match.
+export async function controllerCandidates(req, res) {
+  const year = Number(req.query.year);
+  const q = (req.query.q || '').trim().toLowerCase();
+  if (!year) {
+    res.status(400).json({ error: 'Bad Request', message: 'Missing year' });
+    return;
+  }
+  try {
+    const { sourceKey, source } = await resolveSource(year);
+    const sources = await getSources();
+    const latest = sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
+    // Each result also carries the same entry's rank in the latest edition
+    // -- CORE data is small and already in memory, so this is cheap even
+    // for 50 results, and it's exactly what a user picking a match to
+    // override with needs to see, same as the automatic match already gets.
+    const latestById = latest && latest.source !== sourceKey
+      ? new Map((await getSource(latest.source)).map(c => [c.id, c]))
+      : null;
+    const toRank = (rank) => RANKS.includes(rank) ? rank : (rank ? 'Misc' : 'Unranked');
+    const results = q.length < 2 ? [] : source
+      .filter(c => c.title.toLowerCase().includes(q) || c.acronym.toLowerCase().includes(q))
+      .slice(0, 50)
+      .map(c => {
+        const latestEntry = latestById ? latestById.get(c.id) : (latest && latest.source === sourceKey ? c : null);
+        return {
+          id: c.id, title: c.title, acronym: c.acronym,
+          value: toRank(c.rank), rawValue: RANKS.includes(c.rank) ? null : c.rank,
+          currentSource: latest ? latest.source : null,
+          currentValue: latestEntry ? toRank(latestEntry.rank) : null,
+        };
+      });
+    res.json({ source: sourceKey, results });
+  } catch (error) {
+    console.error('[core] Error searching candidates', error);
+    res.status(500).json({ error: 'Internal Server Error', message: error.message });
+  }
 }
 
 async function computeRank(acronym, venueFullName, year) {
@@ -235,22 +346,29 @@ async function computeRank(acronym, venueFullName, year) {
 
   if (candidates.length === 0) {
     const exactMatch = source.find(conf => levenshtein(normalizeTitle(conf.title), titleNormalized) === 0);
-
-    if (exactMatch) {
-      rank = sanitizedRank(exactMatch.rank, true, 0, exactMatch.title);
-    } else {
-      rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
-    }
+    rank = exactMatch ? sanitizedRank(exactMatch, 'exact', 0) : unrankedResult(sourceKey);
   } else if (candidates.length > 1) {
     let scores = candidates.map(conf => ({ conf: conf, score: levenshtein(normalizeTitle(conf.title), titleNormalized) }));
-    let bestMatch = scores.reduce((min, current) => current.score < min.score ? current : min, scores[0]);
-    rank = sanitizedRank(bestMatch.conf.rank, bestMatch.score === 0, bestMatch.score, bestMatch.conf.title);
+    const minScore = Math.min(...scores.map(s => s.score));
+    const tied = scores.filter(s => s.score === minScore);
+    // Several same-acronym CORE entries are equally close by title -- if
+    // they don't even agree on the rank, picking one over the other would
+    // be a coin flip, so say so instead of silently trusting whichever
+    // happened to sort first.
+    if (tied.length > 1 && new Set(tied.map(t => t.conf.rank)).size > 1) {
+      rank = ambiguousResult(sourceKey, tied);
+    } else {
+      const bestMatch = tied[0];
+      rank = sanitizedRank(bestMatch.conf, bestMatch.score === 0 ? 'exact' : 'fuzzy', bestMatch.score);
+    }
   } else {
+    // Unique acronym match -- always high confidence regardless of the
+    // title score, which is only informational here.
     const entry = candidates[0];
     const score = levenshtein(normalizeTitle(entry.title), titleNormalized);
-    rank = sanitizedRank(entry.rank, true, score, entry.title);
+    rank = sanitizedRank(entry, 'exact', score);
   }
-  return rank;
+  return attachCurrentValue(rank, venueFullName);
 }
 
 
@@ -333,14 +451,14 @@ async function computeRank2(venueFullName, year) {
   // genuinely line up) guards against this regardless of query length,
   // instead of only blocking the single-word extreme of it.
   if (titleNormalized.length < 2) {
-    return { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+    return { ...unrankedResult(sourceKey), queryText: venueFullName };
   }
   const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
   const scores = source.map(conf => ({ conf: conf, levenshtein: levenshtein(normalizeTitle(conf.acronym + ' ' + conf.title), titleNormalized) }));
   const candidates = scores.filter(score => score.levenshtein <= maxAllowedDistance);
 
   if (candidates.length === 0) {
-    rank = { value: "Unranked", msg: `No ranking found in ${sourceKey}` };
+    rank = unrankedResult(sourceKey);
   } else {
     // print debug info for the first 5 candidates with the lowest levenshtein distance
     const sortedCandidates = candidates.sort((a, b) => a.levenshtein - b.levenshtein);
@@ -349,8 +467,18 @@ async function computeRank2(venueFullName, year) {
       console.log(`[ranking] ${i + 1}: ${sortedCandidates[i].conf.title} => ${normalizeTitle(sortedCandidates[i].conf.acronym + ' ' + sortedCandidates[i].conf.title)} (distance=${sortedCandidates[i].levenshtein})`);
     }
 
-    const bestMatch = sortedCandidates[0];
-    rank = sanitizedRank(bestMatch.conf.rank, bestMatch.levenshtein === 0, bestMatch.levenshtein, bestMatch.conf.title);
+    const minDistance = sortedCandidates[0].levenshtein;
+    const tied = sortedCandidates.filter(c => c.levenshtein === minDistance);
+    // Same rationale as the acronym-tiebreak branch above: with no acronym
+    // to anchor on, several unrelated CORE entries tying for closest match
+    // is common (short/generic titles collide easily -- see MAX_FUZZY_DISTANCE's
+    // comment). Only trust the pick when they agree on the rank.
+    if (tied.length > 1 && new Set(tied.map(t => t.conf.rank)).size > 1) {
+      rank = ambiguousResult(sourceKey, tied.map(t => ({ conf: t.conf })));
+    } else {
+      const bestMatch = tied[0];
+      rank = sanitizedRank(bestMatch.conf, bestMatch.levenshtein === 0 ? 'exact' : 'fuzzy', bestMatch.levenshtein);
+    }
   }
-  return rank;
+  return attachCurrentValue(rank, venueFullName);
 }

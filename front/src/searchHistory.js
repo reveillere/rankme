@@ -35,3 +35,14 @@ export function recordSearchHistory(entry) {
 export function clearSearchHistory() {
   write([]);
 }
+
+// Author/team search and structure search each show their own "Recent"
+// list carved out of this one shared store (see Search.js and
+// StructureSearch.js) -- a "Clear" button on either must only drop its own
+// slice, not the other's history too.
+export function removeSearchHistoryByType(types) {
+  const typeSet = new Set(Array.isArray(types) ? types : [types]);
+  const next = read().filter(e => !typeSet.has(e.type));
+  write(next);
+  return next;
+}

@@ -37,12 +37,14 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
             <React.Fragment key={item.dblp.url}>
               {displayYear && <li className="year">{year}</li>}
               <li className={`entry ${item.type}`}>
-                <div className="box">
-                  <img alt="paper" src="https://dblp.org/img/n.png" />
-                </div>
+                <Tooltip title={dblpCategories[item.type].name} placement="left">
+                  <div className="box">
+                    <img alt="paper" src="https://dblp.org/img/n.png" />
+                  </div>
+                </Tooltip>
                 <div className="nr">[{nr}]</div>
                 <div className="rank">
-                <RankBadge rank={item.rank} />
+                <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} />
                 </div>
                 <cite className='data'>
                   {
@@ -58,7 +60,7 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
                                 {trimLastDigits(a._)}
                               </a>
                             ) : (
-                              trimLastDigits(a._)
+                              <span className="self-author">{trimLastDigits(a._)}</span>
                             )}
                           </span>
                         ))

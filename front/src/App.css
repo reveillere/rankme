@@ -102,6 +102,10 @@ cite.data .link a { color: #7d848a; text-decoration: none; cursor: pointer;}
 cite.data .link a:hover {
   color: blue;
 }
+/* The team/self member(s) in an author list -- rendered as plain text
+   (they're not clickable, they're already the page you're on) which made
+   them blend into the surrounding gray links instead of standing out. */
+cite.data .self-author { text-decoration: underline; color: #505b62; }
 
 
 .year-slider {

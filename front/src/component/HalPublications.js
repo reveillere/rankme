@@ -22,11 +22,13 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
           <React.Fragment key={item.docid}>
             {displayYear && <li className="year">{item.year || '?'}</li>}
             <li className={`entry ${category.cssClass}`}>
-              <div className="box">
-                <img alt="paper" src="https://dblp.org/img/n.png" />
-              </div>
+              <Tooltip title={category.name} placement="left">
+                <div className="box">
+                  <img alt="paper" src="https://dblp.org/img/n.png" />
+                </div>
+              </Tooltip>
               <div className="rank">
-                <RankBadge rank={item.rank} />
+                <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} />
               </div>
               <cite className='data'>
                 {item.authors.length > 0
@@ -34,7 +36,7 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
                       .map((a, i) => (
                         <span key={i} className="link">
                           {a.idHal && selfIds.includes(a.idHal) ? (
-                            a.name
+                            <span className="self-author">{a.name}</span>
                           ) : a.idHal ? (
                             <a href="#" onClick={(e) => {
                               e.preventDefault();

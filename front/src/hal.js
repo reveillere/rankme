@@ -32,3 +32,12 @@ export async function searchAuthor(query) {
   const resp = await fetch(`/api/hal/search/${query}`);
   return await resp.json();
 }
+
+// A HAL "structure" (lab, institution, team...) -- see
+// https://aurehal.archives-ouvertes.fr/structure/index -- searched the same
+// way as an author, but every publication it's ever been affiliated with
+// gets pulled directly rather than needing a curated list of members.
+export async function searchStructure(query) {
+  const resp = await fetch(`/api/hal/structure-search/${query}`);
+  return await resp.json();
+}

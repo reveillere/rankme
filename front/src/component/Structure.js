@@ -15,19 +15,41 @@ import { getHalCategory } from '../hal';
 import '../App.css';
 
 const yearAccessor = pub => pub.year;
-// HAL's own type codes (ART, COMM, ...) aren't the shared category
-// vocabulary — cssClass maps each one to its dblp-bucket equivalent.
 const categoryKeyAccessor = pub => getHalCategory(pub.type).cssClass;
 
 const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
 });
 
-export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/author-stream/${id}`);
+// A HAL structure (lab, institution, team...) shown the exact same way as a
+// single HAL author -- see AuthorHal.js, which this mirrors -- since it's
+// still just a list of HAL publications ranked the same way, just pulled by
+// structId instead of by an author's own idHal. structureName is only known
+// when the tab was opened from a search result -- opened directly by id (or
+// reloaded from a bare /structure/:id URL) it arrives undefined, so the name
+// is looked up here instead of just falling back to showing the raw id.
+export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved }) {
+  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/structure-stream/${structId}`);
+  const [resolvedName, setResolvedName] = useState(structureName);
+
+  useEffect(() => {
+    setResolvedName(structureName);
+    if (structureName) return;
+    let cancelled = false;
+    fetch(`/api/hal/structure-info/${structId}`)
+      .then(resp => (resp.ok ? resp.json() : null))
+      .then(info => {
+        if (cancelled || !info?.name) return;
+        setResolvedName(info.name);
+        onNameResolved?.(info.name);
+      })
+      .catch(() => { /* best-effort: falls back to showing the bare id */ });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [structId, structureName]);
 
   if (failed && rankedPublications === null) {
-    return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from HAL. Please try again later.</div>;
+    return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this structure from HAL. Please try again later.</div>;
   }
 
   if (rankedPublications === null) {
@@ -35,9 +57,8 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
   }
 
   return (
-    <AuthorHalContent
-      id={id}
-      authorName={authorName}
+    <StructureContent
+      structureName={resolvedName || structId}
       onOpenAuthor={onOpenAuthor}
       onSearchAuthor={onSearchAuthor}
       publications={rankedPublications}
@@ -47,9 +68,7 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
   );
 }
 
-function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done }) {
-  // Unlike dblp, HAL records can be missing a year (incomplete metadata) —
-  // exclude those from the min/max range so they don't turn it into NaN.
+function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done }) {
   const knownYears = rankedPublications.map(yearAccessor).filter(year => year != null);
   const currentYear = new Date().getFullYear();
   const minYear = knownYears.length ? Math.min(...knownYears) : currentYear;
@@ -71,8 +90,6 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
 
-  // Hiding the filter also clears it — otherwise the year range stays
-  // narrowed behind the scenes while the button looks inactive again.
   const handleFilterActiveChange = (active) => {
     setIsFilterActive(active);
     if (!active) setFilterYears([minYear, maxYear]);
@@ -81,10 +98,15 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   return (
     <div className='App'>
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>HAL records{authorName ? ` of ${authorName}` : ''}</h1>
+        <h1>HAL records{structureName ? ` of ${structureName}` : ''}</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
+        {rankedPublications.length >= 1000 && (
+          <div style={{ fontSize: 'small', color: '#e07b00', marginTop: '0.5em' }}>
+            This structure may have more than 1000 records — only the 1000 most recent are shown.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
@@ -100,12 +122,11 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
 
       <div style={{ height: '50px' }}></div>
 
-      <HalPublications selfIds={[id]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+      {/* A structure isn't a person, so no author in the list is ever
+          "self" -- every author name is a clickable link, none underlined. */}
+      <HalPublications selfIds={[]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
 
-      <Snackbar
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        open={!done}
-      >
+      <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>
           Update in progress ({updateCompletedPercent}%)
         </Alert>

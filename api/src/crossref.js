@@ -83,6 +83,25 @@ function sameVenue(eventName, fullName) {
     return overlap / fullNameWords.length > 0.5;
 }
 
+// HAL depositors sometimes spell out that a workshop was co-located with a
+// bigger conference in the venue text itself (e.g. "... (IMIS 2010)
+// colocated with ... (CISIS 2010)"). Past that phrase the text describes a
+// DIFFERENT venue than this record's own -- the same misattribution risk as
+// Crossref reusing a host event's metadata (see sameVenue below), except
+// here the host's exact title sits right there as plain text, so even a
+// fuzzy title match (not just acronym extraction) would happily latch onto
+// it. Cut it off before any matching -- acronym or fuzzy -- happens.
+const HAS_COLOCATION_CAVEAT = /\bco-?located\b/i;
+const COLOCATION_SUFFIX = /\s+co-?located\s+with\b.*$/i;
+
+// Exported for authorStream.js to apply to HAL's raw venue text before any
+// matching, so a co-located host's title never enters the fuzzy match, and
+// this record's own trailing/leading acronym (here, "IMIS") -- which was
+// sitting right before the "colocated with" phrase -- can still be found.
+export function stripColocationSuffix(text) {
+    return text ? text.replace(COLOCATION_SUFFIX, '') : text;
+}
+
 // A trailing parenthesised acronym, optionally followed by a year/edition
 // marker inside the same parens (e.g. "(ICDCS)", "(COMPSAC 2013)",
 // "(DSN-S)"). Only trusted when it was already upper-case in the source
@@ -91,9 +110,29 @@ function sameVenue(eventName, fullName) {
 // raw venue text too, which very often already carries its own acronym this
 // way even without a DOI/Crossref lookup.
 export function extractTrailingAcronym(text) {
-    if (!text) return null;
+    if (!text || HAS_COLOCATION_CAVEAT.test(text)) return null;
     const match = text.match(/\(([A-Za-z][A-Za-z0-9.\-]{1,15})(?:\s*'?\d{2,4})?\)\s*$/);
     if (!match) return null;
     const acronym = match[1];
     return acronym === acronym.toUpperCase() ? acronym : null;
+}
+
+// HAL's own conferenceTitle_s often puts the acronym at the *front* instead
+// of a trailing "(...)" -- e.g. "ASE18 - Proceedings of the 33rd...",
+// "ASE'25 - 40th...", "IC2E 2025 - IEEE...", "WWW '22: Companion...". A
+// generic org name ahead of the real acronym (e.g. "IEEE S&P 2018 - 39th
+// IEEE Symposium on Security and Privacy") is skipped first, and any
+// non-alphanumeric characters are stripped from the result (CORE's own
+// acronym for that entry is "SP", not "S&P").
+const GENERIC_LEADING_ORG = /^(ACM\/IEEE|IEEE\/ACM|ACM|IEEE|IFIP|USENIX)\s+/;
+
+export function extractLeadingAcronym(text) {
+    if (!text || HAS_COLOCATION_CAVEAT.test(text)) return null;
+    const rest = text.replace(GENERIC_LEADING_ORG, '');
+    const match = rest.match(/^([A-Za-z][A-Za-z0-9&]{1,9}?)(\s*'?\d{2,4})?\s*[-:]\s+\S/);
+    if (!match) return null;
+    const acronym = match[1];
+    if (acronym !== acronym.toUpperCase()) return null; // must already be upper-case in source
+    const cleaned = acronym.replace(/[^A-Z0-9]/g, '');
+    return cleaned.length >= 2 ? cleaned : null;
 }

@@ -89,17 +89,108 @@ export async function load() {
     }
 }
 
-async function computeRank(venueFullName, year) {
+// Structured result shape mirroring corePortal.js's, so the front end can
+// build one shared tooltip/edit UI for both CORE and SJR ranks.
+function unrankedResult(sourceYear) {
+    return { value: 'QU', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'none', matchedTitle: null, matchedId: null, distance: null };
+}
+
+function ambiguousResult(sourceYear, tied) {
+    return {
+        value: 'QU', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'ambiguous',
+        matchedTitle: null, matchedId: null, distance: null,
+        ambiguousWith: tied.map(t => ({ title: t.data.Title, id: t.data.Sourceid, value: t.data.BestQuartile })),
+    };
+}
+
+function sanitizedRank(sourceYear, entry, matchType, distance) {
+    return {
+        value: entry.BestQuartile, rawValue: null, source: `scimagojr:${sourceYear}`, matchType,
+        matchedTitle: entry.Title, matchedId: entry.Sourceid, distance,
+    };
+}
+
+// Best-effort: same idea as corePortal's attachCurrentValue -- looks up the
+// same journal (by its stable Scopus Sourceid) in the most recent scimagojr
+// year, so the tooltip can show how it's ranked now versus back when the
+// publication actually came out.
+async function attachCurrentValue(rank, queryText) {
+    rank = { ...rank, queryText };
+    if (rank.matchedId == null || config.end == null) return rank;
+    const latestSource = `scimagojr:${config.end}`;
+    // Already looking at the latest edition -- its quartile IS the current
+    // one, no extra lookup needed. Set unconditionally so the front end can
+    // always show "current rank", not only when it happens to differ.
+    if (rank.source === latestSource) {
+        return { ...rank, currentSource: rank.source, currentValue: rank.value };
+    }
     try {
         const client = await getClient();
         const db = client.db("scimagojr");
+        const latest = await db.collection(config.end.toString()).findOne({ Sourceid: rank.matchedId });
+        if (!latest) return rank;
+        return { ...rank, currentSource: latestSource, currentValue: latest.BestQuartile === '-' ? 'QU' : latest.BestQuartile };
+    } catch (error) {
+        console.error('[sjr] Error attaching current value', error);
+        return rank;
+    }
+}
 
+// Free-text search over one year's scimagojr entries, for the "change
+// match" picker.
+export async function controllerCandidates(req, res) {
+    const year = Number(req.query.year);
+    const q = (req.query.q || '').trim().toLowerCase();
+    if (!year) {
+        res.status(400).json({ error: 'Bad Request', message: 'Missing year' });
+        return;
+    }
+    try {
+        const clampedYear = Math.min(Math.max(year, config.start), config.end);
+        if (q.length < 2) {
+            res.json({ source: `scimagojr:${clampedYear}`, results: [] });
+            return;
+        }
+        const client = await getClient();
+        const db = client.db("scimagojr");
+        const documents = await db.collection(clampedYear.toString())
+            .find({ Title: { $regex: q, $options: 'i' } })
+            .limit(50)
+            .toArray();
+        // Each result also carries the same journal's quartile in the latest
+        // edition -- one batched query (not one per result) -- so a user
+        // picking a match to override with sees the same "current rank" info
+        // the automatic match already gets.
+        const latestYear = config.end;
+        const currentById = new Map();
+        if (latestYear && latestYear !== clampedYear && documents.length > 0) {
+            const latestDocs = await db.collection(latestYear.toString())
+                .find({ Sourceid: { $in: documents.map(d => d.Sourceid) } })
+                .toArray();
+            latestDocs.forEach(d => currentById.set(d.Sourceid, d.BestQuartile === '-' ? 'QU' : d.BestQuartile));
+        }
+        const results = documents.map(d => ({
+            id: d.Sourceid, title: d.Title, value: d.BestQuartile === '-' ? 'QU' : d.BestQuartile,
+            currentSource: latestYear ? `scimagojr:${latestYear}` : null,
+            currentValue: latestYear === clampedYear ? (d.BestQuartile === '-' ? 'QU' : d.BestQuartile) : (currentById.get(d.Sourceid) ?? null),
+        }));
+        res.json({ source: `scimagojr:${clampedYear}`, results });
+    } catch (error) {
+        console.error('[sjr] Error searching candidates', error);
+        res.status(500).json({ error: 'Internal Server Error', message: error.message });
+    }
+}
+
+async function computeRank(venueFullName, year) {
+    try {
         if (year < config.start) {
             year = config.start;
         }
         if (year > config.end) {
             year = config.end;
         }
+        const client = await getClient();
+        const db = client.db("scimagojr");
         const collection = db.collection(year.toString());
         const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);
         const titleNormalized = normalizeTitle(venueFullName);
@@ -113,7 +204,7 @@ async function computeRank(venueFullName, year) {
         // at all, and longer queries still need the allowed distance scaled
         // to their own length rather than a flat cap.
         if (titleNormalized.length < 2) {
-            return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
+            return { ...unrankedResult(year), queryText: venueFullName };
         }
         const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
         const result = documents.map(item => {
@@ -124,20 +215,30 @@ async function computeRank(venueFullName, year) {
 
         let response;
         if (result.length > 0) {
-            const elt = result[0];
-            const rank = elt.data['BestQuartile'];
-            if (rank === '-') {
-                response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
-            } else
-                response = { value: rank, msg: `Best match with "${elt.data.Title}" (distance=${elt.distance})`, exact: elt.distance === 0, score: elt.distance };
+            const minDistance = result[0].distance;
+            const tied = result.filter(r => r.distance === minDistance);
+            // scimagojr is full of near-identical titles that are genuinely
+            // different journals with different quartiles (e.g. "Nature" vs
+            // "Nature Conservation" vs "Nature and Culture" are all one word
+            // apart) -- if the equally-close candidates don't even agree on
+            // the quartile, picking the one that happened to sort first
+            // would be a coin flip.
+            const distinctQuartiles = new Set(tied.map(t => t.data['BestQuartile']));
+            if (tied.length > 1 && distinctQuartiles.size > 1) {
+                response = ambiguousResult(year, tied.map(t => t.data));
+            } else {
+                const elt = tied[0];
+                const rank = elt.data['BestQuartile'];
+                response = rank === '-' ? unrankedResult(year) : sanitizedRank(year, elt.data, elt.distance === 0 ? 'exact' : 'fuzzy', elt.distance);
+            }
         } else {
-            response = { value: "QU", msg: `No ranking found in scimagojr:${year}` };
+            response = unrankedResult(year);
         }
-        return response;
+        return attachCurrentValue(response, venueFullName);
     } catch (error) {
         console.error('Error during levenshtein computation', error);
-        return { value: "QU", msg: `No ranking found in scimagojr:${year}` };
-    } 
+        return { ...unrankedResult(year), queryText: venueFullName };
+    }
 }
 
 

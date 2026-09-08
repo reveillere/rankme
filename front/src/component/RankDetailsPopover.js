@@ -1,0 +1,249 @@
+import { useEffect, useRef, useState } from 'react';
+import Popover from '@mui/material/Popover';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import CircularProgress from '@mui/material/CircularProgress';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+
+import { searchCandidates } from '../rankCandidates';
+import { setOverride, clearOverride, confirmMatch, patchOverrideCandidate } from '../matchOverrides';
+
+const DEBOUNCE_MS = 300;
+
+export const MATCH_STYLE = {
+  exact: { label: 'Exact match', color: '#2e7d32' },
+  fuzzy: { label: 'Approximate match', color: '#e07b00' },
+  ambiguous: { label: 'Ambiguous match', color: '#c62828' },
+  manual: { label: 'Manually set by you', color: '#1565c0' },
+  confirmed: { label: 'Confirmed by you', color: '#66bb6a' },
+  none: { label: 'No match found', color: '#757575' },
+};
+
+// CORE grades and SJR quartiles on one shared best-to-worst scale, so a
+// historical-vs-current rank pair can be compared regardless of portal.
+// "Misc"/"Unranked"/"QU" aren't included: they're not this kind of grade at
+// all, so there's nothing meaningful to say about their trend.
+const RANK_ORDER = { 'A*': 4, 'A': 3, 'B': 2, 'C': 1, 'Q1': 4, 'Q2': 3, 'Q3': 2, 'Q4': 1 };
+
+function trendOf(fromValue, toValue) {
+  const a = RANK_ORDER[fromValue];
+  const b = RANK_ORDER[toValue];
+  if (a == null || b == null || a === b) return null;
+  return b > a ? 'up' : 'down';
+}
+
+// A two-column row -- label of fixed width, then wrapping text -- so
+// "Original text" and "Matched" line up on the same starting column instead
+// of each just running on right after its own (differently-sized) label.
+function LabeledRow({ label, children }) {
+  return (
+    <Box sx={{ display: 'flex', mb: 0.5 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 132, flexShrink: 0 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>{children}</Typography>
+    </Box>
+  );
+}
+
+// The full picture behind one CORE/SJR badge: what year and edition it was
+// computed against, which entry it matched (or why it couldn't), how
+// confident that match is, how the same entry ranks today, and a search box
+// to replace it with a different entry -- a correction that's saved to this
+// browser immediately and also mirrored to the server for later analysis.
+export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, onOverrideChange }) {
+  const open = Boolean(anchorEl);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef();
+
+  useEffect(() => {
+    if (!open) { setQuery(''); setResults([]); }
+  }, [open]);
+
+  // Overrides/confirmations saved before candidate search results carried
+  // currentSource/currentValue (or imported from an older CSV export) are
+  // missing that "rank in the latest edition" info -- backfill it live the
+  // first time the popover opens on one, and persist it so it's not
+  // re-fetched on every open.
+  useEffect(() => {
+    if (!open || !override || override.candidate.currentValue || !year) return;
+    let cancelled = false;
+    searchCandidates(portal, year, override.candidate.title).then(found => {
+      if (cancelled) return;
+      const match = found.find(c => c.id === override.candidate.id);
+      if (match?.currentValue) {
+        const patched = patchOverrideCandidate(override.key, { currentSource: match.currentSource, currentValue: match.currentValue });
+        if (patched) onOverrideChange(patched);
+      }
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, override?.key]);
+
+  const handleQueryChange = (value) => {
+    setQuery(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length < 2) { setResults([]); setSearching(false); return; }
+    setSearching(true);
+    debounceRef.current = setTimeout(async () => {
+      const found = await searchCandidates(portal, year, value);
+      setResults(found);
+      setSearching(false);
+    }, DEBOUNCE_MS);
+  };
+
+  const pickCandidate = (candidate) => {
+    const entry = setOverride({ portal, rank, year, candidate });
+    onOverrideChange(entry);
+    onClose();
+  };
+
+  const confirmThisMatch = () => {
+    const entry = confirmMatch({ portal, rank, year });
+    onOverrideChange(entry);
+  };
+
+  const resetToAutomatic = () => {
+    clearOverride(override.key);
+    onOverrideChange(null);
+    onClose();
+  };
+
+  if (!rank) return null;
+
+  const isConfirmed = override?.type === 'confirmed';
+  const isManualOverride = override && !isConfirmed;
+  const effectiveMatchType = isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : rank.matchType;
+  const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
+  const isJournal = portal === 'sjr';
+  const displayedValue = isManualOverride ? override.candidate.value : rank.value;
+
+  return (
+    <Popover
+      open={open}
+      anchorEl={anchorEl}
+      onClose={onClose}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+    >
+      <Box sx={{ width: 580, maxWidth: '90vw', p: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 1 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            {isJournal ? 'SJR' : 'CORE'} ranking{year ? ` — ${year}` : ''}
+          </Typography>
+          <Typography variant="body2" sx={{ color: style.color, fontWeight: 600 }}>
+            {style.label}
+          </Typography>
+        </Box>
+
+        <Typography variant="body2" sx={{ mb: 0.5 }}>
+          Rank: <strong>{displayedValue}</strong>
+          <Typography component="span" variant="body2" color="text.secondary"> (edition {rank.source})</Typography>
+        </Typography>
+
+        {rank.queryText && <LabeledRow label="Original text:">&quot;{rank.queryText}&quot;</LabeledRow>}
+
+        {isManualOverride ? (
+          <Box sx={{ my: 1 }}>
+            <LabeledRow label="You set this to:">
+              <strong>{override.candidate.title}</strong>{override.candidate.acronym ? ` (${override.candidate.acronym})` : ''}
+            </LabeledRow>
+            <Typography variant="caption" color="text.secondary">
+              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}` : `no match (${rank.value})`}
+            </Typography>
+            <Box sx={{ mt: 1 }}>
+              <Button size="small" onClick={resetToAutomatic}>Reset to automatic match</Button>
+            </Box>
+          </Box>
+        ) : isConfirmed ? (
+          <Box sx={{ my: 1 }}>
+            <LabeledRow label="Matched:">
+              <strong>{rank.matchedTitle}</strong>{rank.matchedAcronym ? ` (${rank.matchedAcronym})` : ''}
+            </LabeledRow>
+            <Typography variant="caption" color="text.secondary">
+              You confirmed this match is correct.
+            </Typography>
+            <Box sx={{ mt: 1 }}>
+              <Button size="small" onClick={resetToAutomatic}>Remove confirmation</Button>
+            </Box>
+          </Box>
+        ) : rank.matchType === 'ambiguous' ? (
+          <Box sx={{ my: 1 }}>
+            <Typography variant="body2">Equally close to several entries that don&apos;t agree on a rank:</Typography>
+            <List dense disablePadding>
+              {(rank.ambiguousWith || []).map((c, i) => (
+                <ListItemText key={i} primary={`${c.title}${c.acronym ? ` (${c.acronym})` : ''}`} secondary={c.value} sx={{ pl: 1 }} />
+              ))}
+            </List>
+          </Box>
+        ) : rank.matchedTitle ? (
+          <Box sx={{ my: 1 }}>
+            <LabeledRow label="Matched:">
+              <strong>{rank.matchedTitle}</strong>{rank.matchedAcronym ? ` (${rank.matchedAcronym})` : ''}
+            </LabeledRow>
+            {rank.distance != null && (
+              <Typography variant="caption" color="text.secondary">
+                Title word distance: {rank.distance}
+              </Typography>
+            )}
+            {rank.matchType === 'fuzzy' && (
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" color="success" variant="outlined" onClick={confirmThisMatch}>
+                  Confirm this match is correct
+                </Button>
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Typography variant="body2" sx={{ my: 1 }}>No matching entry found in this edition.</Typography>
+        )}
+
+        {(() => {
+          const current = isManualOverride ? override.candidate : rank;
+          if (!current.currentValue) return null;
+          const trend = trendOf(displayedValue, current.currentValue);
+          return (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Rank in the latest edition ({current.currentSource}): <strong>{current.currentValue}</strong>
+              {trend === 'up' && <ArrowUpwardIcon fontSize="inherit" sx={{ color: '#2e7d32', verticalAlign: 'middle', ml: 0.3 }} />}
+              {trend === 'down' && <ArrowDownwardIcon fontSize="inherit" sx={{ color: '#c62828', verticalAlign: 'middle', ml: 0.3 }} />}
+              {current.currentValue === displayedValue && <Typography component="span" variant="caption" color="text.secondary"> (unchanged)</Typography>}
+            </Typography>
+          );
+        })()}
+
+        <Divider sx={{ my: 1.5 }} />
+
+        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Change match</Typography>
+        <TextField
+          size="small"
+          fullWidth
+          autoFocus
+          placeholder={isJournal ? 'Search journal name…' : 'Search conference name or acronym…'}
+          value={query}
+          onChange={e => handleQueryChange(e.target.value)}
+        />
+        {searching && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', my: 1 }}><CircularProgress size={20} /></Box>
+        )}
+        {!searching && query.trim().length >= 2 && (
+          <List dense sx={{ maxHeight: 220, overflowY: 'auto', mt: 0.5 }}>
+            {results.length === 0
+              ? <Typography variant="body2" color="text.secondary" sx={{ px: 1 }}>No match</Typography>
+              : results.map(c => (
+                <ListItemButton key={c.id} onClick={() => pickCandidate(c)}>
+                  <ListItemText primary={`${c.title}${c.acronym ? ` (${c.acronym})` : ''}`} secondary={c.value} />
+                </ListItemButton>
+              ))}
+          </List>
+        )}
+      </Box>
+    </Popover>
+  );
+}

@@ -55,7 +55,7 @@ export default function Teams({ onOpenAuthor }) {
   const [teams, setTeams] = useState(() => getTeams());
   const [editingId, setEditingId] = useState(null); // null = creating a new team
   const [name, setName] = useState('');
-  const [source, setSource] = useState('dblp');
+  const [source, setSource] = useState('hal');
   const [members, setMembers] = useState([]); // { id, label }
   const [mode, setMode] = useState('name');
   const [query, setQuery] = useState('');
@@ -77,7 +77,7 @@ export default function Teams({ onOpenAuthor }) {
   const resetForm = () => {
     setEditingId(null);
     setName('');
-    setSource('dblp');
+    setSource('hal');
     setMembers([]);
     setQuery('');
     setIdInput('');
@@ -208,6 +208,13 @@ export default function Teams({ onOpenAuthor }) {
         {editingId && (
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -0.5, mb: 1 }}>
             A team&apos;s source can&apos;t be changed after creation.
+          </Typography>
+        )}
+        {source === 'dblp' && (
+          // Same anti-bot block as Search.js -- dblp.org isn't answering our
+          // server's requests right now, so every DBLP member lookup fails.
+          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: -0.5, mb: 1 }}>
+            DBLP is currently unavailable (blocked by their anti-bot protection). Please use HAL for now.
           </Typography>
         )}
 

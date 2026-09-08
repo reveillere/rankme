@@ -18,6 +18,7 @@ import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
+import Alert from '@mui/material/Alert';
 
 // Styles and Other
 import '../App.css';
@@ -26,7 +27,7 @@ import '../App.css';
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getCachedSearch, setCachedSearch } from '../searchCache';
-import { getSearchHistory, clearSearchHistory } from '../searchHistory';
+import { getSearchHistory, removeSearchHistoryByType } from '../searchHistory';
 import HistoryIcon from '@mui/icons-material/History';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
@@ -61,7 +62,7 @@ const SOURCES = {
 // co-author link with no known idHal) to prefill and immediately run a
 // search, switching to the given source if needed.
 export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
-    const [source, setSource] = useState('dblp');
+    const [source, setSource] = useState('hal');
     const [mode, setMode] = useState('name'); // 'name' | 'id'
     const [query, setQuery] = useState('');
     const [queryResult, setQueryResult] = useState([]);
@@ -152,6 +153,14 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
                     <Tab key={key} value={key} label={label} />
                 ))}
             </Tabs>
+            {source === 'dblp' && (
+                // dblp.org currently serves an anti-bot challenge page to our
+                // server instead of API responses, so every DBLP search/lookup
+                // fails -- HAL is the working default until that clears up.
+                <Alert severity="warning" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
+                    DBLP is currently unavailable (blocked by their anti-bot protection). Please use HAL for now.
+                </Alert>
+            )}
             <ToggleButtonGroup value={mode} exclusive onChange={handleModeChange} size="small" style={{ marginBottom: '20px' }}>
                 <ToggleButton value="name">By name</ToggleButton>
                 <ToggleButton value="id">By {SOURCES[source].idLabel}</ToggleButton>
@@ -315,14 +324,30 @@ const HISTORY_SOURCE_LABEL = {
     'team': 'Team',
 };
 
+const AUTHOR_HISTORY_TYPES = Object.keys(HISTORY_SOURCE_LABEL);
+
 function RecentSearches({ onOpenAuthor }) {
-    const [history, setHistory] = useState(() => getSearchHistory());
+    // Structure search (see StructureSearch.js) shares this same history
+    // store but keeps its own "Recent" list -- filtered out here so it
+    // doesn't show up unlabeled (HISTORY_SOURCE_LABEL has no entry for it).
+    //
+    // Read fresh on every render rather than once via useState(() => ...):
+    // the Author tab is a PERSISTENT_TABS entry in App.js, mounted once at
+    // app load and never unmounted (only display:none/block toggled), so a
+    // one-time initializer would permanently show whatever history existed
+    // at that very first mount and never pick up an author opened
+    // afterwards without a full page reload.
+    const history = getSearchHistory().filter(e => AUTHOR_HISTORY_TYPES.includes(e.type));
+    // Only used to force a re-render after clearing (history itself is
+    // always read fresh above, so bumping this is enough regardless of its
+    // value).
+    const [, forceRefresh] = useState(0);
 
     if (history.length === 0) return null;
 
     const handleClear = () => {
-        clearSearchHistory();
-        setHistory([]);
+        removeSearchHistoryByType(AUTHOR_HISTORY_TYPES);
+        forceRefresh(t => t + 1);
     };
 
     return (

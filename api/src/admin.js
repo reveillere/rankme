@@ -51,11 +51,38 @@ const downloadFile = async () => {
     });
 };
 
+const MD5_PATTERN = /^[0-9a-f]{32}$/i;
+
 const getCurrentMD5 = async () => {
     const md5Response = await fetch(DBLP_MD5_URL);
     const md5Content = await md5Response.text();
-    const md5Expected = md5Content.split(' ')[0];
-    return md5Expected;
+    const md5Expected = md5Content.trim().split(/\s+/)[0];
+    // dblp.org currently sits behind Anubis anti-bot protection, which
+    // answers plain HTTP clients (this fetch included) with a JS challenge
+    // page instead of the real .md5 file -- that response is still a 200,
+    // so without this check a challenge page's opening token would be
+    // silently treated as "the new hash", triggering a doomed re-download
+    // that overwrites a perfectly good local dump with garbage mid-way
+    // through (see extractVenues below).
+    if (!MD5_PATTERN.test(md5Expected)) {
+        throw new Error('dblp.org did not return a valid MD5 (likely blocked by anti-bot protection)');
+    }
+    return md5Expected.toLowerCase();
+};
+
+// A user can fetch dblp.xml.gz/.gz.md5 by hand through a real browser (the
+// only thing that currently gets past dblp.org's anti-bot wall -- see
+// getCurrentMD5) and drop both next to each other in the container with
+// `docker cp`. This is the same filename dblp.org itself uses, so that
+// manual flow needs no extra renaming step.
+const getProvidedMD5 = async () => {
+    try {
+        const content = await readFile('/data/dblp/dblp.xml.gz.md5', 'utf-8');
+        const md5 = content.trim().split(/\s+/)[0];
+        return MD5_PATTERN.test(md5) ? md5.toLowerCase() : null;
+    } catch (error) {
+        return null;
+    }
 };
 
 const storeMD5 = async (md5Value) => {
@@ -64,7 +91,7 @@ const storeMD5 = async (md5Value) => {
 
 const getStoredMD5 = async () => {
     try {
-        return await readFile('/data/dblp/localMD5.txt', 'utf-8');
+        return (await readFile('/data/dblp/localMD5.txt', 'utf-8')).trim();
     } catch (error) {
         return null;
     }
@@ -93,7 +120,7 @@ const verifyMD5 = async (md5Expected) => {
 
 
 const decompressFile = async () => {
-    const totalSize = statSync('/data/dblp.xml.gz').size;  // obtenir la taille du fichier gz
+    const totalSize = statSync('/data/dblp/dblp.xml.gz').size;  // obtenir la taille du fichier gz
     let readSize = 0;
     const pp = printProgress('Decompression')
     const reader = createReadStream('/data/dblp/dblp.xml.gz');
@@ -202,10 +229,30 @@ const processXML = async (filePath) => {
             }
         });
 
+        // dblp's dump declares (and actually is) ISO-8859-1, not UTF-8 --
+        // feeding it raw Buffer chunks makes sax decode them as UTF-8 by
+        // default (Buffer#toString()'s own default), which both mangles
+        // every accented character and trips sax's strict-mode check that
+        // the declared encoding matches what it's reading, crashing the
+        // whole process (sax is an EventEmitter; an 'error' with no
+        // listener is a thrown exception, see the listener added below).
+        // ISO-8859-1 is one byte per character, so decoding chunk-by-chunk
+        // independently -- unlike UTF-8 -- can never split a character
+        // across a chunk boundary.
+        const decoder = new TextDecoder('iso-8859-1');
+        let firstChunk = true;
         fileStream.on('data', (chunk) => {
             readSize += chunk.length;
             pp(readSize, totalSize);
-            parser.write(chunk);
+            let text = decoder.decode(chunk, { stream: true });
+            if (firstChunk) {
+                // Now that the bytes have actually been transcoded to UTF-8
+                // (JS strings are UTF-16, and sax's stream write() encodes a
+                // string argument as UTF-8), the declaration needs to match.
+                text = text.replace(/encoding=["']ISO-8859-1["']/i, 'encoding="UTF-8"');
+                firstChunk = false;
+            }
+            parser.write(text);
         });
 
         fileStream.on('end', async () => {
@@ -222,11 +269,42 @@ const processXML = async (filePath) => {
             console.error('Error reading the file:', error.message);
             reject(error);
         });
+
+        // Without this, a parse error (malformed XML, an encoding mismatch
+        // like the one this function now avoids, ...) is an unhandled
+        // 'error' event on the SAXStream -- Node throws it synchronously,
+        // crashing the entire API process instead of just failing this one
+        // admin-triggered import.
+        parser.on('error', (error) => {
+            console.error('XML parse error:', error.message);
+            reject(error);
+        });
     });
 };
 
 
-async function venueLookup(collection, filter) {
+// Builds url -> official full title from the dump's own "proceedings"
+// records (one per conference edition), so inproceedings venues can be
+// resolved without ever touching the network -- see venueLookup below.
+async function buildProceedingsTitleIndex() {
+    const client = await getClient();
+    await client.connect();
+    const db = client.db('dblp');
+    const index = new Map();
+    for await (const doc of db.collection('proceedings').find({}, { projection: { url: 1, title: 1 } })) {
+        if (doc.url && doc.title) index.set(doc.url, doc.title);
+    }
+    console.log(`[dblp] Indexed ${index.size} proceedings titles from the local dump.`);
+    return index;
+}
+
+// resolveLocally(doc): given an inproceedings/article doc from the dump,
+// return this venue's full name from data the dump already has, or a
+// falsy value to fall back to getVenueFullName's network lookup (i.e. "we
+// don't know, ask dblp.org" -- exactly the per-venue scraping that
+// throttler.js's dblp_scrape_limiter comment traces back to a prior ~16h
+// block, so covering more cases here directly reduces that traffic).
+async function venueLookup(collection, filter, resolveLocally) {
     const client = await getClient();
     await client.connect();
     const db = client.db('dblp');
@@ -239,12 +317,13 @@ async function venueLookup(collection, filter) {
             venueUrls.add(doc.url);
         }
 
-        const totalDocs = await db.collection(collection).countDocuments(); 
+        const totalDocs = await db.collection(collection).countDocuments();
         console.log(`Total entries to process: ${totalDocs}`);
 
         const confsCursor = db.collection(collection).find({});
         let processed = 0;
         let count = 0;
+        let fromLocal = 0;
 
         for await (const doc of confsCursor) {
             if (doc.url && doc.url.startsWith(filter)) {
@@ -252,9 +331,14 @@ async function venueLookup(collection, filter) {
                 if (!venueUrls.has(url)) {
                     count++;
                     venueUrls.add(url);
-                    let venue = await getVenueFullName(url);
-                    if (venue === "") {
-                        venue = doc.title;
+                    let venue = resolveLocally ? resolveLocally(doc) : null;
+                    if (venue) {
+                        fromLocal++;
+                    } else {
+                        venue = await getVenueFullName(url);
+                        if (venue === "") {
+                            venue = doc.title;
+                        }
                     }
 
                     try {
@@ -271,7 +355,7 @@ async function venueLookup(collection, filter) {
             pp(processed, totalDocs);
         }
 
-        console.log(`\n${count} elements inserted in venues.`);
+        console.log(`\n${count} elements inserted in venues (${fromLocal} resolved locally from the dump, ${count - fromLocal} needed a live dblp.org lookup).`);
     } catch (error) {
         console.error("An error occurred:", error);
     } finally {
@@ -283,28 +367,48 @@ export const extractVenues = async () => {
     try {
         await mkdir('/data/dblp', { recursive: true });
 
-        const currentMD5 = await getCurrentMD5();
+        // dblp.org's freshness check (getCurrentMD5) currently fails the
+        // same way everything else on the site does under its anti-bot
+        // protection -- fall back to a manually-provided sidecar .md5 (see
+        // getProvidedMD5) so a dump fetched by hand through a real browser
+        // and `docker cp`'d in next to it still gets picked up and processed.
+        let targetMD5 = await getCurrentMD5().catch((error) => {
+            console.log(`[dblp] Could not check dblp.org for a newer dump (${error.message}), falling back to a locally provided one if any.`);
+            return null;
+        });
+        const viaLiveCheck = targetMD5 != null;
+        if (!targetMD5) {
+            targetMD5 = await getProvidedMD5();
+        }
         const storedMD5 = await getStoredMD5();
-        
 
-        if (storedMD5 !== currentMD5) {
-            console.log('File has been updated. Downloading...');
-
-            console.log(`Current MD5: ${currentMD5}`);
-            await downloadFile();
-            await verifyMD5(currentMD5);
-            await storeMD5(currentMD5);
+        if (!targetMD5) {
+            console.log('[dblp] No dump available: dblp.org is unreachable and no dblp.xml.gz.md5 sidecar was found next to /data/dblp/dblp.xml.gz.');
+        } else if (storedMD5 === targetMD5) {
+            console.log('File has not been updated. Nothing to do.');
+        } else {
+            console.log(`Target MD5: ${targetMD5}`);
+            // Only attempt the live download when the freshness check
+            // itself came from dblp.org -- if we're here via a provided
+            // sidecar file instead, dblp.org can't be reached from here at
+            // all (that's the whole point of the sidecar path), so a
+            // download attempt would just overwrite the manually-placed
+            // .gz with an Anubis challenge page.
+            if (viaLiveCheck) {
+                console.log('File has been updated. Downloading...');
+                await downloadFile();
+            }
+            await verifyMD5(targetMD5);
+            await storeMD5(targetMD5);
             console.log('MD5 verification passed!');
             await decompressFile();
             await processXML('/data/dblp/dblp.xml');
-            await venueLookup('inproceedings', 'db/conf/');
-            await venueLookup('article', 'db/journals/');
-        } else {
-            console.log('File has not been updated. Nothing to do.');
+            const proceedingsTitles = await buildProceedingsTitleIndex();
+            await venueLookup('inproceedings', 'db/conf/', (doc) => proceedingsTitles.get(doc.url?.split('#')[0]));
+            // Journal articles already carry their own journal name
+            // directly (doc.journal) -- no cross-collection lookup needed.
+            await venueLookup('article', 'db/journals/', (doc) => doc.journal || null);
         }
-
-    await venueLookup('article', 'db/journals/');
-
     } catch (error) {
         console.error('Error:', error.message);
     }

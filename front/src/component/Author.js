@@ -113,7 +113,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
         <h1>Records of {trimLastDigits(author.name)}</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
+          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
       </div>
 

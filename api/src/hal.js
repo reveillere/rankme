@@ -96,6 +96,10 @@ function parseAuthors(doc) {
 
 async function fetchAuthorPublications(id) {
     const filter = id.startsWith('form:') ? `authIdForm_i:${id.slice(5)}` : `authIdHal_s:${id}`;
+    return fetchPublicationsByFilter(filter);
+}
+
+async function fetchPublicationsByFilter(filter) {
     const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s';
     const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=1000&wt=json&fl=${fields}&sort=${encodeURIComponent('publicationDateY_i desc')}`;
 
@@ -113,4 +117,117 @@ async function fetchAuthorPublications(id) {
         authors: parseAuthors(doc),
         url: doc.uri_s,
     }));
+}
+
+// ****************************************************************************************************
+// ****************************************************************************************************
+// A HAL "structure" is a lab/institution/team-like entity (see
+// https://aurehal.archives-ouvertes.fr/structure/index) -- unlike an author
+// search, this pulls every publication ever affiliated with it directly,
+// with no separate membership list to maintain.
+
+export async function controllerSearchStructure(req, res) {
+    const searchQuery = req.params[0];
+    try {
+        const results = await getSearchStructure(searchQuery);
+        res.json(results);
+    } catch (error) {
+        console.log('Error during HAL structure search computation', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
+async function getSearchStructure(searchQuery) {
+    const key = `hal:structure-search:${searchQuery}`;
+
+    let results = await cache.get(key);
+    if (results == null) {
+        results = await searchStructure(searchQuery);
+        cache.set(key, results, 60 * 60 * 24); // 1 day
+    }
+    return results;
+}
+
+export async function searchStructure(searchQuery) {
+    const fields = 'docid,label_s,acronym_s,valid_s';
+    const url = `${BASE}/ref/structure/?q=${encodeURIComponent(searchQuery)}&wt=json&rows=15&fl=${fields}`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const docs = data?.response?.docs || [];
+
+    // valid_s is not simply valid/invalid: 'VALID' is the current entry,
+    // 'OLD' is a real, still-queryable structure that was later superseded
+    // or renamed (e.g. a defunct team like "Regal") -- excluding it would
+    // make a real, searchable structure invisible by name (its own docid
+    // still works fine). 'INCOMING' is the one status worth dropping: an
+    // unverified/duplicate placeholder (address text, near-duplicate
+    // entries) rather than a real structure record.
+    return docs
+        .filter(doc => doc.valid_s !== 'INCOMING' && doc.label_s)
+        .map(doc => ({ name: doc.label_s, id: doc.docid, acronym: doc.acronym_s || null }));
+}
+
+// Looks up a single structure's own name by id -- used when a structure tab
+// is opened without already knowing its name (typed in directly by id, or
+// reloaded from a bare /structure/:id URL).
+export async function controllerStructureInfo(req, res) {
+    const id = req.params[0];
+    try {
+        const info = await getStructureInfo(id);
+        if (!info) {
+            res.status(404).json({ error: 'Not Found', message: `No HAL structure with id ${id}` });
+            return;
+        }
+        res.json(info);
+    } catch (error) {
+        console.log('Error during HAL structure info lookup', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
+async function getStructureInfo(id) {
+    const key = `hal:structure-info:${id}`;
+
+    let info = await cache.get(key);
+    if (info === null) {
+        const fields = 'docid,label_s,acronym_s';
+        const url = `${BASE}/ref/structure/?q=docid:${encodeURIComponent(id)}&wt=json&rows=1&fl=${fields}`;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        const doc = data?.response?.docs?.[0];
+        info = doc ? { name: doc.label_s, id: doc.docid, acronym: doc.acronym_s || null } : false;
+        cache.set(key, info, 60 * 60 * 24); // 1 day
+    }
+    return info || null;
+}
+
+export async function controllerStructurePublications(req, res) {
+    const id = req.params[0];
+    try {
+        const publications = await getStructurePublications(id);
+        res.json(publications);
+    } catch (error) {
+        console.log('Error during HAL structure computation', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
+export async function getStructurePublications(id) {
+    const key = `hal:structure:${id}`;
+
+    let publications = await cache.get(key);
+    if (publications == null) {
+        publications = await fetchStructurePublications(id);
+        cache.set(key, publications, 60 * 60 * 24); // 1 day
+    }
+    return publications;
+}
+
+// Capped at 1000 like author lookups (see fetchPublicationsByFilter), newest
+// first -- an old or large lab can have tens of thousands of records, so
+// this deliberately trades completeness for not having to build real
+// pagination/streaming for what's meant to be a lightweight addition.
+async function fetchStructurePublications(structId) {
+    return fetchPublicationsByFilter(`structId_i:${structId}`);
 }

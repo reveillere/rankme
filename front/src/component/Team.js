@@ -109,7 +109,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
         <h1>Records of {team.name} ({team.members.length} members)</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Zoomed in of ${publicationsShown} of ${rankedPublications.length} records in the period of ${filterYears[1] - filterYears[0] + 1} years`}
+          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import * as core from './corePortal.js';
 import * as sjr from './sjrPortal.js';
 import * as admin from './admin.js';
 import * as authorStream from './authorStream.js';
+import * as matchOverrides from './matchOverrides.js';
 
 const router = express.Router();
 
@@ -22,8 +23,18 @@ router.get('/hal/author/*', hal.controllerAuthor);
 router.get('/hal/search/*', hal.controllerSearch);
 router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
 
+router.get('/hal/structure/*', hal.controllerStructurePublications);
+router.get('/hal/structure-search/*', hal.controllerSearchStructure);
+router.get('/hal/structure-info/*', hal.controllerStructureInfo);
+router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
+
 router.get('/rank/db/conf/*', core.controllerRank);
 router.get('/rank/db/journals/*', sjr.controllerRank);
+
+router.get('/rank/core/candidates', core.controllerCandidates);
+router.get('/rank/sjr/candidates', sjr.controllerCandidates);
+
+router.post('/match-overrides', matchOverrides.controllerRecord);
 
 router.get('/admin/venues', admin.controllerVenues);
 router.get('/admin/stats', admin.requireAdminToken, admin.controllerStats);
