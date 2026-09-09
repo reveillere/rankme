@@ -83,9 +83,17 @@ services:
     # wiredTigerCacheSizeGB pinned explicitly: mongod otherwise sizes its
     # cache off host RAM regardless of the container's cgroup limit below,
     # and would eventually get OOM-killed as its working set grew into that
-    # gap. 256MB is generous for the ~73MB this app actually stores
-    # (scimagojr + dblp venues + admin/CORE data).
-    command: ["--quiet",  "--logpath=/data/db/mongod.log", "--wiredTigerCacheSizeGB=0.25"]
+    # gap. 0.25GB/768M (the defaults below) are generous for this app's
+    # steady-state footprint, but not for the local DBLP dump (~8GB of
+    # data+indexes once imported, see api/src/dblpLocal.js) -- this box only
+    # has 3.7GB RAM total, so that footprint can't be a permanent reservation
+    # here the way it is on a dev machine (docker-compose.dev.yml's own,
+    # much bigger bump). Instead scripts/deploy-dblp-dump.sh brings mongo up
+    # with MONGO_CACHE_GB/MONGO_MEMORY_LIMIT overridden for just the import,
+    # then back down to these defaults once it's done -- a mongod restart
+    # either way (this flag can't change live), so no extra cost to doing it
+    # as a brief bump-and-shrink instead of carrying it permanently.
+    command: ["--quiet",  "--logpath=/data/db/mongod.log", "--wiredTigerCacheSizeGB=${MONGO_CACHE_GB:-0.25}"]
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 30s
@@ -95,7 +103,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: ${MONGO_MEMORY_LIMIT:-768M}
           cpus: "1.0"
 
 
