@@ -11,6 +11,10 @@ let config = null;
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 const CSV_DIR = '/data/scimagojr';
 
+// A computed (journal, year) rank essentially never changes afterwards --
+// see the identical constant/reasoning in corePortal.js.
+const RANK_CACHE_TTL_S = 60 * 60 * 24 * 30;
+
 
 
         
@@ -271,7 +275,7 @@ export async function getRank(ref, year) {
       // TTL'd (not permanent): a transient miss — e.g. this year's
       // scimagojr collection still being populated by load() at startup —
       // would otherwise get cached as "no ranking found" forever.
-      cache.set(key, rank, 60 * 60 * 24);
+      cache.set(key, rank, RANK_CACHE_TTL_S);
     }
     return rank;
 }
@@ -306,7 +310,7 @@ export async function getRankByFullName(fullName, year) {
     let rank = await cache.get(key);
     if (rank === null) {
         rank = await computeRank(fullName, year);
-        cache.set(key, rank, 60 * 60 * 24);
+        cache.set(key, rank, RANK_CACHE_TTL_S);
     }
     return rank;
 }

@@ -10,6 +10,18 @@ export const querySource = '?search=&by=all&do=Export&source=';
 
 const RANKS = ['A*', 'A', 'B', 'C'];
 
+// A computed (venue, year) rank essentially never changes afterwards --
+// CORE's own published rankings for a past year are historical record, not
+// something that gets revised. The TTL isn't there to catch staleness, only
+// to self-heal a narrow race (see the comment on each cache.set below): a
+// rank lookup landing while sources are still (re)loading at startup could
+// wrongly cache "no ranking found", and without any TTL that wrong answer
+// would stick around forever. A month is far longer than that window ever
+// takes in practice, while still cutting way down on repeat computeRank
+// calls for the (very common) case of the same venue/year being looked up
+// again days or weeks later.
+const RANK_CACHE_TTL_S = 60 * 60 * 24 * 30;
+
 import fetch from './throttler.js';
 
 let sources = null;
@@ -222,7 +234,7 @@ export async function getRank(acronym, ref, year) {
     // TTL'd (not permanent): a transient miss — e.g. sources still being
     // (re)loaded by load() at startup — would otherwise get cached as
     // "no ranking found" forever.
-    cache.set(key, rank, 60 * 60 * 24);
+    cache.set(key, rank, RANK_CACHE_TTL_S);
   }
   return rank;
 }
@@ -427,7 +439,7 @@ export async function getRankByFullName(fullName, year) {
   let rank = await cache.get(key);
   if (rank === null) {
     rank = await computeRank2(fullName, year);
-    cache.set(key, rank, 60 * 60 * 24);
+    cache.set(key, rank, RANK_CACHE_TTL_S);
   }
   return rank;
 }
@@ -441,7 +453,7 @@ export async function getRankByAcronymAndFullName(acronym, fullName, year) {
   let rank = await cache.get(key);
   if (rank === null) {
     rank = await computeRank(acronym.toUpperCase(), fullName, year);
-    cache.set(key, rank, 60 * 60 * 24);
+    cache.set(key, rank, RANK_CACHE_TTL_S);
   }
   return rank;
 }
