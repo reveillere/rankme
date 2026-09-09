@@ -13,7 +13,7 @@ const CSV_DIR = '/data/scimagojr';
 
 // A computed (journal, year) rank essentially never changes afterwards --
 // see the identical constant/reasoning in corePortal.js.
-const RANK_CACHE_TTL_S = 60 * 60 * 24 * 30;
+const RANK_CACHE_TTL_S = 60 * 60 * 24 * 365;
 
 
 
@@ -90,6 +90,16 @@ export async function load() {
         }
     } catch (error) {
         console.error('Error during connection or insertion:', error);
+    }
+
+    // config only ever fails to get set if the try block above blew up
+    // before reaching `config = await collection.findOne(...)` -- in
+    // practice, Mongo itself being unreachable. Every SJR lookup needs
+    // config.start/config.end, so refuse to start rather than come up and
+    // throw on the first real request -- see the identical check/reasoning
+    // in corePortal.js's load().
+    if (config == null) {
+        throw new Error('[sjr] Could not initialize scimagojr config (Mongo unreachable?)');
     }
 }
 

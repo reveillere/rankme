@@ -12,15 +12,16 @@ const RANKS = ['A*', 'A', 'B', 'C'];
 
 // A computed (venue, year) rank essentially never changes afterwards --
 // CORE's own published rankings for a past year are historical record, not
-// something that gets revised. The TTL isn't there to catch staleness, only
-// to self-heal a narrow race (see the comment on each cache.set below): a
-// rank lookup landing while sources are still (re)loading at startup could
-// wrongly cache "no ranking found", and without any TTL that wrong answer
-// would stick around forever. A month is far longer than that window ever
-// takes in practice, while still cutting way down on repeat computeRank
-// calls for the (very common) case of the same venue/year being looked up
-// again days or weeks later.
-const RANK_CACHE_TTL_S = 60 * 60 * 24 * 30;
+// something that gets revised. There's no staleness to guard against, so
+// this is now just an upper bound rather than a real recovery mechanism:
+// load() below refuses to let the process even start if there's no CORE
+// data at all (network fetch failed and no local snapshot), which was the
+// one way a rank lookup could previously get a false "Unranked" cached --
+// see load()'s own comment. A year is effectively "as long as Redis has
+// room for it" (allkeys-lru evicts under memory pressure regardless, see
+// cache.js) while avoiding literally-infinite (a TTL of 0 means "no
+// expiry" to node-redis, easy to trip over by accident later).
+const RANK_CACHE_TTL_S = 60 * 60 * 24 * 365;
 
 import fetch from './throttler.js';
 
@@ -135,7 +136,7 @@ export async function load() {
       // Network check failed outright -- getSources() falls back to the
       // same on-disk snapshot on demand, so nothing more to do here.
       sources = storedSources;
-      console.log(storedSources ? '[core] Using local snapshot.' : '[core] No local snapshot and network check failed -- CORE ranking will be empty until either is available.');
+      if (storedSources) console.log('[core] Using local snapshot.');
     } else if (JSON.stringify(liveSources) === JSON.stringify(storedSources)) {
       sources = liveSources;
       console.log('[core] No update needed');
@@ -152,6 +153,19 @@ export async function load() {
 
   } catch (error) {
     console.error('[core] Error loading sources', error);
+  }
+
+  // Nothing usable at all (network fetch failed AND no local snapshot
+  // exists, or some other error above left `sources` unset) -- refuse to
+  // start rather than come up and silently serve "Unranked" for every
+  // CORE lookup. index.js awaits this before app.listen(), so throwing
+  // here fails the whole boot; docker-compose.prod.yml's `restart:
+  // always` just keeps retrying until the network/snapshot actually
+  // recovers, instead of the app quietly running in a broken state (and,
+  // per RANK_CACHE_TTL_S below, caching those broken results for a long
+  // time).
+  if (sources == null) {
+    throw new Error('[core] No CORE source data available (network fetch failed and no local snapshot found)');
   }
 }
 

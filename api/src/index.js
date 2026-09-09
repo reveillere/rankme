@@ -33,5 +33,14 @@ async function start() {
   });
 }
 
-start();
+// Both load()s now throw if they end up with no usable data at all (see
+// their own comments) -- letting that reject here and crash the process
+// (rather than swallowing it and calling listen() anyway) is deliberate:
+// docker-compose.prod.yml's `restart: always` just keeps retrying until
+// the network/Mongo dependency actually recovers, instead of the app
+// quietly coming up with CORE/SJR ranking broken for everyone.
+start().catch((error) => {
+  console.error('Fatal startup error:', error.message);
+  process.exit(1);
+});
 
