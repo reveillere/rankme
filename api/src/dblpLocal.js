@@ -109,22 +109,64 @@ export async function getPublicationsByNames(names) {
         db.collection('article').find({ author: { $in: names } }).toArray(),
     ]);
 
+    // Every co-author appearing anywhere in this author's own publications,
+    // resolved to a pid in one batched query -- not one lookup per
+    // publication/co-author -- see resolveAuthorPids.
+    const coAuthorNames = new Set();
+    for (const doc of inproceedings) toArray(doc.author).forEach(n => coAuthorNames.add(n));
+    for (const doc of articles) toArray(doc.author).forEach(n => coAuthorNames.add(n));
+    const pidByName = await resolveAuthorPids([...coAuthorNames]);
+
     const publications = [
-        ...inproceedings.map(doc => toPublication(doc, 'inproceedings')),
-        ...articles.map(doc => toPublication(doc, 'article')),
+        ...inproceedings.map(doc => toPublication(doc, 'inproceedings', pidByName)),
+        ...articles.map(doc => toPublication(doc, 'article', pidByName)),
     ];
     publications.sort((a, b) => (parseInt(b.dblp.year, 10) || 0) - (parseInt(a.dblp.year, 10) || 0));
     return publications;
 }
 
-function toPublication(doc, type) {
-    // Co-author names carry no pid in this dump (see getAuthorNames) -- an
-    // empty `$` (attributes) object, matching xml2js's shape for a plain
-    // author element with no attributes, means Publications.js's own
+// Resolves each of `names` (exact co-author strings, as they appear
+// verbatim in an inproceedings/article record's <author> field) to the pid
+// of the www/homepages record listing it as one of its own name variants
+// (see getAuthorNames) -- a person can be looked up this way regardless of
+// which of their own name variants a given paper credits them under.
+//
+// Exact string match, not fuzzy: dblp's own bulk export already
+// disambiguates colliding names at the source (a trailing "0001"/"0002"...
+// suffix), so the same exact string reliably identifies the same person --
+// no extra disambiguation needed on this end (see getPublicationsByNames).
+// Needs www.author indexed (see admin.js's ensureIndexes) -- without it
+// this would be a full scan of the ~4.2M www collection on every author
+// page load.
+async function resolveAuthorPids(names) {
+    if (names.length === 0) return new Map();
+    const db = await getDb();
+    const nameSet = new Set(names);
+    const docs = await db.collection('www')
+        .find({ _id: { $regex: `^${HOMEPAGE_PREFIX}` }, author: { $in: names } }, { projection: { author: 1 } })
+        .toArray();
+    const pidByName = new Map();
+    for (const doc of docs) {
+        const pid = doc._id.slice(HOMEPAGE_PREFIX.length);
+        for (const name of toArray(doc.author)) {
+            if (nameSet.has(name)) pidByName.set(name, pid);
+        }
+    }
+    return pidByName;
+}
+
+function toPublication(doc, type, pidByName) {
+    // A co-author whose name couldn't be resolved to a pid (see
+    // resolveAuthorPids -- e.g. no matching homepages record, or this
+    // publication predates the dump's own name-merge for that person)
+    // gets an empty `$` (attributes) object, matching xml2js's shape for a
+    // plain author element with no attributes: Publications.js's own
     // `a.$.pid` check naturally finds none and renders plain text instead
-    // of a (dead) link, exactly as wanted: no hyperlink when the local
-    // extraction can't back one up.
-    const authors = toArray(doc.author).map(name => ({ $: {}, _: name }));
+    // of a (dead) link.
+    const authors = toArray(doc.author).map(name => {
+        const pid = pidByName?.get(name);
+        return { $: pid ? { pid } : {}, _: name };
+    });
     return {
         type,
         venue: firstOf(type === 'inproceedings' ? doc.booktitle : doc.journal),

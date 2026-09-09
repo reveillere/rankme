@@ -471,6 +471,10 @@ async function ensureIndexes() {
         // index at all (would need a collation-aware one, on top of that
         // per-full-string-only limit).
         db.collection('www').createIndex({ authorTokens: 1 }),
+        // Backs dblpLocal.js's resolveAuthorPids -- resolving a co-author's
+        // exact name (as credited on a specific paper) to their own pid, to
+        // turn it into a link (see Publications.js's `a.$.pid` check).
+        db.collection('www').createIndex({ author: 1 }),
         db.collection('inproceedings').createIndex({ author: 1 }),
         db.collection('article').createIndex({ author: 1 }),
     ]);
