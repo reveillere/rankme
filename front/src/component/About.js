@@ -32,7 +32,11 @@ function About({ open, onClose }) {
       <DialogTitle sx={{ display: 'flex', alignItems: 'baseline', gap: 1, fontWeight: 800 }}>
         rankme
         <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
-          v{pkg.version}
+          {/* versionDate is bumped by hand alongside version in
+              package.json at commit time -- not a build timestamp, so it
+              reflects when this version was released, not when it happened
+              to be compiled. */}
+          v{pkg.version}{pkg.versionDate ? ` · ${pkg.versionDate}` : ''}
         </Typography>
       </DialogTitle>
       <DialogActions style={{ position: 'absolute', right: '8px', top: '8px', padding: '8px' }}>

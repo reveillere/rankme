@@ -39,7 +39,7 @@ const SOURCES = {
         label: 'DBLP',
         heading: 'Search author on DBLP',
         search: searchAuthorDblp,
-        toTab: (elt) => ({ type: 'dblp-author', id: `dblp:${elt.pid}`, label: elt.author, pid: elt.pid }),
+        toTab: (elt) => ({ type: 'dblp-author', id: `dblp:${elt.pid}`, label: elt.author, pid: elt.pid, affiliation: elt.affiliation }),
         idLabel: 'PID',
         idPlaceholder: 'e.g. 12/3456',
         idToTab: (pid) => ({ type: 'dblp-author', id: `dblp:${pid}`, label: pid, pid }),
@@ -48,7 +48,7 @@ const SOURCES = {
         label: 'HAL',
         heading: 'Search author on HAL',
         search: searchAuthorHal,
-        toTab: (elt) => ({ type: 'hal-author', id: `hal:${elt.id}`, label: elt.author, halId: elt.id, authorName: elt.author }),
+        toTab: (elt) => ({ type: 'hal-author', id: `hal:${elt.id}`, label: elt.author, halId: elt.id, authorName: elt.author, affiliation: elt.affiliation }),
         idLabel: 'idHal',
         idPlaceholder: 'e.g. jane-doe',
         idToTab: (id) => ({ type: 'hal-author', id: `hal:${id}`, label: id, halId: id, authorName: undefined }),
@@ -187,7 +187,7 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
                 <>
                     <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
                     {query.trim().length === 0
-                        ? <RecentSearches onOpenAuthor={onOpenAuthor} />
+                        ? <RecentSearches source={source} onOpenAuthor={onOpenAuthor} />
                         : <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />}
                 </>
             ) : (
@@ -351,6 +351,31 @@ function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAut
 
 
 
+// Shared row content for a person (author) entry, used by both the live
+// search results below and RecentSearches, so a name looks the same
+// whether it came from a fresh query or from history.
+function PersonListItemText({ name, affiliation, idLabel, idValue }) {
+    return (
+        <ListItemText
+            primary={<span style={{ fontWeight: 'bold' }}>{name}</span>}
+            secondary={
+                <>
+                    {(affiliation || []).map((affil, index) => (
+                        <span key={index} style={{ fontStyle: 'italic', display: 'block' }}>
+                            {affil}
+                        </span>
+                    ))}
+                    {idValue && (
+                        <span style={{ fontFamily: 'monospace', fontSize: '0.85em', color: 'gray', display: 'block' }}>
+                            {idLabel}: {idValue}
+                        </span>
+                    )}
+                </>
+            }
+        />
+    );
+}
+
 function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor }) {
 
     const Results = () => {
@@ -360,20 +385,11 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
                     <ListItem disablePadding>
                         <ListItemButton onClick={() => onOpenAuthor(SOURCES[source].toTab(elt))}>
                             <div style={{ minWidth: '500px' }}>
-                                <ListItemText
-                                    primary={<span style={{ fontWeight: 'bold' }}>{elt.author}</span>}
-                                    secondary={
-                                        <>
-                                            {elt.affiliation.map((affil, index) => (
-                                                <span key={index} style={{ fontStyle: 'italic', display: 'block' }}>
-                                                    {affil}
-                                                </span>
-                                            ))}
-                                            <span style={{ fontFamily: 'monospace', fontSize: '0.85em', color: 'gray', display: 'block' }}>
-                                                {SOURCES[source].idLabel}: {source === 'dblp' ? elt.pid : elt.id}
-                                            </span>
-                                        </>
-                                    }
+                                <PersonListItemText
+                                    name={elt.author}
+                                    affiliation={elt.affiliation}
+                                    idLabel={SOURCES[source].idLabel}
+                                    idValue={source === 'dblp' ? elt.pid : elt.id}
                                 />
                             </div>
                         </ListItemButton>
@@ -410,26 +426,25 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
 }
 
 
-const HISTORY_SOURCE_LABEL = {
-    'dblp-author': 'DBLP',
-    'hal-author': 'HAL',
-    'team': 'Team',
+// Maps the current search tab (SOURCES key) to the single history entry
+// type it should recall -- e.g. switching to the DBLP tab shows only
+// past DBLP author lookups, not HAL ones (or teams, which have their own
+// full browsable list on the Teams tab and so don't need recalling here).
+const HISTORY_TYPE_FOR_SOURCE = {
+    dblp: 'dblp-author',
+    hal: 'hal-author',
 };
 
-const AUTHOR_HISTORY_TYPES = Object.keys(HISTORY_SOURCE_LABEL);
+function RecentSearches({ source, onOpenAuthor }) {
+    const historyType = HISTORY_TYPE_FOR_SOURCE[source];
 
-function RecentSearches({ onOpenAuthor }) {
-    // Structure search (see StructureSearch.js) shares this same history
-    // store but keeps its own "Recent" list -- filtered out here so it
-    // doesn't show up unlabeled (HISTORY_SOURCE_LABEL has no entry for it).
-    //
     // Read fresh on every render rather than once via useState(() => ...):
     // the Author tab is a PERSISTENT_TABS entry in App.js, mounted once at
     // app load and never unmounted (only display:none/block toggled), so a
     // one-time initializer would permanently show whatever history existed
     // at that very first mount and never pick up an author opened
     // afterwards without a full page reload.
-    const history = getSearchHistory().filter(e => AUTHOR_HISTORY_TYPES.includes(e.type));
+    const history = getSearchHistory().filter(e => e.type === historyType);
     // Only used to force a re-render after clearing (history itself is
     // always read fresh above, so bumping this is enough regardless of its
     // value).
@@ -438,7 +453,7 @@ function RecentSearches({ onOpenAuthor }) {
     if (history.length === 0) return null;
 
     const handleClear = () => {
-        removeSearchHistoryByType(AUTHOR_HISTORY_TYPES);
+        removeSearchHistoryByType(historyType);
         forceRefresh(t => t + 1);
     };
 
@@ -447,7 +462,7 @@ function RecentSearches({ onOpenAuthor }) {
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
                     <HistoryIcon fontSize="small" />
-                    <Typography variant="subtitle2">Recent</Typography>
+                    <Typography variant="subtitle2">Recent on {SOURCES[source].label}</Typography>
                 </Box>
                 <Button size="small" startIcon={<DeleteOutlineIcon fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
                     Clear
@@ -455,14 +470,19 @@ function RecentSearches({ onOpenAuthor }) {
             </Box>
             <List dense disablePadding>
                 {history.map((entry) => (
-                    <ListItem key={entry.id} disablePadding>
-                        <ListItemButton onClick={() => onOpenAuthor(entry)}>
-                            <ListItemText
-                                primary={entry.label}
-                                secondary={HISTORY_SOURCE_LABEL[entry.type] || entry.type}
-                            />
-                        </ListItemButton>
-                    </ListItem>
+                    <div key={entry.id}>
+                        <ListItem disablePadding>
+                            <ListItemButton onClick={() => onOpenAuthor(entry)}>
+                                <PersonListItemText
+                                    name={entry.label}
+                                    affiliation={entry.affiliation}
+                                    idLabel={SOURCES[source].idLabel}
+                                    idValue={entry.pid || entry.halId}
+                                />
+                            </ListItemButton>
+                        </ListItem>
+                        <Divider />
+                    </div>
                 ))}
             </List>
         </Box>

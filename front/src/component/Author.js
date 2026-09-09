@@ -111,7 +111,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   return (
     <div className='App'>
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>Records of {trimLastDigits(author.name)}</h1>
+        <h1>DBLP records of {trimLastDigits(author.name)}</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
