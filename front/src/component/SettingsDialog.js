@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -8,9 +9,11 @@ import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Tooltip from '@mui/material/Tooltip';
+import Divider from '@mui/material/Divider';
 
 import { Selector, CategoriesSelector } from './Selector';
 import { categories, useFilterSettings } from '../FilterSettingsContext';
+import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
 import CorePortal from '../corePortal';
 import SjrPortal from '../sjrPortal';
 
@@ -26,11 +29,33 @@ export function SettingsDialog({ open, onClose }) {
     filterRanks, setFilterRanks,
     filterCategories, setFilterCategories,
   } = useFilterSettings();
+  // Not part of FilterSettingsContext: that context is for chart/list
+  // filtering (re-applied reactively as you change it), while this is a
+  // one-off "trust the crowd or not" preference, read fresh by each
+  // RankBadge only when it starts loading its shared-overrides fetch (see
+  // RankBadge.js) -- plain localStorage is enough, matching e.g. About.js's
+  // "don't show this again" checkbox.
+  const [useCommunityOverrides, setUseCommunityOverridesState] = useState(getUseCommunityOverrides);
+  const handleCommunityOverridesChange = (e) => {
+    setUseCommunityOverridesState(e.target.checked);
+    setUseCommunityOverrides(e.target.checked);
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Display settings</DialogTitle>
       <DialogContent>
+        <Typography variant="subtitle1" gutterBottom>Match corrections</Typography>
+        <FormControlLabel
+          control={<Checkbox checked={useCommunityOverrides} onChange={handleCommunityOverridesChange} size="small" />}
+          label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
+        />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 2 }}>
+          When a CORE/SJR match gets corrected the same way by several different people, everyone sees that correction
+          by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
+        </Typography>
+        <Divider sx={{ mb: 2.5 }} />
+
         <Typography variant="subtitle1" gutterBottom>Publication categories</Typography>
 
         <CategoryWithRanks

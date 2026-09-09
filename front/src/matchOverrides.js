@@ -45,6 +45,57 @@ export function getOverride(portal, rank) {
   return read()[keyFor(portal, rank.source, rank.queryText)] || null;
 }
 
+// Community-confirmed corrections: once enough different browsers land on
+// the same (portal, venue text) -> candidate independently (see
+// matchOverrides.js on the server, PROMOTION_THRESHOLD), everyone sees that
+// correction by default instead of just whoever found it. A personal
+// override (above) always wins over this when both exist -- see RankBadge.js.
+const USE_SHARED_KEY = 'rankme:useCommunityOverrides';
+
+// Default on (absent/anything but the literal string "false" means
+// enabled) -- opt-out, not opt-in, or the feature would only ever reach
+// whoever actually goes looking for it in Settings.
+export function getUseCommunityOverrides() {
+  try { return localStorage.getItem(USE_SHARED_KEY) !== 'false'; } catch { return true; }
+}
+
+export function setUseCommunityOverrides(value) {
+  try { localStorage.setItem(USE_SHARED_KEY, value ? 'true' : 'false'); } catch { /* best-effort */ }
+}
+
+// One in-flight/resolved fetch per portal, shared by every RankBadge on the
+// page -- without this, a publication list with a hundred CORE ranks would
+// fire a hundred identical requests instead of one. Not invalidated within
+// a page load: a fresh load is enough to pick up newly-promoted
+// corrections, this isn't meant to live-update.
+const sharedOverridesPromiseByPortal = {};
+
+// Returns a Promise<{[venueText]: {venueText, candidate, confirmedCount}}>.
+// Callers (RankBadge.js) own turning this into render-safe state; this
+// module stays plain data logic, no React here.
+export function fetchSharedOverrides(portal) {
+  if (!sharedOverridesPromiseByPortal[portal]) {
+    sharedOverridesPromiseByPortal[portal] = fetch(`/api/match-overrides/shared/${portal}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(list => {
+        const byText = {};
+        for (const entry of list) byText[entry.venueText] = entry;
+        return byText;
+      })
+      .catch(() => ({}));
+  }
+  return sharedOverridesPromiseByPortal[portal];
+}
+
+// sharedMap: the resolved value of fetchSharedOverrides(portal) (or null/
+// undefined while still loading) -- a synchronous lookup once the caller
+// already has it, mirroring getOverride's shape so RankBadge.js can treat
+// both the same way except for priority (personal wins over shared).
+export function getSharedOverride(rank, sharedMap) {
+  if (!sharedMap || !rank?.queryText) return null;
+  return sharedMap[rank.queryText] || null;
+}
+
 export function listOverrides() {
   return Object.values(read()).sort((a, b) => b.savedAt - a.savedAt);
 }

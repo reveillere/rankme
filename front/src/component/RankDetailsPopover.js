@@ -23,6 +23,11 @@ export const MATCH_STYLE = {
   ambiguous: { label: 'Ambiguous match', color: '#c62828' },
   manual: { label: 'Manually set by you', color: '#1565c0' },
   confirmed: { label: 'Confirmed by you', color: '#66bb6a' },
+  // A different blue than "manual" -- both are corrections rather than an
+  // automatic match, but this one nobody in this browser actually made;
+  // it's a different-enough shade to tell apart at a glance while still
+  // reading as "someone deliberately set this", not a computed result.
+  shared: { label: 'Confirmed by the community', color: '#0288d1' },
   none: { label: 'No match found', color: '#757575' },
 };
 
@@ -56,7 +61,7 @@ function LabeledRow({ label, children }) {
 // confident that match is, how the same entry ranks today, and a search box
 // to replace it with a different entry -- a correction that's saved to this
 // browser immediately and also mirrored to the server for later analysis.
-export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, onOverrideChange }) {
+export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, sharedOverride, onOverrideChange }) {
   const open = Boolean(anchorEl);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -120,10 +125,13 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
 
   const isConfirmed = override?.type === 'confirmed';
   const isManualOverride = override && !isConfirmed;
-  const effectiveMatchType = isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : rank.matchType;
+  // A personal override/confirmation always wins over a shared one -- the
+  // shared correction only applies when this browser hasn't set its own.
+  const isShared = !override && !!sharedOverride;
+  const effectiveMatchType = isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : isShared ? 'shared' : rank.matchType;
   const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
   const isJournal = portal === 'sjr';
-  const displayedValue = isManualOverride ? override.candidate.value : rank.value;
+  const displayedValue = isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
 
   return (
     <Popover
@@ -173,6 +181,19 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
               <Button size="small" onClick={resetToAutomatic}>Remove confirmation</Button>
             </Box>
           </Box>
+        ) : isShared ? (
+          <Box sx={{ my: 1 }}>
+            <LabeledRow label="Community match:">
+              <strong>{sharedOverride.candidate.title}</strong>{sharedOverride.candidate.acronym ? ` (${sharedOverride.candidate.acronym})` : ''}
+            </LabeledRow>
+            <Typography variant="caption" color="text.secondary">
+              Confirmed by {sharedOverride.confirmedCount} other {sharedOverride.confirmedCount === 1 ? 'person' : 'people'} who corrected this same text.
+              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}` : `no match (${rank.value})`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              Search below to set your own correction instead, or turn community corrections off in Settings.
+            </Typography>
+          </Box>
         ) : rank.matchType === 'ambiguous' ? (
           <Box sx={{ my: 1 }}>
             <Typography variant="body2">Equally close to several entries that don&apos;t agree on a rank:</Typography>
@@ -205,7 +226,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
         )}
 
         {(() => {
-          const current = isManualOverride ? override.candidate : rank;
+          const current = isManualOverride ? override.candidate : isShared ? sharedOverride.candidate : rank;
           if (!current.currentValue) return null;
           const trend = trendOf(displayedValue, current.currentValue);
           return (

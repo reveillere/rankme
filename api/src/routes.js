@@ -36,6 +36,7 @@ router.get('/rank/core/candidates', core.controllerCandidates);
 router.get('/rank/sjr/candidates', sjr.controllerCandidates);
 
 router.post('/match-overrides', matchOverrides.controllerRecord);
+router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);
 
 // requireAdminToken added here: this triggers a full drop + rebuild of
 // every DBLP collection (see admin.js's processXML) -- CPU/memory/disk
