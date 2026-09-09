@@ -91,7 +91,7 @@ echo "==> Checking remote disk/memory headroom on $SSH_HOST (informational -- no
 ssh "$SSH_HOST" 'echo "--- memory ---"; free -h; echo "--- disk (docker root) ---"; df -h /var/lib/docker 2>/dev/null || df -h /'
 
 echo "==> Reading ADMIN_TOKEN from $REMOTE_DIR/.env on $SSH_HOST"
-ADMIN_TOKEN="$(ssh "$SSH_HOST" "grep -m1 '^ADMIN_TOKEN=' '$REMOTE_DIR/.env' | cut -d= -f2-")"
+ADMIN_TOKEN="$(ssh "$SSH_HOST" "grep -m1 '^ADMIN_TOKEN=' $REMOTE_DIR/.env | cut -d= -f2-")"
 if [ -z "$ADMIN_TOKEN" ]; then
   echo "Could not read ADMIN_TOKEN from $REMOTE_DIR/.env on $SSH_HOST" >&2
   exit 1
@@ -112,11 +112,11 @@ ssh "$SSH_HOST" "sudo docker exec '$API_CONTAINER' mkdir -p /data/dblp && \
   rm -rf '$REMOTE_TMP'"
 
 echo "==> Bumping mongo to ${MONGO_IMPORT_CACHE_GB}GB cache / ${MONGO_IMPORT_MEMORY_LIMIT} limit for the import"
-ssh "$SSH_HOST" "cd '$REMOTE_DIR' && sudo env MONGO_CACHE_GB=$MONGO_IMPORT_CACHE_GB MONGO_MEMORY_LIMIT=$MONGO_IMPORT_MEMORY_LIMIT docker compose -f docker-compose.prod.yml up -d mongo"
+ssh "$SSH_HOST" "cd $REMOTE_DIR && sudo env MONGO_CACHE_GB=$MONGO_IMPORT_CACHE_GB MONGO_MEMORY_LIMIT=$MONGO_IMPORT_MEMORY_LIMIT docker compose -f docker-compose.prod.yml up -d mongo"
 
 shrink_mongo_back() {
   echo "==> Shrinking mongo back to docker-compose.prod.yml's own defaults"
-  ssh "$SSH_HOST" "cd '$REMOTE_DIR' && sudo docker compose -f docker-compose.prod.yml up -d mongo" \
+  ssh "$SSH_HOST" "cd $REMOTE_DIR && sudo docker compose -f docker-compose.prod.yml up -d mongo" \
     || echo "WARNING: failed to shrink mongo back down -- check it manually on $SSH_HOST" >&2
 }
 # Runs on every exit path (success, timeout, or an earlier command failing
@@ -135,14 +135,21 @@ if [ "$health" != "healthy" ]; then
   exit 1
 fi
 
+# https + -k, not plain http: nginx.conf.prod redirects any non-https
+# request to https (301, see its `if ($scheme != "https")` block) -- a
+# plain http:// call here got back that redirect page, not the actual API
+# response, silently (curl treats a 301 as success). -k skips cert
+# verification because the cert is issued for rankme.fr, not the
+# `localhost` name curl sends as Host/SNI here -- fine since this is
+# loopback traffic on the box itself, not going out over the network.
 echo "==> Triggering the import (POST /api/admin/venues)"
-ssh "$SSH_HOST" "curl -s 'http://localhost/api/admin/venues' -H 'X-Admin-Token: $ADMIN_TOKEN'"
+ssh "$SSH_HOST" "curl -sk 'https://localhost/api/admin/venues' -H 'X-Admin-Token: $ADMIN_TOKEN'"
 echo
 
 echo "==> Polling /api/dblp/status (every ${POLL_INTERVAL_S}s, up to ${POLL_TIMEOUT_S}s)"
 elapsed=0
 while [ "$elapsed" -lt "$POLL_TIMEOUT_S" ]; do
-  body="$(ssh "$SSH_HOST" "curl -s http://localhost/api/dblp/status")"
+  body="$(ssh "$SSH_HOST" "curl -sk https://localhost/api/dblp/status")"
   echo "  [$(date +%H:%M:%S)] $body"
   case "$body" in
     *'"ready":true'*)
