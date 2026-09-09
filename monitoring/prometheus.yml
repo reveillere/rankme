@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: rankme-api
+    # This scrapes the api container directly (targets: api:80), not
+    # through the reverseproxy -- so the path here is the route as the
+    # Express app itself registers it (routes.js: router.get('/admin/
+    # metrics', ...), no '/api' prefix), not the public '/api/admin/
+    # metrics' URL, which only exists because nginx's `rewrite
+    # ^/api/(.*)$ /$1 break;` strips that prefix before proxying (see
+    # reverse-proxy/nginx.conf.dev/.prod) -- a step this direct
+    # container-to-container scrape never goes through.
+    #
+    # /admin/metrics is behind requireAdminToken (see admin.js) --
+    # bearer_token_file points at a file populated from the host's own
+    # ADMIN_TOKEN by the token-writer init container (see
+    # docker-compose.monitoring.yml) rather than duplicating the secret
+    # into this checked-in file.
+    bearer_token_file: /etc/prometheus/secrets/admin-token
+    metrics_path: /admin/metrics
+    static_configs:
+      - targets: ['api:80']
+
+  - job_name: node
+    static_configs:
+      - targets: ['node_exporter:9100']
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

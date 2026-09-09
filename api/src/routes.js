@@ -14,6 +14,7 @@ const router = express.Router();
 // won't false-positive as unhealthy just because an upstream is degraded.
 router.get('/health', (req, res) => res.json({ status: 'ok' }));
 
+router.get('/dblp/status', admin.controllerDblpStatus);
 router.get('/dblp/author/*', dblp.controllerAuthor);
 router.get('/dblp/search/*', dblp.controllerSearch);
 router.get('/dblp/venue/*', dblp.controllerVenue);
@@ -36,8 +37,12 @@ router.get('/rank/sjr/candidates', sjr.controllerCandidates);
 
 router.post('/match-overrides', matchOverrides.controllerRecord);
 
-router.get('/admin/venues', admin.controllerVenues);
+// requireAdminToken added here: this triggers a full drop + rebuild of
+// every DBLP collection (see admin.js's processXML) -- CPU/memory/disk
+// heavy and, until now, callable by anyone who found the URL.
+router.get('/admin/venues', admin.requireAdminToken, admin.controllerVenues);
 router.get('/admin/stats', admin.requireAdminToken, admin.controllerStats);
+router.get('/admin/metrics', admin.requireAdminToken, admin.controllerPrometheusMetrics);
 
 
 router.post('/rank/db/conf2', core.controllerRank2);

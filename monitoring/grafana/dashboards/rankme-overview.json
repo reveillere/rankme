@@ -1,0 +1,105 @@
+{
+  "title": "rankme overview",
+  "uid": "rankme-overview",
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP requests / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(rankme_requests_total[5m])", "legendFormat": "requests/s" },
+        { "expr": "rate(rankme_errors_total[5m])", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "p95 latency by route (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "rankme_route_latency_ms{quantile=\"0.95\"}", "legendFormat": "{{method}} {{route}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Ranking queue depth",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rankme_ranking_queue_depth", "legendFormat": "{{state}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "DBLP local dump",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        { "expr": "rankme_dblp_ready", "legendFormat": "ready" },
+        { "expr": "rankme_dblp_importing", "legendFormat": "importing" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "no" }, "1": { "text": "yes" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Mongo / Redis up",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        { "expr": "rankme_mongo_up", "legendFormat": "mongo" },
+        { "expr": "rankme_redis_up", "legendFormat": "redis" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "down" }, "1": { "text": "up" } } }
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Host RAM used %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)",
+          "legendFormat": "RAM used %"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Host disk used % (docker root)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})",
+          "legendFormat": "disk used %"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Host CPU load (1m)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        { "expr": "node_load1", "legendFormat": "load1" }
+      ]
+    }
+  ]
+}

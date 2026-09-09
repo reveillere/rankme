@@ -52,7 +52,14 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
                       ? item.authors
                         .map((a, i) => (
                           <span key={i} className="link">
-                            {!pids.includes(a.$.pid) ? (
+                            {!a.$.pid ? (
+                              // No pid for this author -- e.g. every
+                              // co-author from the local dump import (see
+                              // dblpLocal.js), which carries no per-author
+                              // pid at all -- so there's nothing to link
+                              // to or compare against pids/selfPids.
+                              <span>{trimLastDigits(a._)}</span>
+                            ) : !pids.includes(a.$.pid) ? (
                               <a href="#" onClick={(e) => {
                                 e.preventDefault();
                                 onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });

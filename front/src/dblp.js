@@ -19,6 +19,16 @@ export async function fetchAuthor(authorPID) {
         return await resp.json();
 }
 
+// { ready, importing, version } -- version is the imported dump's MD5,
+// null until the first successful import. Polled by Search.js to disable
+// the DBLP tab with a clear message while a (re)import is in progress,
+// since the collections it reads are dropped and rebuilt in place (see
+// admin.js's processXML) rather than swapped in atomically.
+export async function fetchStatus() {
+    const resp = await fetch('/api/dblp/status');
+    return await resp.json();
+}
+
 
 export function getName(author) {
     return author?.dblpperson?.$?.name;

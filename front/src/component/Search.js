@@ -24,7 +24,7 @@ import Alert from '@mui/material/Alert';
 import '../App.css';
 
 // API Functions
-import { searchAuthor as searchAuthorDblp } from '../dblp';
+import { searchAuthor as searchAuthorDblp, fetchAuthor as fetchAuthorDblp, fetchStatus as fetchDblpStatus, getName as getDblpName } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getCachedSearch, setCachedSearch } from '../searchCache';
 import { getSearchHistory, removeSearchHistoryByType } from '../searchHistory';
@@ -67,6 +67,12 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
     const [query, setQuery] = useState('');
     const [queryResult, setQueryResult] = useState([]);
     const [queryStatus, setQueryStatus] = useState('ready');
+    // { ready, importing, version } | null (not fetched yet). DBLP now
+    // reads a local dump snapshot instead of dblp.org live -- see
+    // dblp.js's fetchStatus -- and that snapshot is dropped and rebuilt in
+    // place on every (re)import, so the tab needs to know when it's mid-
+    // rebuild rather than just trying and getting empty/wrong results.
+    const [dblpStatus, setDblpStatus] = useState(null);
     const debounceRef = useRef();
     const requestIdRef = useRef(0);
 
@@ -119,6 +125,21 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
         runSearch(searchRequest.source, searchRequest.text);
     }, [searchRequest]);
 
+    // Polled (not fetch-once) so a rebuild that starts or finishes while
+    // this tab is open is reflected without the user having to reload --
+    // only while the DBLP tab is actually the one showing, and backed off
+    // to a slow interval once we know it's ready (nothing left to change).
+    useEffect(() => {
+        if (source !== 'dblp') return;
+        let cancelled = false;
+        const poll = () => fetchDblpStatus().then(s => { if (!cancelled) setDblpStatus(s); }).catch(() => {});
+        poll();
+        const intervalMs = dblpStatus?.ready ? 30000 : 5000;
+        const id = setInterval(poll, intervalMs);
+        return () => { cancelled = true; clearInterval(id); };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [source, dblpStatus?.ready]);
+
     const handleSourceChange = (event, newSource) => {
         setSource(newSource);
         if (mode === 'name') runSearch(newSource, query);
@@ -139,6 +160,8 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
         }, DEBOUNCE_MS);
     };
 
+    const dblpDisabled = source === 'dblp' && !dblpStatus?.ready;
+
     return (
         <div className='App'>
             <h1>{SOURCES[source].heading}</h1>
@@ -154,12 +177,7 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
                 ))}
             </Tabs>
             {source === 'dblp' && (
-                // dblp.org currently serves an anti-bot challenge page to our
-                // server instead of API responses, so every DBLP search/lookup
-                // fails -- HAL is the working default until that clears up.
-                <Alert severity="warning" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
-                    DBLP is currently unavailable (blocked by their anti-bot protection). Please use HAL for now.
-                </Alert>
+                <DblpStatusBanner status={dblpStatus} />
             )}
             <ToggleButtonGroup value={mode} exclusive onChange={handleModeChange} size="small" style={{ marginBottom: '20px' }}>
                 <ToggleButton value="name">By name</ToggleButton>
@@ -167,61 +185,134 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
             </ToggleButtonGroup>
             {mode === 'name' ? (
                 <>
-                    <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} />
+                    <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
                     {query.trim().length === 0
                         ? <RecentSearches onOpenAuthor={onOpenAuthor} />
                         : <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />}
                 </>
             ) : (
-                <AuthorIdForm source={source} onOpenAuthor={onOpenAuthor} />
+                <AuthorIdForm source={source} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
             )}
         </div>
     );
 }
 
+// dblp reads a local dump snapshot now (see dblp.js's fetchStatus) instead
+// of dblp.org live -- source of truth for the banner text and for
+// disabling the search/id forms while a (re)import has the collections it
+// reads dropped and being rebuilt (see admin.js's processXML).
+function DblpStatusBanner({ status }) {
+    if (!status || status.importing) {
+        return (
+            <Alert severity="info" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
+                DBLP local dump import in progress -- search and lookup are disabled until it finishes.
+            </Alert>
+        );
+    }
+    if (!status.ready) {
+        return (
+            <Alert severity="warning" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
+                DBLP hasn't been imported locally yet. Please use HAL for now.
+            </Alert>
+        );
+    }
+    const importedDate = status.importedAt
+        ? new Date(status.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : null;
+    return (
+        <Alert severity="success" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
+            DBLP results come from a local snapshot of the dblp.org dump{importedDate ? ` (imported ${importedDate})` : ''}, not a live query --
+            dblp.org itself is currently blocked by their anti-bot protection. Matching is by exact
+            author name, so accuracy depends on dblp's own name disambiguation.
+        </Alert>
+    );
+}
 
-function AuthorIdForm({ source, onOpenAuthor }) {
+
+function AuthorIdForm({ source, onOpenAuthor, disabled }) {
     const [id, setId] = useState('');
+    // DBLP only (see the preview effect below): undefined = not looked up
+    // yet/empty id, null = looked up, no local record, string = the name
+    // found for this PID. Shown before the user commits to opening the
+    // tab, since a PID is opaque on its own -- easy to fat-finger a digit
+    // and land on a different person's page without noticing.
+    const [previewName, setPreviewName] = useState(undefined);
     const inputRef = useRef();
+    const previewDebounceRef = useRef();
+    const previewRequestIdRef = useRef(0);
 
     // Switching source (DBLP <-> HAL) means a stale id from the other
     // source is no longer meaningful — drop it rather than leave it
     // sitting there ready to be submitted against the wrong source.
     useEffect(() => {
         setId('');
+        setPreviewName(undefined);
         inputRef.current.focus();
     }, [source]);
 
+    useEffect(() => {
+        if (source !== 'dblp') return;
+        if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current);
+        const trimmed = id.trim();
+        if (!trimmed) {
+            previewRequestIdRef.current++;
+            setPreviewName(undefined);
+            return;
+        }
+        const requestId = ++previewRequestIdRef.current;
+        previewDebounceRef.current = setTimeout(async () => {
+            try {
+                const author = await fetchAuthorDblp(trimmed);
+                if (requestId !== previewRequestIdRef.current) return;
+                setPreviewName(getDblpName(author) || null);
+            } catch {
+                if (requestId !== previewRequestIdRef.current) return;
+                setPreviewName(null);
+            }
+        }, DEBOUNCE_MS);
+    }, [source, id]);
+
+    const showPreview = source === 'dblp' && id.trim().length > 0;
+
     return (
-        <Paper
-            component="form"
-            onSubmit={e => {
-                e.preventDefault();
-                const trimmed = id.trim();
-                if (!trimmed) return;
-                onOpenAuthor(SOURCES[source].idToTab(trimmed));
-                setId('');
-            }}
-            sx={{ p: '2px 4px', display: 'flex', marginBottom: '40px', alignItems: 'center', width: 400 }}
-        >
-            <IconButton sx={{ p: '10px' }} aria-label="menu">
-                <AccountCircle />
-            </IconButton>
-            <InputBase
-                inputRef={inputRef}
-                sx={{ ml: 1, flex: 1 }}
-                placeholder={SOURCES[source].idPlaceholder}
-                inputProps={{ 'aria-label': `${SOURCES[source].idLabel} (${source})` }}
-                value={id}
-                onChange={e => setId(e.target.value)}
-            />
-            <Button type="submit" disabled={!id.trim()}>Open</Button>
-        </Paper>
+        <>
+            <Paper
+                component="form"
+                onSubmit={e => {
+                    e.preventDefault();
+                    const trimmed = id.trim();
+                    if (!trimmed) return;
+                    onOpenAuthor(SOURCES[source].idToTab(trimmed));
+                    setId('');
+                }}
+                sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: 400 }}
+            >
+                <IconButton sx={{ p: '10px' }} aria-label="menu">
+                    <AccountCircle />
+                </IconButton>
+                <InputBase
+                    inputRef={inputRef}
+                    sx={{ ml: 1, flex: 1 }}
+                    placeholder={SOURCES[source].idPlaceholder}
+                    inputProps={{ 'aria-label': `${SOURCES[source].idLabel} (${source})` }}
+                    value={id}
+                    disabled={disabled}
+                    onChange={e => setId(e.target.value)}
+                />
+                <Button type="submit" disabled={disabled || !id.trim() || (showPreview && previewName === null)}>Open</Button>
+            </Paper>
+            {showPreview && (
+                <Typography variant="body2" sx={{ mt: 1, mb: 3, color: previewName === null ? 'error.main' : 'text.secondary' }}>
+                    {previewName === undefined ? 'Looking up…' : previewName === null ? 'No local DBLP record for this PID.' : `→ ${previewName}`}
+                </Typography>
+            )}
+            {!showPreview && <Box sx={{ mb: 5 }} />}
+        </>
     );
 }
 
 
-function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAuthor }) {
+function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAuthor, disabled }) {
 
     const inputRef = useRef();
 
@@ -249,6 +340,7 @@ function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAut
                 placeholder="Author name"
                 inputProps={{ 'aria-label': 'Author name' }}
                 value={query}
+                disabled={disabled}
                 onChange={e => onInputChange(e.target.value)}
             />
         </Paper>

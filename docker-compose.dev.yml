@@ -67,9 +67,16 @@ services:
     # wiredTigerCacheSizeGB pinned explicitly: mongod otherwise sizes its
     # cache off host RAM (16GB+ on a 32GB dev machine) regardless of the
     # container's cgroup limit below, and would eventually get OOM-killed as
-    # its working set grew into that gap. 256MB is generous for the ~73MB
-    # this app actually stores (scimagojr + dblp venues + admin/CORE data).
-    command: ["--quiet",  "--logpath=/data/db/mongod.log", "--wiredTigerCacheSizeGB=0.25"]
+    # its working set grew into that gap. 2GB accounts for the local DBLP
+    # dump collections (article/inproceedings/www alone are several GB
+    # each on disk, dev-only -- see admin.js) on top of the ~73MB this app
+    # otherwise stores (scimagojr + dblp venues + admin/CORE data); a
+    # smaller (256MB) cache left full-collection scans like
+    # sweepDeletedRecords's deleteMany severely cache-starved and slow
+    # (a single collection's sweep took 25+ minutes). Local dev only --
+    # docker-compose.prod.yml's VPS is RAM-constrained and keeps its own,
+    # smaller value; don't carry this bump over there.
+    command: ["--quiet",  "--logpath=/data/db/mongod.log", "--wiredTigerCacheSizeGB=2"]
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 30s
@@ -79,7 +86,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 3G
           cpus: "1.0"
 
   redis:

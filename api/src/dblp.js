@@ -2,6 +2,8 @@ import xml2js from 'xml2js';
 import * as cache from './cache.js';
 import sax from "sax";
 import { getClient } from './db.js';
+import * as dblpLocal from './dblpLocal.js';
+import * as admin from './admin.js';
 
 const BASE = 'https://dblp.org';
 
@@ -100,8 +102,30 @@ export async function updateAuthor(author) {
 export async function controllerAuthor(req, res) {
     const authorPID = req.params[0];
     try {
-        const author = await getFetchAuthor(authorPID);
-        res.json(author);
+        // Local dump only for now -- see the identical note in
+        // authorStream.js's controllerDblpAuthor: the live dblp.org path
+        // (getFetchAuthor below) is deliberately not called here anymore,
+        // kept intact but unplugged rather than removed. Only the display
+        // name is needed here (Author.js reads author.dblpperson.$.name),
+        // so this fabricates just enough of the live endpoint's shape for
+        // that to work.
+        //
+        // Also guards against a rebuild in progress: processXML drops
+        // inproceedings/article/www at the *start* of a reimport (see
+        // admin.js), so without this a lookup mid-import could see partial
+        // or no data and misreport "not found" instead of "come back once
+        // the import is done".
+        const status = await admin.getDblpStatus();
+        if (!status.ready) {
+            res.status(503).json({ error: status.importing ? 'DBLP local dump import in progress' : 'DBLP local dump not imported yet' });
+            return;
+        }
+        const localNames = await dblpLocal.getAuthorNames(authorPID);
+        if (localNames == null) {
+            res.status(404).json({ error: `No local DBLP record for PID ${authorPID}` });
+            return;
+        }
+        res.json({ dblpperson: { $: { name: localNames[0] || authorPID } } });
     } catch (error) {
         console.log('Error during author computation', error);
         res.status(400).json({ error: error.message })
@@ -137,7 +161,15 @@ async function getAuthor(authorPID, key) {
 export async function controllerSearch(req, res) {
     const searchQuery = req.params[0];
     try {
-        const author = await getSearchAuthor(searchQuery);
+        // Local dump only for now -- see the note on controllerAuthor
+        // above. getSearchAuthor/searchAuthor below (the live dblp.org
+        // search API path) are dormant, not called, kept intact.
+        const status = await admin.getDblpStatus();
+        if (!status.ready) {
+            res.status(503).json({ error: status.importing ? 'DBLP local dump import in progress' : 'DBLP local dump not imported yet' });
+            return;
+        }
+        const author = await dblpLocal.searchAuthorsByName(searchQuery);
         res.json(author);
     } catch (error) {
         console.log('Error during search computation', error);
@@ -145,6 +177,11 @@ export async function controllerSearch(req, res) {
     }
 }
 
+// Dormant: the live dblp.org search path controllerSearch used before the
+// local dump existed. Not called anymore (dblp.org is blocked by Anubis
+// anti-bot protection in this environment) -- kept as-is, unplugged rather
+// than deleted, for a future deployment where it isn't.
+// eslint-disable-next-line no-unused-vars
 async function getSearchAuthor(searchQuery) {
     const key = `dblp:search:${searchQuery}`;
 
@@ -154,7 +191,7 @@ async function getSearchAuthor(searchQuery) {
         const exactMatches = await searchAuthor(searchQuery.replace(/ +/g, '$ ') + '$');
         const likelyMatches = await searchAuthor(searchQuery);
         const combined = exactMatches.concat(likelyMatches);
-        results = combined.filter((value, index, self) => 
+        results = combined.filter((value, index, self) =>
             self.findIndex(item => item.pid === value.pid) === index
         );        cache.set(key, results, 60 * 60 * 24); // 1 day
     }

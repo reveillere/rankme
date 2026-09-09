@@ -1,0 +1,138 @@
+# Optional monitoring stack: Prometheus + node_exporter + Grafana, layered
+# on top of the main prod stack instead of merged into it, so it can be
+# turned on independently once the VPS has the RAM for it.
+#
+# WHY SEPARATE: the main docker-compose.prod.yml intentionally keeps
+# services minimal (see e.g. mongo's wiredTigerCacheSizeGB comment) on a
+# RAM-constrained VPS with a documented OOM history. Prometheus + Grafana +
+# node_exporter add real memory pressure of their own (roughly 150-300MB
+# combined depending on retention) -- this file exists so that's a
+# deliberate decision made when there's headroom for it, not something
+# `docker compose up` on the main file drags in by accident.
+#
+# WHAT IT ADDS:
+#   - node_exporter: host-level CPU/memory/disk/network metrics -- the
+#     thing actually missing before now given this app's history of
+#     RAM-driven incidents (see mongo's cache-size comment, the DBLP dump
+#     import's own RAM/disk footprint).
+#   - prometheus: scrapes node_exporter and the api container's own
+#     /api/admin/metrics (see api/src/admin.js's controllerPrometheusMetrics
+#     -- request rates/latency/errors per route, ranking queue depth, DBLP
+#     import status, mongo/redis connectivity), 15s interval, 15 days
+#     retention (tune PROMETHEUS_RETENTION below for a smaller/larger disk
+#     footprint).
+#   - grafana: served at /grafana/ behind the existing reverseproxy (see
+#     reverse-proxy/nginx.conf.prod's `location /grafana/` block) so it
+#     rides the same TLS termination and doesn't need its own port/cert.
+#     Auto-provisioned with the Prometheus datasource and one starter
+#     dashboard (see grafana/dashboards/rankme-overview.json) -- default
+#     admin password below MUST be changed via GF_SECURITY_ADMIN_PASSWORD
+#     in the host's .env before this ever goes up on a real server.
+#
+# USAGE (run from the repo root, once the VPS has RAM headroom for it --
+# see the note above; NOT started automatically by anything):
+#   docker compose -f docker-compose.prod.yml -f monitoring/docker-compose.monitoring.yml up -d
+#
+# The api container must expose /api/admin/metrics for the scrape target
+# to return anything -- already wired in this same change (see
+# api/src/admin.js/routes.js) -- and ADMIN_TOKEN (same one docker-compose.
+# prod.yml already requires) needs to be set in the host's .env for
+# Prometheus's own scrape auth (see prometheus.yml's bearer_token_file,
+# populated from ADMIN_TOKEN via the `token-writer` init step below rather
+# than hand-copied into prometheus.yml, so it never needs to be committed
+# or kept in sync by hand).
+
+services:
+  token-writer:
+    image: alpine:3.20
+    command: >
+      sh -c "echo -n \"$${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}\" > /shared/admin-token && echo written"
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
+    volumes:
+      - prometheus-shared:/shared
+
+  node_exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: always
+    # Standard node_exporter docker setup (three separate mounts, not one
+    # combined /:/host -- some collectors, e.g. cpu/network, need
+    # --path.procfs/--path.sysfs explicitly rather than inferring them
+    # from --path.rootfs alone).
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host/root'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      # No `rslave` propagation here (unlike the typical native-Linux
+      # node_exporter recipe): Docker Desktop's own VM root isn't a
+      # shared/slave mount, so requesting propagation on this bind fails
+      # to even start the container ("path / is mounted on / but it is
+      # not a shared or slave mount"). A plain ro bind still gives
+      # node_exporter a live view of the (VM's) filesystem -- on Docker
+      # Desktop this reports the VM's resources, not literally the Mac
+      # host's, which is a Docker Desktop limitation, not something fixable
+      # here.
+      - /:/host/root:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.2"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: always
+    depends_on:
+      token-writer:
+        condition: service_completed_successfully
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-shared:/etc/prometheus/secrets:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}'
+      # Prometheus's own UI/API stays internal-only (no published port) --
+      # only Grafana (itself behind the reverseproxy) is reachable from
+      # outside this compose network.
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: always
+    depends_on:
+      - prometheus
+    environment:
+      # Defaults to local dev; set GRAFANA_ROOT_URL=https://rankme.fr/grafana/
+      # in the host's .env for a real deployment.
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:8080/grafana/}
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # CHANGE THIS: set a real GF_SECURITY_ADMIN_PASSWORD in the host's
+      # .env before running this against a real server. Left unset here on
+      # purpose (falls back to Grafana's own default admin/admin) so a
+      # missing .env entry is obvious on first login rather than silently
+      # deploying with a value nobody chose.
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+volumes:
+  prometheus-data:
+  prometheus-shared:
+  grafana-data:

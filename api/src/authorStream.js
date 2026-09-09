@@ -1,27 +1,64 @@
 import { getFetchAuthor, normalizePublications, getVenueFullName } from './dblp.js';
+import * as dblpLocal from './dblpLocal.js';
+import * as admin from './admin.js';
 import * as core from './corePortal.js';
 import * as sjr from './sjrPortal.js';
 import { getAuthorPublications, getStructurePublications } from './hal.js';
 import * as crossref from './crossref.js';
 import { streamRankedItems } from './ranking.js';
 
+// dblp's own <booktitle> is very often *just* the acronym, optionally with
+// a trailing year/edition ("PODC", "AINA 2017", "ICSE'22") -- neither of
+// crossref.js's extractTrailingAcronym ("... (XYZ)") nor extractLeadingAcronym
+// ("XYZ - ...") matches that shape, since both were tuned for HAL's own
+// (differently formatted) venue text. Deliberately conservative: only
+// fires when the *entire* string is just that (no other words), so a
+// genuinely descriptive booktitle still falls through to fuzzy full-name
+// matching instead of being misread as an acronym.
+function extractBareAcronym(text) {
+    if (!text) return null;
+    const match = text.match(/^([A-Za-z][A-Za-z0-9.\-]{1,15})(?:\s*'?\d{2,4})?$/);
+    if (!match) return null;
+    const acronym = match[1];
+    return acronym === acronym.toUpperCase() ? acronym : null;
+}
+
 export async function controllerDblpAuthor(req, res) {
     const pid = req.params[0];
     try {
-        const author = await getFetchAuthor(pid);
-        const publications = normalizePublications(author);
+        // Local dump only for now -- dblp.org itself is behind Anubis
+        // anti-bot protection (see throttler.js's dblp_scrape_limiter
+        // comment), so the live path (fetchViaLiveDblp below) is
+        // deliberately not called anymore, kept intact for a future
+        // deployment where dblp.org isn't blocked rather than removed.
+        const status = await admin.getDblpStatus();
+        if (!status.ready) {
+            res.status(503).json({ error: status.importing ? 'DBLP local dump import in progress' : 'DBLP local dump not imported yet' });
+            return;
+        }
+        const localNames = await dblpLocal.getAuthorNames(pid);
+        if (localNames == null) {
+            res.status(404).json({ error: `No local DBLP record for PID ${pid}` });
+            return;
+        }
+        const publications = await dblpLocal.getPublicationsByNames(localNames);
         await streamRankedItems(
             res, publications,
             pub => pub.type === 'inproceedings' || pub.type === 'article',
             async (pub) => {
-                const ref = pub.dblp.url.split('#')[0];
-                const [fullName, rank] = await Promise.all([
-                    getVenueFullName(ref),
-                    pub.type === 'inproceedings'
-                        ? core.getRank(pub.venue, ref, pub.dblp.year)
-                        : sjr.getRank(ref, pub.dblp.year),
-                ]);
-                return { fullName, rank };
+                // Same acronym-first strategy as the HAL path below --
+                // dblp's own <booktitle> text (e.g. "AINA 2017") often
+                // already carries the acronym directly. No network
+                // lookup: getRankByAcronymAndFullName/getRankByFullName
+                // (unlike getRank in fetchViaLiveDblp) never call
+                // getVenueFullName.
+                const acronym = crossref.extractTrailingAcronym(pub.venue) || crossref.extractLeadingAcronym(pub.venue) || extractBareAcronym(pub.venue);
+                const rank = pub.type === 'inproceedings'
+                    ? (acronym
+                        ? await core.getRankByAcronymAndFullName(acronym, pub.venue, pub.dblp.year)
+                        : await core.getRankByFullName(pub.venue, pub.dblp.year))
+                    : await sjr.getRankByFullName(pub.venue, pub.dblp.year);
+                return { rank };
             },
             `dblp:${pid}`
         );
@@ -29,6 +66,31 @@ export async function controllerDblpAuthor(req, res) {
         console.error('[authorStream] dblp error', error);
         if (!res.headersSent) res.status(400).json({ error: error.message }); else res.end();
     }
+}
+
+// Dormant: the live dblp.org path controllerDblpAuthor used before the
+// local dump existed. Not called anymore (dblp.org is blocked by Anubis
+// anti-bot protection in this environment) -- kept as-is, unplugged rather
+// than deleted, for a future deployment where it isn't.
+// eslint-disable-next-line no-unused-vars
+async function fetchViaLiveDblp(req, res, pid) {
+    const author = await getFetchAuthor(pid);
+    const publications = normalizePublications(author);
+    await streamRankedItems(
+        res, publications,
+        pub => pub.type === 'inproceedings' || pub.type === 'article',
+        async (pub) => {
+            const ref = pub.dblp.url.split('#')[0];
+            const [fullName, rank] = await Promise.all([
+                getVenueFullName(ref),
+                pub.type === 'inproceedings'
+                    ? core.getRank(pub.venue, ref, pub.dblp.year)
+                    : sjr.getRank(ref, pub.dblp.year),
+            ]);
+            return { fullName, rank };
+        },
+        `dblp:${pid}`
+    );
 }
 
 // Shared by both HAL entry points below: an author's and a structure's

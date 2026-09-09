@@ -14,9 +14,23 @@ import fetch from './throttler.js';
 
 let sources = null;
 
+// Falls back to the on-disk snapshot (see SOURCES below, written by load())
+// when portal.core.edu.au can't be reached -- mirrors the same
+// local-first-with-network-fallback pattern already used for the DBLP dump
+// (admin.js) and SJR data (sjrPortal.js's loadYearCSV), so a get*Rank* call
+// mid-request doesn't retry a live fetch (and its full request timeout) on
+// every single publication when the site is down/blocked, only once at
+// startup (see load()) with this as the safety net for whenever that
+// startup check itself failed.
 async function getSources() {
   if (sources == null) {
-    sources = await fetchSources();
+    try {
+      sources = await fetchSources();
+    } catch (error) {
+      console.log(`[core] Could not reach portal.core.edu.au (${error.message}), falling back to the local snapshot.`);
+      sources = await readJSON(SOURCES);
+      if (sources == null) throw error; // nothing to fall back to
+    }
   }
   return sources;
 }
@@ -97,14 +111,27 @@ export async function load() {
     console.log('[core] Loading sources ...');
     await mkdir('/data/core', { recursive: true });
 
-    sources = await fetchSources();
-    let storedSources = await readJSON(SOURCES);
-    if (JSON.stringify(sources) === JSON.stringify(storedSources)) {
+    let liveSources = null;
+    try {
+      liveSources = await fetchSources();
+    } catch (error) {
+      console.log(`[core] Could not check portal.core.edu.au for updated sources (${error.message}), using the local snapshot if any.`);
+    }
+    const storedSources = await readJSON(SOURCES);
+
+    if (liveSources == null) {
+      // Network check failed outright -- getSources() falls back to the
+      // same on-disk snapshot on demand, so nothing more to do here.
+      sources = storedSources;
+      console.log(storedSources ? '[core] Using local snapshot.' : '[core] No local snapshot and network check failed -- CORE ranking will be empty until either is available.');
+    } else if (JSON.stringify(liveSources) === JSON.stringify(storedSources)) {
+      sources = liveSources;
       console.log('[core] No update needed');
     } else {
+      sources = liveSources;
       console.log('[core] Updating sources ...');
-      await writeFile(SOURCES, JSON.stringify(sources), 'utf-8');
-      for (const source of sources) {
+      await writeFile(SOURCES, JSON.stringify(liveSources), 'utf-8');
+      for (const source of liveSources) {
         const data = await fetchSource(source.source);
         await writeFile(SOURCE(source.source), JSON.stringify(data), 'utf-8');
       }
