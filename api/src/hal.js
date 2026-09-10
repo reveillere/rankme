@@ -108,13 +108,30 @@ const PAGE_SIZE = 10000;
 
 async function fetchPublicationsByFilter(filter) {
     const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s';
+    // publicationDateY_i is only a YEAR -- thousands of docs share the same
+    // value for a lab-sized structure, so it alone isn't a stable sort key
+    // for deep `start`-based pagination: Solr is free to order same-year
+    // ties differently between two separate requests (a large index can
+    // shift slightly between them too), which showed up as ~17 publications
+    // returned on *both* pages for LaBRI (10000+ records). docid is unique
+    // and immutable, so appending it as a tiebreaker makes the ordering --
+    // and therefore which docs land on which page -- fully deterministic.
+    const sort = 'publicationDateY_i desc,docid asc';
     const docs = [];
+    const seenDocids = new Set();
     for (let start = 0; ; start += PAGE_SIZE) {
-        const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=${PAGE_SIZE}&start=${start}&wt=json&fl=${fields}&sort=${encodeURIComponent('publicationDateY_i desc')}`;
+        const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&rows=${PAGE_SIZE}&start=${start}&wt=json&fl=${fields}&sort=${encodeURIComponent(sort)}`;
         const resp = await fetch(url);
         const data = await resp.json();
         const page = data?.response?.docs || [];
-        docs.push(...page);
+        // Belt-and-suspenders on top of the tiebreaker above: still skip
+        // any docid already seen (from an earlier page, or a genuine dup in
+        // HAL's own index) rather than trust the fix to be airtight.
+        for (const doc of page) {
+            if (seenDocids.has(doc.docid)) continue;
+            seenDocids.add(doc.docid);
+            docs.push(doc);
+        }
         if (page.length < PAGE_SIZE) break;
     }
 
