@@ -51,8 +51,22 @@ export async function getVenueInfo(doi, prefetched) {
     // (including one that failed 429 rate-limiting, see fetchVenueInfo) was
     // silently refetched from Crossref on every single call instead of ever
     // actually being cached.
+    //
+    // Entries written before this wrapper existed (commit d324088b) are
+    // still sitting in Redis under their old 90-day TTL, unwrapped -- e.g.
+    // `{fullName, acronym}` directly instead of `{info: {fullName,
+    // acronym}}`. That commit's own message called for flushing
+    // crossref:venue:* after deploying to avoid exactly this, but the
+    // flush never happened: confirmed live on rankme.fr, a legacy entry's
+    // `cached.info` read as undefined, silently skipping the acronym-aware
+    // Crossref override entirely (an ambiguous CORE match, e.g. dblp's
+    // bare "DSN" venue text matching two different CORE entries both
+    // called DSN, stayed ambiguous/Unranked instead of resolving via
+    // Crossref's fuller title -- see /dblp/11/1262's IBBE-SGX record).
+    // Detecting the shape by an 'info' key self-heals this on next read,
+    // without depending on a cache flush ever actually happening.
     const cached = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
-    if (cached !== null && cached !== undefined) return cached.info;
+    if (cached !== null && cached !== undefined) return (cached && typeof cached === 'object' && 'info' in cached) ? cached.info : cached;
 
     const { info, ttlS } = await fetchVenueInfo(doi);
     cache.set(key, { info }, ttlS);
