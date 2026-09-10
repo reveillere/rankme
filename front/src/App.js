@@ -252,11 +252,12 @@ function App() {
             // selected one to actually read as more prominent, not just
             // differently-colored.
             sx={{
-              backgroundColor: tab.id === activeTabId ? '#e0e0e0' : '#f5f5f5',
+              backgroundColor: tab.id === activeTabId ? '#eeeeee' : '#fafafa',
               fontWeight: tab.id === activeTabId ? 700 : 400,
-              borderTopLeftRadius: 8,
-              borderTopRightRadius: 8,
-              minHeight: 32,
+              borderTopLeftRadius: 10,
+              borderTopRightRadius: 10,
+              minHeight: 24,
+              py: 1,
               mx: 0.5,
             }}
             label={
@@ -279,8 +280,8 @@ function App() {
         <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
           {tab.type === 'search' && <AuthorSearch onOpenAuthor={openAuthorTab} searchRequest={searchRequest} />}
           {tab.type === 'teams' && <Teams onOpenAuthor={openAuthorTab} />}
-          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} />}
-          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} />}
+          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} onNameResolved={(name) => updateTabInfo(tab.id, { label: name })} />}
+          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { authorName: name, label: name })} />}
           {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} />}
           {tab.type === 'structures' && <StructureSearch onOpenStructure={openAuthorTab} />}
           {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} />}

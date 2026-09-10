@@ -37,7 +37,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 
 Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
 
-export function Author({ pid, onOpenAuthor }) {
+export function Author({ pid, onOpenAuthor, onNameResolved }) {
   const [author, setAuthor] = useState(null);
 
   useEffect(() => {
@@ -45,11 +45,18 @@ export function Author({ pid, onOpenAuthor }) {
       try {
         const author = await fetchAuthor(pid);
         setAuthor(author)
+        // A tab opened directly by pid (or reloaded from a bare /dblp/:pid
+        // URL) doesn't know this author's display name yet -- patch it in
+        // once dblp's own record for them resolves, same as Structure.js
+        // does for a structure's name.
+        const name = author?.dblpperson?.$?.name;
+        if (name) onNameResolved?.(trimLastDigits(name));
       } catch (e) {
         console.error(`Error fetching data for author ${pid}: `, e);
       }
     };
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
 
   if (author === null)

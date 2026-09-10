@@ -66,8 +66,10 @@ export default function Teams({ onOpenAuthor }) {
   const [mode, setMode] = useState('name');
   const [query, setQuery] = useState('');
   const [idInput, setIdInput] = useState('');
+  const [bulkInput, setBulkInput] = useState('');
   const [results, setResults] = useState([]);
   const debounceRef = useRef();
+  const bulkFileInputRef = useRef();
 
   // Members from one source aren't meaningful once you switch to the other
   // — only clear them on an actual user-driven switch, not when loading an
@@ -77,6 +79,7 @@ export default function Teams({ onOpenAuthor }) {
     setMembers([]);
     setQuery('');
     setIdInput('');
+    setBulkInput('');
     setResults([]);
   };
 
@@ -87,6 +90,7 @@ export default function Teams({ onOpenAuthor }) {
     setMembers([]);
     setQuery('');
     setIdInput('');
+    setBulkInput('');
     setResults([]);
   };
 
@@ -98,6 +102,7 @@ export default function Teams({ onOpenAuthor }) {
     setMode('name');
     setQuery('');
     setIdInput('');
+    setBulkInput('');
     setResults([]);
   };
 
@@ -126,6 +131,28 @@ export default function Teams({ onOpenAuthor }) {
   };
 
   const removeMember = (id) => setMembers(prev => prev.filter(m => m.id !== id));
+
+  // One id per line, but also tolerate commas/semicolons since a pasted
+  // list won't always be newline-separated.
+  const addBulkMembers = (text) => {
+    const ids = Array.from(new Set(text.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)));
+    if (ids.length === 0) return;
+    setMembers(prev => {
+      const existing = new Set(prev.map(m => m.id));
+      const additions = ids.filter(id => !existing.has(id)).map(id => ({ id, label: id }));
+      return [...prev, ...additions];
+    });
+    setBulkInput('');
+  };
+
+  const handleBulkFileChange = (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => addBulkMembers(String(reader.result));
+    reader.readAsText(file);
+  };
 
   const canSave = name.trim().length > 0 && members.length >= 2;
 
@@ -221,9 +248,10 @@ export default function Teams({ onOpenAuthor }) {
         <ToggleButtonGroup value={mode} exclusive onChange={(e, v) => v && setMode(v)} size="small" sx={{ mb: 1 }}>
           <ToggleButton value="name">By name</ToggleButton>
           <ToggleButton value="id">By {SOURCES[source].idLabel}</ToggleButton>
+          <ToggleButton value="bulk">Bulk {SOURCES[source].idLabel}s</ToggleButton>
         </ToggleButtonGroup>
 
-        {mode === 'name' ? (
+        {mode === 'name' && (
           <Box sx={{ position: 'relative' }}>
             {/* Same Paper + icon + InputBase shape as Search.js's
                 AuthorSearchForm -- was a plain TextField here, which looked
@@ -265,7 +293,9 @@ export default function Teams({ onOpenAuthor }) {
               </Paper>
             )}
           </Box>
-        ) : (
+        )}
+
+        {mode === 'id' && (
           // Same Paper + icon + InputBase shape as Search.js's
           // AuthorIdForm, with Teams' own "Add to the working list" button
           // in place of Author's "Open" (which opens a tab immediately).
@@ -288,6 +318,36 @@ export default function Teams({ onOpenAuthor }) {
               <AddIcon fontSize="small" />
             </IconButton>
           </Paper>
+        )}
+
+        {mode === 'bulk' && (
+          <Box>
+            <TextField
+              multiline
+              minRows={4}
+              fullWidth
+              size="small"
+              placeholder={`One ${SOURCES[source].idLabel} per line`}
+              value={bulkInput}
+              onChange={e => setBulkInput(e.target.value)}
+              sx={{ mb: 1 }}
+            />
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button size="small" variant="outlined" onClick={() => bulkFileInputRef.current?.click()}>
+                Import file
+              </Button>
+              <input
+                ref={bulkFileInputRef}
+                type="file"
+                accept=".txt"
+                hidden
+                onChange={handleBulkFileChange}
+              />
+              <Button size="small" variant="contained" disabled={!bulkInput.trim()} onClick={() => addBulkMembers(bulkInput)}>
+                Add all
+              </Button>
+            </Box>
+          </Box>
         )}
 
         {members.length > 0 && (

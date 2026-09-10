@@ -28,7 +28,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
 });
 
-export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
+export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved }) {
   const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/author-stream/${id}`);
 
   if (failed && rankedPublications === null) {
@@ -47,6 +47,7 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
       authorName={authorName}
       onOpenAuthor={onOpenAuthor}
       onSearchAuthor={onSearchAuthor}
+      onNameResolved={onNameResolved}
       publications={rankedPublications}
       progress={progress}
       done={done}
@@ -54,7 +55,24 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor }) {
   );
 }
 
-function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done }) {
+function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done }) {
+  // A tab opened directly by id (or reloaded from a bare /hal/:id URL)
+  // doesn't know this author's display name yet -- unlike a structure (see
+  // Structure.js's structure-info lookup), HAL has no per-author name
+  // endpoint, but every one of their own publications already lists their
+  // own name alongside their idHal in its authors array (see hal.js's
+  // parseAuthors), so it's resolved from data already being fetched anyway
+  // instead of firing an extra request. `init`'s publications (year/authors
+  // etc.) are already complete by the time this component mounts -- only
+  // ranks are still pending -- so this only needs to run once, not on every
+  // streamed rank update.
+  useEffect(() => {
+    if (authorName || !onNameResolved) return;
+    const match = rankedPublications.flatMap(pub => pub.authors).find(a => a.idHal === id);
+    if (match?.name) onNameResolved(match.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, authorName]);
+
   // Unlike dblp, HAL records can be missing a year (incomplete metadata) —
   // exclude those from the min/max range so they don't turn it into NaN.
   const knownYears = rankedPublications.map(yearAccessor).filter(year => year != null);
