@@ -61,13 +61,16 @@ export function useRankedPublications(streamUrl) {
       scheduleFlush();
     });
 
-    es.addEventListener('error', (e) => {
-      try {
-        progressRef.current = JSON.parse(e.data);
-        scheduleFlush();
-      } catch {
-        // connection-level error, no payload to parse
-      }
+    // Named 'rank-error' server-side, deliberately not 'error': EventSource
+    // dispatches a server-sent event named 'error' through the exact same
+    // listeners (this one AND onerror below) as a genuine connection
+    // failure, so onerror would treat one failed publication as the whole
+    // stream dying and close it before 'done' ever arrives -- this is what
+    // "stuck at N%, never reaches 100%" turned out to be on any structure
+    // with at least one per-item ranking error.
+    es.addEventListener('rank-error', (e) => {
+      progressRef.current = JSON.parse(e.data);
+      scheduleFlush();
     });
 
     es.addEventListener('done', () => {

@@ -160,7 +160,16 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
                 sse.send('rank', { index, completed, total, ...extra });
             } catch (error) {
                 completed++;
-                sse.send('error', { index, completed, total, message: error.message });
+                // Named 'rank-error', not 'error': EventSource dispatches a
+                // server-sent named event through the exact same 'error'
+                // listeners (addEventListener AND onerror) as a genuine
+                // connection failure -- a client using 'error' for both
+                // would have its onerror handler treat a single failed
+                // publication as the whole stream dying, closing the
+                // connection before 'done' ever arrives (confirmed: this is
+                // what "stuck at N%, never reaches 100%" on a structure with
+                // any per-item ranking error turned out to be).
+                sse.send('rank-error', { index, completed, total, message: error.message });
             }
             activeStreams.updateProgress(streamId, completed, total);
         })));

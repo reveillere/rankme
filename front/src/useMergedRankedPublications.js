@@ -109,14 +109,16 @@ export function useMergedRankedPublications(source, members) {
         schedulePublish();
       });
 
-      es.addEventListener('error', (e) => {
-        try {
-          const { completed, total } = JSON.parse(e.data);
-          memberProgress[i] = { completed, total };
-          schedulePublish();
-        } catch {
-          // connection-level error, no payload to parse
-        }
+      // Named 'rank-error' server-side, deliberately not 'error' -- see
+      // useRankedPublications.js's identical comment: EventSource routes a
+      // server-sent event literally named 'error' through the same
+      // listeners as a genuine connection failure, so onerror below would
+      // treat one member's single failed publication as that whole
+      // member's stream dying.
+      es.addEventListener('rank-error', (e) => {
+        const { completed, total } = JSON.parse(e.data);
+        memberProgress[i] = { completed, total };
+        schedulePublish();
       });
 
       es.addEventListener('done', () => {
