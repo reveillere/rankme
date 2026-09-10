@@ -3,8 +3,8 @@ import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { RankBadge } from './RankBadge';
+import { DoiChip } from './DoiChip';
 
 // dblp's own <ee> element(s) -- usually a DOI link, but a record can carry
 // several (e.g. also an arXiv mirror) and a repeated field comes back as an
@@ -151,13 +151,7 @@ function Venue({ item }) {
           link
         }
          {extra}
-        {doiUrl && (
-          <Tooltip title="View DOI" placement="bottom">
-            <a href={doiUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
-              <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
-            </a>
-          </Tooltip>
-        )}
+        <DoiChip url={doiUrl} />
       </span>
     </span>
   );

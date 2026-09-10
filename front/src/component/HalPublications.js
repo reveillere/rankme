@@ -3,6 +3,7 @@ import Tooltip from '@mui/material/Tooltip';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getHalCategory } from '../hal';
 import { RankBadge } from './RankBadge';
+import { DoiChip } from './DoiChip';
 
 // Extracted from AuthorHal.js so Team.js can reuse the exact same rendering
 // for a HAL-sourced team, parameterized by selfIds (the whole team's HAL
@@ -66,13 +67,7 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
                       </a>
                     </Tooltip>
                   )}
-                  {item.doi && (
-                    <Tooltip title="View DOI" placement="bottom">
-                      <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
-                        <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
-                      </a>
-                    </Tooltip>
-                  )}
+                  <DoiChip url={item.doi ? `https://doi.org/${item.doi}` : null} />
                 </span>
               </cite>
             </li>

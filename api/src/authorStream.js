@@ -58,23 +58,34 @@ export async function controllerDblpAuthor(req, res) {
                         ? await core.getRankByAcronymAndFullName(acronym, pub.venue, pub.dblp.year)
                         : await core.getRankByFullName(pub.venue, pub.dblp.year))
                     : await sjr.getRankByFullName(pub.venue, pub.dblp.year);
-                // dblp's own <journal> text is very often a heavily
-                // abbreviated form (e.g. "Empir. Softw. Eng." for
-                // "Empirical Software Engineering") that doesn't fuzzy-
-                // match SJR's own full titles at all -- unlike a
-                // conference's <booktitle>, which usually already IS (or
-                // contains) a usable acronym, so this fallback only
-                // applies to journal articles. Only paid for when the
-                // cheap local match already came back empty, and only
-                // when dblp's own DOI (<ee>) is available to ask Crossref
-                // for the real title -- same fallback the HAL path
-                // already uses (see rankHalPublications).
-                if (pub.type === 'article' && rank.matchType === 'none') {
+                // dblp's own <booktitle>/<journal> text is sometimes too
+                // abbreviated or informal to match well -- a journal name
+                // like "Empir. Softw. Eng." never fuzzy-matches SJR's
+                // "Empirical Software Engineering" at all, and even a
+                // conference's booktitle occasionally yields only a fuzzy
+                // or ambiguous CORE match. When the local attempt isn't
+                // already an exact match and dblp's own DOI (<ee>) is
+                // available, ask Crossref for the real title/acronym and
+                // retry -- same fallback the HAL path already uses (see
+                // rankHalPublications). Only adopted when it's clearly
+                // better: an authoritative exact match, or anything at all
+                // when the local attempt found nothing -- not swapped in
+                // just because it's a different guess than one we already
+                // had.
+                if (rank.matchType !== 'exact') {
                     const doi = crossref.extractDoi(pub.dblp.ee);
                     if (doi) {
                         const info = await crossref.getVenueInfo(doi);
-                        if (info?.fullName) {
-                            rank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
+                        let doiRank = null;
+                        if (pub.type === 'inproceedings' && (info?.acronym || info?.fullName)) {
+                            doiRank = info.acronym
+                                ? await core.getRankByAcronymAndFullName(info.acronym, info.fullName || pub.venue, pub.dblp.year)
+                                : await core.getRankByFullName(info.fullName, pub.dblp.year);
+                        } else if (pub.type === 'article' && info?.fullName) {
+                            doiRank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
+                        }
+                        if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none')) {
+                            rank = doiRank;
                         }
                     }
                 }
