@@ -265,13 +265,27 @@ async function resolveSource(year) {
   return { sourceKey, source };
 }
 
+// CORE's own rank field carries more categories than the 4 standard grades
+// -- things like "Australasian", "National", or "Multiconference" for a
+// co-located/umbrella conference series. Every place that shapes a rank for
+// the front end buckets a raw CORE string into {value, rawValue} the same
+// way: value is a RANKS entry when it's one of the 4 standard grades,
+// otherwise the generic "Misc" (or "Unranked" if CORE has no rank at all
+// for this entry); rawValue keeps the original CORE string whenever value
+// is "Misc", so the front end can always show what CORE actually says (see
+// RankDetailsPopover.js's rankLabel) instead of only the generic bucket.
+function bucketRank(rawRank) {
+  const isStandard = RANKS.includes(rawRank);
+  return {
+    value: isStandard ? rawRank : (rawRank ? 'Misc' : 'Unranked'),
+    rawValue: isStandard ? null : (rawRank || null),
+  };
+}
+
 // Structured result shape shared by every match branch below (and mirrored
 // by sjrPortal.js) so the front end can build one consistent tooltip/edit UI
 // for both CORE and SJR instead of parsing a human-readable message string.
-//   value:          the badge grade -- a RANKS entry, "Misc" (a real CORE
-//                    rank string outside RANKS, e.g. "Multiconference"), or
-//                    "Unranked"
-//   rawValue:        the original CORE rank string when value is "Misc"
+//   value/rawValue: see bucketRank
 //   matchType:       'exact' | 'fuzzy' | 'ambiguous' | 'none'
 //   matchedTitle/Acronym/Id: identifies which CORE entry was matched, so a
 //                    user can review or override it
@@ -279,23 +293,19 @@ async function resolveSource(year) {
 //                    matched title (informational only when matchType is
 //                    'exact', since that's already guaranteed correct by a
 //                    unique acronym or a literal title match)
-//   currentSource/currentValue: the SAME CORE entry's rank in the latest
-//                    available edition, when it differs from the one used
-//                    (rankings drift between editions)
+//   currentSource/currentValue/currentRawValue: the SAME CORE entry's rank
+//                    in the latest available edition, when it differs from
+//                    the one used (rankings drift between editions)
 function makeSanitizedRank(sourceKey) {
-  return (entry, matchType, distance) => {
-    const isStandard = RANKS.includes(entry.rank);
-    return {
-      value: isStandard ? entry.rank : (entry.rank ? 'Misc' : 'Unranked'),
-      rawValue: isStandard ? null : (entry.rank || null),
-      source: sourceKey,
-      matchType,
-      matchedTitle: entry.title,
-      matchedAcronym: entry.acronym,
-      matchedId: entry.id,
-      distance,
-    };
-  };
+  return (entry, matchType, distance) => ({
+    ...bucketRank(entry.rank),
+    source: sourceKey,
+    matchType,
+    matchedTitle: entry.title,
+    matchedAcronym: entry.acronym,
+    matchedId: entry.id,
+    distance,
+  });
 }
 
 function unrankedResult(sourceKey) {
@@ -306,7 +316,7 @@ function ambiguousResult(sourceKey, tied) {
   return {
     value: 'Unranked', rawValue: null, source: sourceKey, matchType: 'ambiguous',
     matchedTitle: null, matchedAcronym: null, matchedId: null, distance: null,
-    ambiguousWith: tied.map(t => ({ title: t.conf.title, acronym: t.conf.acronym, id: t.conf.id, value: t.conf.rank })),
+    ambiguousWith: tied.map(t => ({ title: t.conf.title, acronym: t.conf.acronym, id: t.conf.id, ...bucketRank(t.conf.rank) })),
   };
 }
 
@@ -331,16 +341,13 @@ async function attachCurrentValue(rank, queryText) {
     // out to differ) so the front end can always show "current rank"
     // instead of only when there happens to be a discrepancy.
     if (latest.source === rank.source) {
-      return { ...rank, currentSource: rank.source, currentValue: rank.value };
+      return { ...rank, currentSource: rank.source, currentValue: rank.value, currentRawValue: rank.rawValue };
     }
     const latestSource = await getSource(latest.source);
     const latestEntry = latestSource.find(c => c.id === rank.matchedId);
     if (!latestEntry) return rank;
-    return {
-      ...rank,
-      currentSource: latest.source,
-      currentValue: RANKS.includes(latestEntry.rank) ? latestEntry.rank : (latestEntry.rank ? 'Misc' : 'Unranked'),
-    };
+    const { value: currentValue, rawValue: currentRawValue } = bucketRank(latestEntry.rank);
+    return { ...rank, currentSource: latest.source, currentValue, currentRawValue };
   } catch (error) {
     console.error('[core] Error attaching current value', error);
     return rank;
@@ -368,17 +375,18 @@ export async function controllerCandidates(req, res) {
     const latestById = latest && latest.source !== sourceKey
       ? new Map((await getSource(latest.source)).map(c => [c.id, c]))
       : null;
-    const toRank = (rank) => RANKS.includes(rank) ? rank : (rank ? 'Misc' : 'Unranked');
     const results = q.length < 2 ? [] : source
       .filter(c => c.title.toLowerCase().includes(q) || c.acronym.toLowerCase().includes(q))
       .slice(0, 50)
       .map(c => {
         const latestEntry = latestById ? latestById.get(c.id) : (latest && latest.source === sourceKey ? c : null);
+        const current = latestEntry ? bucketRank(latestEntry.rank) : null;
         return {
           id: c.id, title: c.title, acronym: c.acronym,
-          value: toRank(c.rank), rawValue: RANKS.includes(c.rank) ? null : c.rank,
+          ...bucketRank(c.rank),
           currentSource: latest ? latest.source : null,
-          currentValue: latestEntry ? toRank(latestEntry.rank) : null,
+          currentValue: current ? current.value : null,
+          currentRawValue: current ? current.rawValue : null,
         };
       });
     res.json({ source: sourceKey, results });

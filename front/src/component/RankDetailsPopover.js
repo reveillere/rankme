@@ -5,7 +5,6 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -42,6 +41,42 @@ function trendOf(fromValue, toValue) {
   const b = RANK_ORDER[toValue];
   if (a == null || b == null || a === b) return null;
   return b > a ? 'up' : 'down';
+}
+
+// One clickable candidate row -- the rank first, in a fixed-width column so
+// a whole list of them lines up and stays scannable, then the title on the
+// same line rather than wrapping to a second line just for its grade.
+// Shared by the "equally close" list (an ambiguous match's tied entries)
+// and the "change match" search results below, so picking a candidate
+// works the same way -- click it -- in both places instead of only the
+// search results being clickable.
+//
+// rawValue (CORE's own category behind a "Misc" bucket, see bucketRank in
+// corePortal.js) is appended after the title/acronym rather than into the
+// rank column itself -- that column has to stay a short, fixed width for
+// every row to line up, so any extra detail flows with the (already
+// variable-width) title text instead of stretching the column per-row.
+function CandidateListItem({ value, rawValue, title, acronym, onClick }) {
+  return (
+    <ListItemButton onClick={onClick} sx={{ py: 0.5, alignItems: 'flex-start' }}>
+      <Typography
+        component="span"
+        variant="body2"
+        color="text.secondary"
+        sx={{ minWidth: 40, flexShrink: 0, fontWeight: 700 }}
+      >
+        {value}
+      </Typography>
+      <Typography component="span" variant="body2" sx={{ wordBreak: 'break-word' }}>
+        {title}{acronym ? ` (${acronym})` : ''}
+        {rawValue && (
+          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+            — {rawValue}
+          </Typography>
+        )}
+      </Typography>
+    </ListItemButton>
+  );
 }
 
 // A two-column row -- label of fixed width, then wrapping text -- so
@@ -84,7 +119,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
       if (cancelled) return;
       const match = found.find(c => c.id === override.candidate.id);
       if (match?.currentValue) {
-        const patched = patchOverrideCandidate(override.key, { currentSource: match.currentSource, currentValue: match.currentValue });
+        const patched = patchOverrideCandidate(override.key, { currentSource: match.currentSource, currentValue: match.currentValue, currentRawValue: match.currentRawValue ?? null });
         if (patched) onOverrideChange(patched);
       }
     });
@@ -132,6 +167,11 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
   const isJournal = portal === 'sjr';
   const displayedValue = isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
+  // CORE's own category behind a "Misc" bucket (e.g. "Multiconference") --
+  // see bucketRank in corePortal.js. Shown alongside the bucket everywhere
+  // the value itself is shown, so "Misc" never hides what CORE actually
+  // says.
+  const displayedRawValue = isManualOverride ? override.candidate.rawValue : isShared ? sharedOverride.candidate.rawValue : rank.rawValue;
 
   return (
     <Popover
@@ -152,6 +192,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
 
         <Typography variant="body2" sx={{ mb: 0.5 }}>
           Rank: <strong>{displayedValue}</strong>
+          {displayedRawValue && <Typography component="span" variant="body2" color="text.secondary"> ({displayedRawValue})</Typography>}
           <Typography component="span" variant="body2" color="text.secondary"> (edition {rank.source})</Typography>
         </Typography>
 
@@ -163,7 +204,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
               <strong>{override.candidate.title}</strong>{override.candidate.acronym ? ` (${override.candidate.acronym})` : ''}
             </LabeledRow>
             <Typography variant="caption" color="text.secondary">
-              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}` : `no match (${rank.value})`}
+              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}${rank.rawValue ? ` (${rank.rawValue})` : ''}` : `no match (${rank.value})`}
             </Typography>
             <Box sx={{ mt: 1 }}>
               <Button size="small" onClick={resetToAutomatic}>Reset to automatic match</Button>
@@ -188,7 +229,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
             </LabeledRow>
             <Typography variant="caption" color="text.secondary">
               Confirmed by {sharedOverride.confirmedCount} other {sharedOverride.confirmedCount === 1 ? 'person' : 'people'} who corrected this same text.
-              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}` : `no match (${rank.value})`}
+              Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}${rank.rawValue ? ` (${rank.rawValue})` : ''}` : `no match (${rank.value})`}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               Search below to set your own correction instead, or turn community corrections off in Settings.
@@ -196,10 +237,10 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
           </Box>
         ) : rank.matchType === 'ambiguous' ? (
           <Box sx={{ my: 1 }}>
-            <Typography variant="body2">Equally close to several entries that don&apos;t agree on a rank:</Typography>
+            <Typography variant="body2" sx={{ mb: 0.5 }}>Equally close to several entries that don&apos;t agree on a rank — pick one:</Typography>
             <List dense disablePadding>
               {(rank.ambiguousWith || []).map((c, i) => (
-                <ListItemText key={i} primary={`${c.title}${c.acronym ? ` (${c.acronym})` : ''}`} secondary={c.value} sx={{ pl: 1 }} />
+                <CandidateListItem key={i} value={c.value} rawValue={c.rawValue} title={c.title} acronym={c.acronym} onClick={() => pickCandidate(c)} />
               ))}
             </List>
           </Box>
@@ -232,6 +273,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
           return (
             <Typography variant="body2" sx={{ mb: 1 }}>
               Rank in the latest edition ({current.currentSource}): <strong>{current.currentValue}</strong>
+              {current.currentRawValue && <Typography component="span" variant="body2" color="text.secondary"> ({current.currentRawValue})</Typography>}
               {trend === 'up' && <ArrowUpwardIcon fontSize="inherit" sx={{ color: '#2e7d32', verticalAlign: 'middle', ml: 0.3 }} />}
               {trend === 'down' && <ArrowDownwardIcon fontSize="inherit" sx={{ color: '#c62828', verticalAlign: 'middle', ml: 0.3 }} />}
               {current.currentValue === displayedValue && <Typography component="span" variant="caption" color="text.secondary"> (unchanged)</Typography>}
@@ -258,9 +300,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
             {results.length === 0
               ? <Typography variant="body2" color="text.secondary" sx={{ px: 1 }}>No match</Typography>
               : results.map(c => (
-                <ListItemButton key={c.id} onClick={() => pickCandidate(c)}>
-                  <ListItemText primary={`${c.title}${c.acronym ? ` (${c.acronym})` : ''}`} secondary={c.value} />
-                </ListItemButton>
+                <CandidateListItem key={c.id} value={c.value} rawValue={c.rawValue} title={c.title} acronym={c.acronym} onClick={() => pickCandidate(c)} />
               ))}
           </List>
         )}
