@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 // Material-UI Components and Icons
-import { AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab } from '@mui/material';
+import { AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab, Divider } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SettingsIcon from '@mui/icons-material/Settings';
 import RuleIcon from '@mui/icons-material/Rule';
@@ -153,13 +153,31 @@ function App() {
   const context = activeTab && (activeTab.type === 'teams' || activeTab.type === 'team') ? 'teams'
     : activeTab && (activeTab.type === 'structures' || activeTab.type === 'hal-structure') ? 'structures'
     : 'search';
+  const isPersistentTab = t => t.id === SEARCH_TAB_ID || t.id === TEAMS_TAB_ID || t.id === STRUCTURES_TAB_ID;
   const visibleTabs = tabs.filter(t => (
-    t.id === SEARCH_TAB_ID || t.id === TEAMS_TAB_ID || t.id === STRUCTURES_TAB_ID || (
+    isPersistentTab(t) || (
       context === 'teams' ? t.type === 'team'
         : context === 'structures' ? t.type === 'hal-structure'
         : t.type === 'dblp-author' || t.type === 'hal-author'
     )
   ));
+  // Author/Teams/Structure (the 3 ways to switch context, always present)
+  // vs. whatever's actually been opened under the current one (a specific
+  // author, team, or structure) -- kept visually distinct below (a divider,
+  // and a card-like background only on the latter) since they're not the
+  // same kind of tab: these three don't close and don't represent "a page
+  // you're looking at", they're the navigation itself.
+  const persistentVisibleTabs = visibleTabs.filter(isPersistentTab);
+  const dynamicVisibleTabs = visibleTabs.filter(t => !isPersistentTab(t));
+  // MUI's own Tabs indicator only ever tracks the literal selection
+  // (activeTabId) -- fine when that's Author/Teams/Structure itself, but
+  // when it's a dynamic tab underneath one of them (e.g. a specific
+  // author), the indicator moves to that dynamic tab and Author is left
+  // looking unselected even though it's still the active section. This id
+  // gets a manual underline below (separate from, and in addition to,
+  // MUI's own indicator wherever that currently is) so the context stays
+  // visible regardless of which dynamic tab is open.
+  const contextTabId = context === 'teams' ? TEAMS_TAB_ID : context === 'structures' ? STRUCTURES_TAB_ID : SEARCH_TAB_ID;
 
   return (
     <div>
@@ -193,31 +211,61 @@ function App() {
         variant="scrollable"
         scrollButtons="auto"
         style={{ borderBottom: '1px solid #ddd', backgroundColor: '#fff', position: 'sticky', top: 64, zIndex: 1200 }}
-        sx={{ '& .MuiTab-root': { textTransform: 'capitalize' } }}
+        sx={{
+          '& .MuiTab-root': { textTransform: 'capitalize' },
+          // MUI centers each Tab's own content vertically within its own
+          // height, not against the row -- flex-end on the row itself is
+          // what makes a dynamic tab's smaller minHeight below actually
+          // read as "sitting on the line" rather than floating in the
+          // middle of it.
+          '& .MuiTabs-flexContainer': { alignItems: 'flex-end' },
+        }}
       >
-        {visibleTabs.map(tab => (
+        {persistentVisibleTabs.map(tab => (
           <Tab
             key={tab.id}
             value={tab.id}
+            label={tab.id === SEARCH_TAB_ID ? 'Author' : tab.id === TEAMS_TAB_ID ? 'Teams' : 'Structure'}
+            // The context this tab represents stays underlined even while
+            // a dynamic tab underneath it is the one actually selected --
+            // MUI's own sliding indicator already covers the case where
+            // this tab itself is the selection, so this only adds the
+            // extra underline for the "context, but not literal
+            // selection" case, to avoid doubling up on thickness.
+            sx={tab.id === contextTabId && tab.id !== activeTabId
+              ? { borderBottom: '2px solid', borderColor: 'primary.main' }
+              : undefined}
+          />
+        ))}
+
+        <Divider orientation="vertical" flexItem sx={{ my: 1.5, mx: 0.5 }} />
+
+        {dynamicVisibleTabs.map(tab => (
+          <Tab
+            key={tab.id}
+            value={tab.id}
+            // Materializes each opened author/team/structure as its own
+            // small card sitting on the tab bar -- distinct from the
+            // plain Author/Teams/Structure tabs to its left, which are
+            // navigation itself rather than "a page you have open".
+            sx={{
+              backgroundColor: '#eeeeee',
+              borderTopLeftRadius: 8,
+              borderTopRightRadius: 8,
+              minHeight: 40,
+              mx: 0.5,
+            }}
             label={
-              tab.id === SEARCH_TAB_ID ? (
-                'Author'
-              ) : tab.id === TEAMS_TAB_ID ? (
-                'Teams'
-              ) : tab.id === STRUCTURES_TAB_ID ? (
-                'Structure'
-              ) : (
-                <span title={tab.label} style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {tab.label}
-                  </span>
-                  <CloseIcon
-                    fontSize="small"
-                    onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
-                    style={{ flexShrink: 0 }}
-                  />
+              <span title={tab.label} style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: 160 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {tab.label}
                 </span>
-              )
+                <CloseIcon
+                  fontSize="small"
+                  onClick={(e) => { e.stopPropagation(); closeTab(tab.id); }}
+                  style={{ flexShrink: 0 }}
+                />
+              </span>
             }
           />
         ))}
