@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { useRankedPublications } from '../useRankedPublications';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
-import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
@@ -25,6 +25,11 @@ const portalAccessor = pub => pub.type === 'COMM' ? 'core' : 'sjr';
 // a brand new reference every render, which would defeat HalPublicationRow's
 // React.memo for every single row on every render (see HalPublications.js).
 const NO_SELF_IDS = [];
+
+// Lazy: pulls in chart.js (a meaningfully sized dependency) as its own
+// chunk, since the chart renders below the fold rather than gating the
+// initial view of this page.
+const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
 const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
@@ -81,10 +86,19 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
 }
 
 function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done }) {
-  const knownYears = rankedPublications.map(yearAccessor).filter(year => year != null);
-  const currentYear = new Date().getFullYear();
-  const minYear = knownYears.length ? Math.min(...knownYears) : currentYear;
-  const maxYear = knownYears.length ? Math.max(...knownYears) : currentYear;
+  // Years are already known from the initial SSE `init` payload -- only
+  // `.rank` fields arrive later -- so this only needs recomputing when the
+  // publication count itself changes, not on every streamed rank update
+  // (which replaces the array reference on every tick, and this stream can
+  // flush ~7x/second). A single reduce pass avoids Math.min/max(...array),
+  // which risks a RangeError on very large arrays.
+  const [minYear, maxYear] = useMemo(() => {
+    const knownYears = rankedPublications.map(yearAccessor).filter(year => year != null);
+    const currentYear = new Date().getFullYear();
+    if (knownYears.length === 0) return [currentYear, currentYear];
+    return knownYears.reduce(([min, max], year) => [Math.min(min, year), Math.max(max, year)], [knownYears[0], knownYears[0]]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedPublications.length]);
   const [filterYears, setFilterYears] = useState([minYear, maxYear]);
   const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
@@ -127,7 +141,9 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
-        <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        <React.Suspense fallback={<CircularProgress size={32} />}>
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        </React.Suspense>
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 

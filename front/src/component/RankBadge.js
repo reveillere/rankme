@@ -62,17 +62,19 @@ export function RankBadge({ rank, portal, year, resolvedFullName }) {
       >
         {effective.value}
       </span>
-      <RankDetailsPopover
-        anchorEl={anchorEl}
-        onClose={() => setAnchorEl(null)}
-        portal={portal}
-        year={year}
-        rank={rank}
-        override={override}
-        sharedOverride={sharedOverride}
-        resolvedFullName={resolvedFullName}
-        onOverrideChange={() => setRefreshTick(t => t + 1)}
-      />
+      {anchorEl && (
+        <RankDetailsPopover
+          anchorEl={anchorEl}
+          onClose={() => setAnchorEl(null)}
+          portal={portal}
+          year={year}
+          rank={rank}
+          override={override}
+          sharedOverride={sharedOverride}
+          resolvedFullName={resolvedFullName}
+          onOverrideChange={() => setRefreshTick(t => t + 1)}
+        />
+      )}
     </>
   );
 }

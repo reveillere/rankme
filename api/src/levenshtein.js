@@ -1,23 +1,28 @@
+// NOT included here: "journal" -- checked against scimagojr (32k+
+// entries): stripping it collides 378 pairs of genuinely distinct
+// journals (e.g. "Journal of Finance" vs "Finance", "Journal of
+// Hepatology" vs "Hepatology"), which would make the fuzzy match pick
+// between two different journals essentially at random.
+const wordsToRemove = ['acm', 'ieee', 'international', 'national', 'IFIP']
+  .concat(['proceedings', 'chapter', 'association', 'magazine'])
+  .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
+  .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
+
+// Built once at module scope: normalizeTitle is called at least twice per
+// ranked publication (CORE and/or SJR paths), and this regex was otherwise
+// being recompiled from the same ~40-word alternation on every single call.
+// Safe to share despite the `/g` flag -- `.replace()` scans and resets
+// internally per call, it doesn't carry `lastIndex` across separate calls
+// the way `.exec()`/`.test()` would.
+const wordsToRemoveRegex = new RegExp(`\\b(?<!-)(?:${wordsToRemove.join('|')})(?!-)\\b`, 'gi');
+
 export function normalizeTitle(line) {
-  // NOT included here: "journal" -- checked against scimagojr (32k+
-  // entries): stripping it collides 378 pairs of genuinely distinct
-  // journals (e.g. "Journal of Finance" vs "Finance", "Journal of
-  // Hepatology" vs "Hepatology"), which would make the fuzzy match pick
-  // between two different journals essentially at random.
-  const wordsToRemove = ['acm', 'ieee', 'international', 'national', 'IFIP']
-    .concat(['proceedings', 'chapter', 'association', 'magazine'])
-    .concat(['in', 'of', 'to', 'on', 'for', 'at', 'the', 'and'])
-    .concat(['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']);
-
-
-  const regex = new RegExp(`\\b(?<!-)(?:${wordsToRemove.join('|')})(?!-)\\b`, 'gi');
-
   return line
     .replace(/\(.*?\)/g, '')  // remove content in parentheses
     .replace(/['"]/g, '')  // remove quotes, & and commas
     .replace(/\//g, ' ')  // replace slashes with spaces
     .replace(/:\s/g, ' ')  // replace colons followed by a space word with a space
-    .replace(regex, '')  // remove specific words and prepositions
+    .replace(wordsToRemoveRegex, '')  // remove specific words and prepositions
     .replace(/\d+\w*/g, '')  // remove numbers
     .replace(/-\s/g, ' ')  // replace hyphens followed by a space word with a space
     .toLowerCase() // convert to lowercase

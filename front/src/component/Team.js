@@ -3,9 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 // Material-UI Components and Icons
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
-
-// Chart.js Components
-import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
@@ -16,7 +14,6 @@ import { getHalCategory } from '../hal';
 import DateRangeSlider from './DateRangeSlider';
 import { Publications } from './Publications';
 import { HalPublications } from './HalPublications';
-import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
@@ -33,7 +30,10 @@ const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
 });
 
-Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
+// Lazy: pulls in chart.js (a meaningfully sized dependency) as its own
+// chunk, since the chart renders below the fold rather than gating the
+// initial view of this page.
+const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
 const yearAccessorFor = source => (source === 'hal' ? (pub => pub.year) : (pub => pub.dblp.year));
 // HAL's own type codes aren't the shared category vocabulary — cssClass
@@ -130,7 +130,9 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
-        <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        <React.Suspense fallback={<CircularProgress size={32} />}>
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        </React.Suspense>
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 

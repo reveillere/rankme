@@ -1,4 +1,11 @@
 import { Bar } from 'react-chartjs-2';
+import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
+
+// Registered here (rather than by each page that renders a chart) so it
+// happens exactly once, wherever this module is first loaded -- Author.js
+// and Team.js used to each do this themselves at import time, which is why
+// this file is now the one and only place chart.js's core gets pulled in.
+Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
 
 function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAccessor, yearAccessor }) {
   const options = {

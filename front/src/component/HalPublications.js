@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import Tooltip from '@mui/material/Tooltip';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getHalCategory } from '../hal';
@@ -18,73 +19,78 @@ import { DoiChip } from './DoiChip';
 // updates 5 ranks out of 10,400 costs roughly 5 rows' worth of rendering,
 // not 10,400.
 //
-// This does NOT fix the very first mount (measured at ~6.4s of blocking
-// main-thread work for the full 10,400-row list) or a filter that swaps in
-// a very different subset (every row is "new" from React's point of view
-// either way) -- only true list virtualization (rendering just the
-// currently-visible rows) fixes those, and a react-virtuoso attempt was
-// reverted here because its ResizeObserver-based measurement couldn't be
-// verified to work at all in this project's browser test tooling. If the
-// initial-load cost for an exceptionally large structure like LaBRI is
-// still a problem, that's the next thing to tackle -- carefully, with a
-// way to actually verify it first.
-const HalPublicationRow = React.memo(function HalPublicationRow({ item, displayYear, selfIds, onOpenAuthor, onSearchAuthor }) {
-  const category = getHalCategory(item.type);
-
+// Only renders the row's *inner* content now -- the wrapping <li> (with its
+// "year"/"entry <category>" className) moved to HalItem below, since
+// Virtuoso owns the wrapping element it measures for virtualization.
+const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor }) {
   return (
-    <React.Fragment>
-      {displayYear && <li className="year">{item.year || '?'}</li>}
-      <li className={`entry ${category.cssClass}`}>
-        <Tooltip title={category.name} placement="left">
-          <div className="box">
-            <img alt="paper" src="https://dblp.org/img/n.png" />
-          </div>
-        </Tooltip>
-        <div className="rank">
-          <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} />
+    <>
+      <Tooltip title={category.name} placement="left">
+        <div className="box">
+          <img alt="paper" src="https://dblp.org/img/n.png" />
         </div>
-        <cite className='data'>
-          {item.authors.length > 0
-            ? item.authors
-                .map((a, i) => (
-                  <span key={i} className="link">
-                    {a.idHal && selfIds.includes(a.idHal) ? (
-                      <span className="self-author">{a.name}</span>
-                    ) : a.idHal ? (
-                      <a href="#" onClick={(e) => {
-                        e.preventDefault();
-                        onOpenAuthor({ type: 'hal-author', id: `hal:${a.idHal}`, label: a.name, halId: a.idHal, authorName: a.name });
-                      }}>
-                        {a.name}
-                      </a>
-                    ) : (
-                      <a href="#" onClick={(e) => { e.preventDefault(); onSearchAuthor('hal', a.name); }}>
-                        {a.name}
-                      </a>
-                    )}
-                  </span>
-                ))
-                .reduce((prev, curr) => [prev, ', ', curr])
-            : <span>No Authors Listed</span>}
-          <br />
-          <span className='title'>{item.title}</span>
-          <span className='link'>
-            <span className='venue'>
-              {item.venue || category.name}
-            </span>
-            {item.url && (
-              <Tooltip title="View on HAL" placement="bottom">
-                <a href={item.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
-                  <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
-                </a>
-              </Tooltip>
-            )}
-            <DoiChip url={item.doi ? `https://doi.org/${item.doi}` : null} />
+      </Tooltip>
+      <div className="rank">
+        <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} />
+      </div>
+      <cite className='data'>
+        {item.authors.length > 0
+          ? item.authors
+              .map((a, i) => (
+                <span key={i} className="link">
+                  {a.idHal && selfIds.includes(a.idHal) ? (
+                    <span className="self-author">{a.name}</span>
+                  ) : a.idHal ? (
+                    <a href="#" onClick={(e) => {
+                      e.preventDefault();
+                      onOpenAuthor({ type: 'hal-author', id: `hal:${a.idHal}`, label: a.name, halId: a.idHal, authorName: a.name });
+                    }}>
+                      {a.name}
+                    </a>
+                  ) : (
+                    <a href="#" onClick={(e) => { e.preventDefault(); onSearchAuthor('hal', a.name); }}>
+                      {a.name}
+                    </a>
+                  )}
+                </span>
+              ))
+              .reduce((prev, curr) => [prev, ', ', curr])
+          : <span>No Authors Listed</span>}
+        <br />
+        <span className='title'>{item.title}</span>
+        <span className='link'>
+          <span className='venue'>
+            {item.venue || category.name}
           </span>
-        </cite>
-      </li>
-    </React.Fragment>
+          {item.url && (
+            <Tooltip title="View on HAL" placement="bottom">
+              <a href={item.url} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+              </a>
+            </Tooltip>
+          )}
+          <DoiChip url={item.doi ? `https://doi.org/${item.doi}` : null} />
+        </span>
+      </cite>
+    </>
   );
+});
+
+// Virtuoso's `List`/`Item` overrides keep the virtualized list's DOM a
+// plain <ul>/<li> tree -- same markup, same App.css selectors
+// (ul.publ-list>li...) as before virtualization, just with only the
+// currently-visible <li>s actually mounted. `row` is whatever `itemContent`
+// was handed for that index (see the flattened `rows` built below) --
+// HalItem needs it to pick the right className, a decision that used to
+// live on the two sibling <li>s themselves before they were split into
+// "wrapper owned by Virtuoso, content returned by itemContent".
+const HalList = React.forwardRef(function HalList({ style, children, ...props }, ref) {
+  return <ul className='publ-list' ref={ref} style={style} {...props}>{children}</ul>;
+});
+
+const HalItem = React.forwardRef(function HalItem({ item: row, children, style, ...props }, ref) {
+  const className = row.kind === 'year' ? 'year' : `entry ${row.category.cssClass}`;
+  return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
 // Extracted from AuthorHal.js so Team.js can reuse the exact same rendering
@@ -93,25 +99,62 @@ const HalPublicationRow = React.memo(function HalPublicationRow({ item, displayY
 // need to stay referentially stable across re-renders for HalPublicationRow's
 // memoization above to actually pay off -- see Structure.js's NO_SELF_IDS.
 export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor }) {
-  const sorted = [...data].sort((a, b) => (b.year || 0) - (a.year || 0));
-  let previousYear = null;
+  // Flattened so each Virtuoso index is exactly one <li> (a "year" marker
+  // or an "entry") -- this is what makes the LaBRI-scale (~10,400 rows)
+  // first mount cheap: only the rows actually inside (or just outside) the
+  // viewport are ever rendered, instead of all 10,400 at once. category is
+  // precomputed here (not inside HalPublicationRow) so HalItem can read it
+  // for the className without a second getHalCategory call per row; for a
+  // known type getHalCategory returns the same cached object every time
+  // (see hal.js), so this doesn't defeat HalPublicationRow's memoization
+  // above -- the category reference stays stable across flushes just like
+  // `item` does for an unchanged row.
+  const rows = useMemo(() => {
+    const sorted = [...data].sort((a, b) => (b.year || 0) - (a.year || 0));
+    let previousYear = null;
+    const out = [];
+    for (const item of sorted) {
+      const displayYear = previousYear !== item.year;
+      previousYear = item.year;
+      if (displayYear) out.push({ kind: 'year', key: `year-${item.year}`, year: item.year });
+      out.push({ kind: 'entry', key: item.docid, item, category: getHalCategory(item.type) });
+    }
+    return out;
+  }, [data]);
 
   return (
-    <ul className='publ-list'>
-      {sorted.map((item) => {
-        const displayYear = previousYear !== item.year;
-        previousYear = item.year;
-        return (
+    <Virtuoso
+      // Virtuoso's own root div is the actual flex child of .App here (the
+      // <ul class="publ-list"> it renders is nested one level inside it) --
+      // .App is a flex column with align-items:center, so without an
+      // explicit width that root shrink-to-fits based on whichever rows
+      // Virtuoso currently has mounted, and can collapse to almost nothing
+      // (e.g. during the gap before any row has mounted, or if the
+      // currently-visible rows all happen to be short).
+      style={{ width: '100%' }}
+      useWindowScroll
+      // Virtuoso's normal bootstrap renders one "probe" item, measures it
+      // via ResizeObserver, then expands to fill the viewport -- that
+      // measurement step needs a ResizeObserver callback to actually fire.
+      // initialItemCount sidesteps it for the first paint by rendering a
+      // fixed batch unconditionally (meant for SSR, where there's no layout
+      // to measure yet either); real scrolling afterwards is driven by
+      // scroll events, not ResizeObserver, and already works fine.
+      initialItemCount={30}
+      data={rows}
+      computeItemKey={(index, row) => row.key}
+      components={{ List: HalList, Item: HalItem }}
+      itemContent={(index, row) => row.kind === 'year'
+        ? (row.year || '?')
+        : (
           <HalPublicationRow
-            key={item.docid}
-            item={item}
-            displayYear={displayYear}
+            item={row.item}
+            category={row.category}
             selfIds={selfIds}
             onOpenAuthor={onOpenAuthor}
             onSearchAuthor={onSearchAuthor}
           />
-        );
-      })}
-    </ul>
+        )}
+    />
   );
 }

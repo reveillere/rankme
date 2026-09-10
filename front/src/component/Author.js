@@ -4,9 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 // Material-UI Components and Icons
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
-
-// Chart.js Components
-import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
+import CircularProgress from '@mui/material/CircularProgress';
 
 // DBLP
 import { fetchAuthor } from '../dblp';
@@ -16,7 +14,6 @@ import { ranks, useFilterSettings } from '../FilterSettingsContext';
 // Components
 import DateRangeSlider from './DateRangeSlider';
 import { Publications } from './Publications';
-import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
@@ -35,7 +32,10 @@ const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
 });
 
-Chart.register(ArcElement, LinearScale, BarController, BarElement, CategoryScale, Tooltip);
+// Lazy: pulls in chart.js (a meaningfully sized dependency) as its own
+// chunk, since the chart renders below the fold rather than gating the
+// initial view of this page.
+const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
 export function Author({ pid, onOpenAuthor, onNameResolved }) {
   const [author, setAuthor] = useState(null);
@@ -140,7 +140,9 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
-        <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        <React.Suspense fallback={<CircularProgress size={32} />}>
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+        </React.Suspense>
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 

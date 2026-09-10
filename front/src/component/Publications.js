@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
@@ -34,58 +35,73 @@ const title = (o) => {
 // fix and its comment in HalPublications.js). pids/onOpenAuthor need to
 // stay referentially stable for this to pay off -- see the pids useMemo
 // below.
-const PublicationRow = React.memo(function PublicationRow({ item, nr, displayYear, pids, onOpenAuthor }) {
+//
+// Only renders the row's *inner* content now -- the wrapping <li> (with its
+// "year"/"entry <type>" className) moved to PublicationsItem below, since
+// Virtuoso owns the wrapping element it measures for virtualization.
+const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor }) {
   const year = item.dblp.year;
   return (
-    <React.Fragment>
-      {displayYear && <li className="year">{year}</li>}
-      <li className={`entry ${item.type}`}>
-        <Tooltip title={dblpCategories[item.type].name} placement="left">
-          <div className="box">
-            <img alt="paper" src="https://dblp.org/img/n.png" />
-          </div>
-        </Tooltip>
-        <div className="nr">[{nr}]</div>
-        <div className="rank">
-        <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
+    <>
+      <Tooltip title={dblpCategories[item.type].name} placement="left">
+        <div className="box">
+          <img alt="paper" src="https://dblp.org/img/n.png" />
         </div>
-        <cite className='data'>
-          {
-            item.authors.length > 0
-              ? item.authors
-                .map((a, i) => (
-                  <span key={i} className="link">
-                    {!a.$.pid ? (
-                      // No pid for this author -- e.g. every
-                      // co-author from the local dump import (see
-                      // dblpLocal.js), which carries no per-author
-                      // pid at all -- so there's nothing to link
-                      // to or compare against pids/selfPids.
-                      <span>{trimLastDigits(a._)}</span>
-                    ) : !pids.includes(a.$.pid) ? (
-                      <a href="#" onClick={(e) => {
-                        e.preventDefault();
-                        onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
-                      }}>
-                        {trimLastDigits(a._)}
-                      </a>
-                    ) : (
-                      <span className="self-author">{trimLastDigits(a._)}</span>
-                    )}
-                  </span>
-                ))
-                .reduce((prev, curr) => [prev, ', ', curr])
-              : <span>No Authors Listed</span>
-          }
-          <br />
-          <span className='title'>
-            {title(item.dblp.title)}
-          </span>
-          <Venue item={item} />
-        </cite>
-      </li>
-    </React.Fragment>
+      </Tooltip>
+      <div className="nr">[{nr}]</div>
+      <div className="rank">
+      <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
+      </div>
+      <cite className='data'>
+        {
+          item.authors.length > 0
+            ? item.authors
+              .map((a, i) => (
+                <span key={i} className="link">
+                  {!a.$.pid ? (
+                    // No pid for this author -- e.g. every
+                    // co-author from the local dump import (see
+                    // dblpLocal.js), which carries no per-author
+                    // pid at all -- so there's nothing to link
+                    // to or compare against pids/selfPids.
+                    <span>{trimLastDigits(a._)}</span>
+                  ) : !pids.includes(a.$.pid) ? (
+                    <a href="#" onClick={(e) => {
+                      e.preventDefault();
+                      onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
+                    }}>
+                      {trimLastDigits(a._)}
+                    </a>
+                  ) : (
+                    <span className="self-author">{trimLastDigits(a._)}</span>
+                  )}
+                </span>
+              ))
+              .reduce((prev, curr) => [prev, ', ', curr])
+            : <span>No Authors Listed</span>
+        }
+        <br />
+        <span className='title'>
+          {title(item.dblp.title)}
+        </span>
+        <Venue item={item} />
+      </cite>
+    </>
   );
+});
+
+// See HalPublications.js's HalList/HalItem for why these overrides exist:
+// Virtuoso needs to own the item-wrapping element for measurement, so the
+// <li> (with its "year"/"entry <type>" className) is supplied here instead
+// of by PublicationRow. `row` is whatever `itemContent` was handed for that
+// index -- see the flattened `rows` built in Publications below.
+const PublicationsList = React.forwardRef(function PublicationsList({ style, children, ...props }, ref) {
+  return <ul className='publ-list' ref={ref} style={style} {...props}>{children}</ul>;
+});
+
+const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row, children, style, ...props }, ref) {
+  const className = row.kind === 'year' ? 'year' : `entry ${row.item.type}`;
+  return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
 export function Publications({ author, data, onOpenAuthor, selfPids }) {
@@ -102,6 +118,12 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
   // recent first -- depends on iteration order over the sorted list, not
   // just the item itself, so it's precomputed here in one pass rather than
   // inside the (memoized, per-item-only) row above.
+  //
+  // Flattened (a "year" marker row inserted wherever the year changes,
+  // rather than a per-entry displayYear flag) so each Virtuoso index below
+  // is exactly one <li> -- see HalPublications.js's identical rows shape
+  // for why: it's what lets a large list mount only its visible rows
+  // instead of every one of them at once.
   const rows = useMemo(() => {
     const pubs = [...data].sort((a, b) => b.year - a.year);
     const typeCounts = data.reduce((acc, curr) => {
@@ -109,30 +131,37 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
       return acc;
     }, {});
     let previousYear = null;
-    return pubs.map((item) => {
+    const out = [];
+    for (const item of pubs) {
       const displayYear = previousYear !== item.dblp.year;
       previousYear = item.dblp.year;
+      if (displayYear) out.push({ kind: 'year', key: `year-${item.dblp.year}`, year: item.dblp.year });
       const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
-      return { item, nr, displayYear };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      out.push({ kind: 'entry', key: item.dblp.url, item, nr });
+    }
+    return out;
   }, [data]);
 
   return (
-    <div>
-      <ul className='publ-list'>
-        {rows.map(({ item, nr, displayYear }) => (
-          <PublicationRow
-            key={item.dblp.url}
-            item={item}
-            nr={nr}
-            displayYear={displayYear}
-            pids={pids}
-            onOpenAuthor={onOpenAuthor}
-          />
-        ))}
-      </ul>
-    </div>
+    <Virtuoso
+      // See HalPublications.js's identical Virtuoso style prop for why this
+      // is needed: .App is a flex column with align-items:center, so
+      // Virtuoso's own root div (the actual flex child here) would
+      // otherwise shrink-to-fit based on whatever rows happen to be
+      // mounted, instead of spanning the page like the list used to.
+      style={{ width: '100%' }}
+      useWindowScroll
+      // See HalPublications.js's identical initialItemCount for why: the
+      // first-paint probe-and-measure bootstrap depends on a ResizeObserver
+      // callback firing, which this forces past instead of waiting on.
+      initialItemCount={30}
+      data={rows}
+      computeItemKey={(index, row) => row.key}
+      components={{ List: PublicationsList, Item: PublicationsItem }}
+      itemContent={(index, row) => row.kind === 'year'
+        ? row.year
+        : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} />}
+    />
   );
 }
 

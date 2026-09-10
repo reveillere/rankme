@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { streamRankedItems } from './ranking.js';
 
 function fakeRes() {
@@ -11,6 +12,13 @@ function fakeRes() {
     end: () => {},
     events,
   };
+}
+
+// streamRankedItems listens for the request's 'close' event (see ranking.js)
+// -- a plain EventEmitter is enough to stand in for req here, since that's
+// the only thing it's used for.
+function fakeReq() {
+  return new EventEmitter();
 }
 
 test('streamRankedItems caps concurrent computeRank calls regardless of item count', async () => {
@@ -26,7 +34,7 @@ test('streamRankedItems caps concurrent computeRank calls regardless of item cou
     return { rank: 'x' };
   };
 
-  await streamRankedItems(fakeRes(), items, () => true, computeRank);
+  await streamRankedItems(fakeReq(), fakeRes(), items, () => true, computeRank);
 
   // A prolific author (hundreds of publications) launching every ranking
   // computation at once via an uncapped Promise.all OOM-killed the api
@@ -41,7 +49,7 @@ test('streamRankedItems only ranks items isRankable selects, and reports the sma
   const res = fakeRes();
   const ranked = [];
 
-  await streamRankedItems(res, items, (item) => item.rankable, async (item, index) => {
+  await streamRankedItems(fakeReq(), res, items, (item) => item.rankable, async (item, index) => {
     ranked.push(index);
     return { rank: 'ok' };
   });
@@ -49,4 +57,23 @@ test('streamRankedItems only ranks items isRankable selects, and reports the sma
   assert.deepEqual(ranked, [0, 2]);
   const initEvent = res.events.find((e) => e.startsWith('event: init'));
   assert.match(initEvent, /"total":2/);
+});
+
+test('streamRankedItems skips scheduling work once the client has already disconnected', async () => {
+  const req = fakeReq();
+  const res = fakeRes();
+  const items = Array.from({ length: 5 }, (_, i) => ({ id: i }));
+  let calls = 0;
+  const computeRank = async () => { calls++; return { rank: 'x' }; };
+
+  // Fired synchronously right after the call below: streamRankedItems runs
+  // synchronously up to its first await (Promise.all), which is after the
+  // 'close' listener is registered but before any ranking_limiter.schedule
+  // callback actually runs -- so this is a deterministic "client vanished
+  // before any ranking work started" case, not a timing-dependent one.
+  const promise = streamRankedItems(req, res, items, () => true, computeRank);
+  req.emit('close');
+  await promise;
+
+  assert.equal(calls, 0, 'no ranking work should run once the request already closed');
 });

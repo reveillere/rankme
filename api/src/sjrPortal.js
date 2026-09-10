@@ -22,6 +22,60 @@ function escapeRegex(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// computeRank pulled an entire year's scimagojr collection into memory
+// (Mongo find({}).toArray()) AND re-normalized every title in it, on every
+// single call -- and this can happen up to 8x concurrently (ranking.js's
+// ranking_limiter). A year's documents are immutable for the process
+// lifetime (load() above only ever inserts once per year, guarded by the
+// `count === 0` check), so both the fetch and the normalization are worth
+// caching.
+//
+// Measured cost of holding a year resident, in exactly this trimmed shape
+// (Sourceid/Title/BestQuartile + a pre-normalized title -- Categories/Areas
+// are parsed by parseCSV but never read by computeRank/attachCurrentValue,
+// so they're dropped here): loading all 27 years (1999-2025) grew heap
+// usage from ~12MB to ~365MB, i.e. roughly 13-18MB per year (newer years,
+// with more indexed journals, cost more). Holding all 27 resident at once
+// would be over a third of this container's 1GB cap (docker-compose.prod.yml)
+// on top of the rest of the process (DBLP/CORE data, HTTP/Mongo/Redis
+// connections, etc.) -- not a comfortable fit. Capped LRU instead, sized to
+// the same 8 as ranking_limiter's maxConcurrent so that 8 concurrent
+// requests for 8 different years can each keep their own year resident
+// without evicting each other's in the worst case: worst-case retained size
+// is then ~8 * 18MB =~ 150MB, comfortably inside budget. In practice the
+// hit rate is much better than "1 year per request" -- attachCurrentValue
+// below always wants config.end (see next comment), which keeps that one
+// year almost permanently hot regardless of what else cycles through.
+const YEAR_CACHE_MAX_SIZE = 8;
+const yearCache = new Map(); // insertion order == LRU order (oldest first)
+
+async function getYearData(year) {
+    const key = year.toString();
+    if (yearCache.has(key)) {
+        // Re-insert to move this key to the end (most-recently-used) --
+        // content is unchanged, only its position in eviction order.
+        const data = yearCache.get(key);
+        yearCache.delete(key);
+        yearCache.set(key, data);
+        return data;
+    }
+    const client = await getClient();
+    const db = client.db("scimagojr");
+    const documents = (await db.collection(key).find({}).toArray()).filter(item => item.Title !== null);
+    const docs = documents.map(item => ({
+        Sourceid: item.Sourceid,
+        Title: item.Title,
+        BestQuartile: item.BestQuartile,
+        normalizedTitle: normalizeTitle(item.Title),
+    }));
+    const data = { docs, bySourceid: new Map(docs.map(d => [d.Sourceid, d])) };
+    yearCache.set(key, data);
+    if (yearCache.size > YEAR_CACHE_MAX_SIZE) {
+        yearCache.delete(yearCache.keys().next().value); // evict the oldest (least-recently-used)
+    }
+    return data;
+}
+
 
 
         
@@ -94,6 +148,10 @@ export async function load() {
                     console.error(`[sjr] Error loading year ${year}:`, error.message);
                 }
             }
+            // Idempotent (a no-op if it already exists), so safe to call on
+            // every startup rather than only right after a fresh insert --
+            // speeds up controllerCandidates' Sourceid $in lookup below.
+            await collection.createIndex({ Sourceid: 1 });
         }
     } catch (error) {
         console.error('Error during connection or insertion:', error);
@@ -146,9 +204,12 @@ async function attachCurrentValue(rank, queryText) {
         return { ...rank, currentSource: rank.source, currentValue: rank.value };
     }
     try {
-        const client = await getClient();
-        const db = client.db("scimagojr");
-        const latest = await db.collection(config.end.toString()).findOne({ Sourceid: rank.matchedId });
+        // config.end is exactly the year kept hottest in getYearData's LRU
+        // (see its comment) -- almost every call here wants it, so this is
+        // a Mongo round-trip trade for a Map lookup nearly all the time,
+        // not just when it happens to already be cached.
+        const { bySourceid } = await getYearData(config.end);
+        const latest = bySourceid.get(rank.matchedId);
         if (!latest) return rank;
         return { ...rank, currentSource: latestSource, currentValue: latest.BestQuartile === '-' ? 'QU' : latest.BestQuartile };
     } catch (error) {
@@ -215,10 +276,7 @@ async function computeRank(venueFullName, year) {
         if (year > config.end) {
             year = config.end;
         }
-        const client = await getClient();
-        const db = client.db("scimagojr");
-        const collection = db.collection(year.toString());
-        const documents = (await collection.find({}).toArray()).filter(item => item.Title !== null);
+        const { docs } = await getYearData(year);
         const titleNormalized = normalizeTitle(venueFullName);
         // No acronym concept for journals, so this is always matching on
         // title words alone against the whole scimagojr list -- same false
@@ -233,9 +291,8 @@ async function computeRank(venueFullName, year) {
             return { ...unrankedResult(year), queryText: venueFullName };
         }
         const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
-        const result = documents.map(item => {
-            const title1 = normalizeTitle(item.Title);
-            const distance = levenshtein(title1, titleNormalized);
+        const result = docs.map(item => {
+            const distance = levenshtein(item.normalizedTitle, titleNormalized);
             return { data: item, distance: distance };
         }).filter(item => item.distance <= maxAllowedDistance).sort((a, b) => a.distance - b.distance);
 

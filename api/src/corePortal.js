@@ -26,6 +26,14 @@ const RANK_CACHE_TTL_S = 60 * 60 * 24 * 365;
 import fetch from './throttler.js';
 
 let sources = null;
+let sourcesSorted = false;
+
+// The ~11 CORE source files are immutable for the process lifetime (see
+// RANK_CACHE_TTL_S's comment above) and are read at least twice per ranked
+// publication (resolveSource + attachCurrentValue), each a Redis round-trip
+// plus a JSON.parse of a ~100-200KB blob. Keyed in-process cache avoids
+// both after the first request for a given source id.
+const sourceCache = new Map();
 
 // Falls back to the on-disk snapshot (see SOURCES below, written by load())
 // when portal.core.edu.au can't be reached -- mirrors the same
@@ -44,6 +52,13 @@ async function getSources() {
       sources = await readJSON(SOURCES);
       if (sources == null) throw error; // nothing to fall back to
     }
+  }
+  // resolveSource needs this sorted newest-first on every call -- sort once
+  // here (in place, same array reference) rather than re-sorting an
+  // already-sorted array on every single ranked publication.
+  if (!sourcesSorted) {
+    sources.sort((a, b) => b.year - a.year);
+    sourcesSorted = true;
   }
   return sources;
 }
@@ -96,14 +111,17 @@ export async function controllerSources(req, res) {
 
 // Returns the source  for a given source
 async function getSource(id) {
+  if (sourceCache.has(id)) {
+    return sourceCache.get(id);
+  }
   const key = `core:source:${id}`;
   let source = await cache.get(key);
-  if (source) {
-    return source;
+  if (!source) {
+    console.log(`[core] Source ${id} not in cache, reading from file ...`)
+    source = await readJSON(SOURCE(id));
+    await cache.set(key, source);
   }
-  console.log(`[core] Source ${id} not in cache, reading from file ...`)
-  source = await readJSON(SOURCE(id));
-  await cache.set(key, source);
+  sourceCache.set(id, source);
   return source;
 }
 
@@ -257,8 +275,7 @@ export async function getRank(acronym, ref, year) {
 // HAL path — no acronym available) need the same yearly source snapshot and
 // the same rank-message shaping; only the actual matching strategy differs.
 async function resolveSource(year) {
-  const sources = await getSources();
-  const sortedList = sources.sort((a, b) => b.year - a.year);
+  const sortedList = await getSources(); // already sorted newest-first
   const foundItem = sortedList.find(item => item.year <= year);
   const sourceKey = foundItem ? foundItem.source : sortedList[sortedList.length - 1].source;
   const source = await getSource(sourceKey);
@@ -531,13 +548,7 @@ async function computeRank2(venueFullName, year) {
   if (candidates.length === 0) {
     rank = unrankedResult(sourceKey);
   } else {
-    // print debug info for the first 5 candidates with the lowest levenshtein distance
     const sortedCandidates = candidates.sort((a, b) => a.levenshtein - b.levenshtein);
-    console.log(`[ranking of ${venueFullName} => ${titleNormalized}] Found ${sortedCandidates.length} candidates in ${sourceKey}`);
-    for (let i = 0; i < Math.min(10, sortedCandidates.length); i++) {
-      console.log(`[ranking] ${i + 1}: ${sortedCandidates[i].conf.title} => ${normalizeTitle(sortedCandidates[i].conf.acronym + ' ' + sortedCandidates[i].conf.title)} (distance=${sortedCandidates[i].levenshtein})`);
-    }
-
     const minDistance = sortedCandidates[0].levenshtein;
     const tied = sortedCandidates.filter(c => c.levenshtein === minDistance);
     // Same rationale as the acronym-tiebreak branch above: with no acronym

@@ -103,9 +103,10 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef();
 
-  useEffect(() => {
-    if (!open) { setQuery(''); setResults([]); }
-  }, [open]);
+  // No effect resetting query/results on close: RankBadge now only renders
+  // this component at all while anchorEl is set (see RankBadge.js), so
+  // closing unmounts it and discards this state naturally -- a fresh mount
+  // next open always starts blank.
 
   // Overrides/confirmations saved before candidate search results carried
   // currentSource/currentValue (or imported from an older CSV export) are

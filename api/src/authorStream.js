@@ -51,7 +51,7 @@ export async function controllerDblpAuthor(req, res) {
         }
         const publications = await dblpLocal.getPublicationsByNames(localNames);
         await streamRankedItems(
-            res, publications,
+            req, res, publications,
             pub => pub.type === 'inproceedings' || pub.type === 'article',
             async (pub) => {
                 // Same acronym-first strategy as the HAL path below --
@@ -133,7 +133,7 @@ async function fetchViaLiveDblp(req, res, pid) {
     const author = await getFetchAuthor(pid);
     const publications = normalizePublications(author);
     await streamRankedItems(
-        res, publications,
+        req, res, publications,
         pub => pub.type === 'inproceedings' || pub.type === 'article',
         async (pub) => {
             const ref = pub.dblp.url.split('#')[0];
@@ -153,9 +153,9 @@ async function fetchViaLiveDblp(req, res, pid) {
 // publications are the exact same shape (HAL doesn't distinguish), so the
 // matching/ranking logic that turns a venue string into a CORE/SJR rank is
 // identical either way -- only which publication list gets fetched differs.
-async function rankHalPublications(res, publications, label) {
+async function rankHalPublications(req, res, publications, label) {
     await streamRankedItems(
-        res, publications,
+        req, res, publications,
         pub => pub.type === 'COMM' || pub.type === 'ART',
         async (pub) => {
             // HAL's own venue field is free text typed by the depositor
@@ -208,7 +208,7 @@ export async function controllerHalAuthor(req, res) {
     const id = req.params[0];
     try {
         const publications = await getAuthorPublications(id);
-        await rankHalPublications(res, publications, `hal:${id}`);
+        await rankHalPublications(req, res, publications, `hal:${id}`);
     } catch (error) {
         console.error('[authorStream] hal error', error);
         if (!res.headersSent) res.status(400).json({ error: error.message }); else res.end();
@@ -219,7 +219,7 @@ export async function controllerHalStructure(req, res) {
     const id = req.params[0];
     try {
         const publications = await getStructurePublications(id);
-        await rankHalPublications(res, publications, `hal-structure:${id}`);
+        await rankHalPublications(req, res, publications, `hal-structure:${id}`);
     } catch (error) {
         console.error('[authorStream] hal structure error', error);
         if (!res.headersSent) res.status(400).json({ error: error.message }); else res.end();

@@ -1,6 +1,11 @@
 import { createClient } from 'redis';
- 
+
 const REDIS_URI = process.env.REDIS_URI;
+
+// A get/HIT-or-MISS line on every single cache.get was ~90% of this
+// container's total log volume (756k of 862k lines over 25h uptime) for no
+// production benefit -- default off, opt in for local debugging.
+const DEBUG_CACHE = process.env.DEBUG_CACHE === 'true';
 
 const createRedisClient = (() => {
     let client;
@@ -22,7 +27,9 @@ const createRedisClient = (() => {
 export async function get(key) {
     const redisClient = await createRedisClient();
     const cachedResponse = await redisClient.get(key);
-    console.log('[redis] get:', key, '=>', cachedResponse ? '\x1b[32mHIT\x1b[0m' : '\x1b[31mMISS\x1b[0m');
+    if (DEBUG_CACHE) {
+        console.log('[redis] get:', key, '=>', cachedResponse ? '\x1b[32mHIT\x1b[0m' : '\x1b[31mMISS\x1b[0m');
+    }
     return JSON.parse(cachedResponse);
 } 
 
