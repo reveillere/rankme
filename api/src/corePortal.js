@@ -489,11 +489,20 @@ export async function controllerRank2(req, res) {
 // running computeRank2's full source scan independently.
 const inFlightByFullName = new Map();
 
-export async function getRankByFullName(fullName, year) {
-  const key = `rank:${year}:core2:${fullName}`;
+// Exported so authorStream.js's batch prefetch can compute the exact same
+// keys for a bulk MGET without duplicating (and risking drifting from)
+// these formats.
+export function rankKey(fullName, year) {
+  return `rank:${year}:core2:${fullName}`;
+}
 
-  const rank = await cache.get(key);
-  if (rank !== null) return rank;
+// prefetched: see sjrPortal.js's identical parameter for the full
+// rationale -- same contract here.
+export async function getRankByFullName(fullName, year, prefetched) {
+  const key = rankKey(fullName, year);
+
+  const rank = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
+  if (rank !== null && rank !== undefined) return rank;
 
   return dedupeInFlight(inFlightByFullName, key, async () => {
     const result = await computeRank2(fullName, year);
@@ -516,11 +525,17 @@ export async function getRankByFullName(fullName, year) {
 // of colliding with it).
 const inFlightByAcronym = new Map();
 
-export async function getRankByAcronymAndFullName(acronym, fullName, year) {
-  const key = `rank:${year}:core2acro:${acronym}:${fullName}`;
+export function rankKeyAcronym(acronym, fullName, year) {
+  return `rank:${year}:core2acro:${acronym}:${fullName}`;
+}
 
-  const rank = await cache.get(key);
-  if (rank !== null) return rank;
+// prefetched: see sjrPortal.js's identical parameter for the full
+// rationale -- same contract here.
+export async function getRankByAcronymAndFullName(acronym, fullName, year, prefetched) {
+  const key = rankKeyAcronym(acronym, fullName, year);
+
+  const rank = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
+  if (rank !== null && rank !== undefined) return rank;
 
   return dedupeInFlight(inFlightByAcronym, key, async () => {
     const result = await computeRank(acronym.toUpperCase(), fullName, year);

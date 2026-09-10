@@ -28,8 +28,21 @@ const FAILURE_TTL_S = 60 * 60 * 4; // 4 hours: a 429/timeout/network error is tr
 // and it often carries an acronym HAL doesn't expose at all -- letting HAL
 // publications use the same acronym-first CORE matching as DBLP publications
 // instead of a pure fuzzy match over the whole ranking database.
-export async function getVenueInfo(doi) {
-    const key = `crossref:venue:${doi}`;
+// Exported so authorStream.js's batch prefetch can compute the exact same
+// key for a bulk MGET without duplicating (and risking drifting from) this
+// format.
+export function venueKey(doi) {
+    return `crossref:venue:${doi}`;
+}
+
+// prefetched, when given, is a Map already populated by a bulk MGET (see
+// authorStream.js) -- prefetched.has(key) means that key was definitely
+// checked in that batch, so its value (present or not) is authoritative and
+// worth skipping a redundant Redis round-trip for. A key absent from
+// prefetched just falls back to a normal cache.get, unchanged from before
+// this parameter existed.
+export async function getVenueInfo(doi, prefetched) {
+    const key = venueKey(doi);
 
     // Wrapped in { info } rather than caching the bare value: a DOI with no
     // useful venue info at all is a legitimate, cacheable result (info:
@@ -38,8 +51,8 @@ export async function getVenueInfo(doi) {
     // (including one that failed 429 rate-limiting, see fetchVenueInfo) was
     // silently refetched from Crossref on every single call instead of ever
     // actually being cached.
-    const cached = await cache.get(key);
-    if (cached !== null) return cached.info;
+    const cached = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
+    if (cached !== null && cached !== undefined) return cached.info;
 
     const { info, ttlS } = await fetchVenueInfo(doi);
     cache.set(key, { info }, ttlS);

@@ -6,6 +6,7 @@ import * as sjr from './sjrPortal.js';
 import { getAuthorPublications, getStructurePublications } from './hal.js';
 import * as crossref from './crossref.js';
 import { streamRankedItems } from './ranking.js';
+import * as cache from './cache.js';
 
 // dblp's own <booktitle> is very often *just* the acronym, optionally with
 // a trailing year/edition ("PODC", "AINA 2017", "ICSE'22") -- neither of
@@ -153,40 +154,113 @@ async function fetchViaLiveDblp(req, res, pid) {
 // publications are the exact same shape (HAL doesn't distinguish), so the
 // matching/ranking logic that turns a venue string into a CORE/SJR rank is
 // identical either way -- only which publication list gets fetched differs.
+// HAL's own venue/acronym for a publication, before any Crossref
+// refinement -- factored out so the batch prefetch below and the real
+// per-item pass agree on exactly one copy of this logic instead of two
+// that could drift apart.
+function resolveHalVenueAcronym(pub) {
+    // HAL's own venue field is free text typed by the depositor at
+    // submission time, but very often already carries its own acronym --
+    // trailing, e.g. "... (DAIS)", or leading, e.g. "ASE18 - Proceedings
+    // of..." -- which is free to extract and, paired with the venue text
+    // it came from, is an internally consistent source for acronym-first
+    // CORE matching. Crossref (when a DOI is available) can offer a
+    // cleaner acronym HAL doesn't expose at all; when it does, its
+    // acronym and full name are used as a pair too, since for some
+    // records (Springer/LNCS proceedings especially) Crossref's full
+    // name alone collapses to a single generic word ("Middleware 2012")
+    // that coincidentally fuzzy-matches unrelated CORE entries once
+    // stripped of its own acronym.
+    // A "... colocated with ..." suffix describes a *different* (host)
+    // venue -- stripped before any matching so its title never gets
+    // fuzzy-matched as if it were this record's own.
+    let venue = crossref.stripColocationSuffix(pub.venue);
+    const wasColocated = venue !== pub.venue;
+    let acronym = crossref.extractTrailingAcronym(venue) || crossref.extractLeadingAcronym(venue);
+    // Skip the Crossref lookup entirely when HAL's own text says this was
+    // co-located: IEEE/ACM often file a co-located workshop's papers
+    // under the *host* conference's DOI container (see e.g.
+    // 10.1109/CISIS.2010.167, whose Crossref record only ever mentions
+    // "CISIS", never the workshop it was actually published as -- "IMIS"),
+    // so Crossref can't be trusted to know this record's own venue any
+    // better than HAL's colocation-suffix text already told us it can't.
+    const doiLookupApplies = !!(pub.doi && !wasColocated);
+    return { venue, acronym, doiLookupApplies };
+}
+
+// Applies an *already-cached* Crossref override on top of
+// resolveHalVenueAcronym's HAL-only baseline, purely from crossrefPrefetch
+// (a Map from crossref.venueKey(doi) to the cached { info } value) -- no
+// I/O, so safe to call speculatively while guessing a rank key to prefetch.
+// This deliberately mirrors only the *cache-hit* branch of the real
+// resolution (crossref.getVenueInfo, called for real in the per-item pass
+// below) -- a DOI missing from crossrefPrefetch (a genuine cache miss, or
+// simply outside the batch) just keeps the HAL-only guess, which only means
+// Phase 1 won't have prefetched that one item's actual rank key; the
+// per-item pass still resolves and ranks it correctly either way, just
+// without the prefetch benefit for that item.
+function applyCachedCrossrefOverride(venue, acronym, doi, crossrefPrefetch) {
+    const info = crossrefPrefetch?.get(crossref.venueKey(doi))?.info;
+    return info?.acronym ? { venue: info.fullName || venue, acronym: info.acronym } : { venue, acronym };
+}
+
+// A publication's final rank cache key, mirroring exactly what
+// core.rankKey/rankKeyAcronym/sjr.rankKey build internally -- used by the
+// batch prefetch below to know what to MGET before any per-item work runs.
+function halRankKeyFor(pub, venue, acronym) {
+    return pub.type === 'COMM'
+        ? (acronym ? core.rankKeyAcronym(acronym, venue, pub.year) : core.rankKey(venue, pub.year))
+        : sjr.rankKey(venue, pub.year);
+}
+
+// Shared by both HAL entry points below: an author's and a structure's
+// publications are the exact same shape (HAL doesn't distinguish), so the
+// matching/ranking logic that turns a venue string into a CORE/SJR rank is
+// identical either way -- only which publication list gets fetched differs.
+//
+// On a fully warm cache, ranking a large structure (LaBRI: ~7860 rankable
+// publications) used to mean ~7860 sequential Redis round-trips (8 at a
+// time via ranking_limiter) purely to re-read values already sitting in
+// Redis -- 15-30s wall-clock for zero actual computation (confirmed via
+// redis-cli MONITOR: all GETs, no SETs). The two batch prefetches below
+// collapse that into two MGETs; anything not covered by them (a genuine
+// cache miss) falls through to the exact same per-item logic as before,
+// unchanged.
 async function rankHalPublications(req, res, publications, label) {
+    const rankable = publications.filter(pub => pub.type === 'COMM' || pub.type === 'ART');
+
+    // Phase 0: every DOI the per-item Crossref lookup would consult anyway,
+    // batched into one MGET instead of one GET per publication. Several
+    // publications can share the same DOI-bearing proceedings, so dedupe
+    // first.
+    const doisToPrefetch = [...new Set(
+        rankable.filter(pub => resolveHalVenueAcronym(pub).doiLookupApplies).map(pub => pub.doi)
+    )];
+    const crossrefPrefetch = await cache.mget(doisToPrefetch.map(doi => crossref.venueKey(doi)));
+
+    // Phase 1: guess each publication's final venue/acronym using Phase 0's
+    // prefetched Crossref info (via applyCachedCrossrefOverride -- the same
+    // override the per-item pass below will independently arrive at,
+    // whenever crossrefPrefetch actually has the data), collect the
+    // resulting rank keys (deduped -- many publications share a venue/year),
+    // and MGET all of them in one round-trip.
+    const rankKeysToPrefetch = new Set();
+    for (const pub of rankable) {
+        let { venue, acronym, doiLookupApplies } = resolveHalVenueAcronym(pub);
+        if (doiLookupApplies) {
+            ({ venue, acronym } = applyCachedCrossrefOverride(venue, acronym, pub.doi, crossrefPrefetch));
+        }
+        rankKeysToPrefetch.add(halRankKeyFor(pub, venue, acronym));
+    }
+    const rankPrefetch = await cache.mget([...rankKeysToPrefetch]);
+
     await streamRankedItems(
         req, res, publications,
         pub => pub.type === 'COMM' || pub.type === 'ART',
         async (pub) => {
-            // HAL's own venue field is free text typed by the depositor
-            // at submission time, but very often already carries its own
-            // acronym -- trailing, e.g. "... (DAIS)", or leading, e.g.
-            // "ASE18 - Proceedings of..." -- which is free to extract
-            // and, paired with the venue text it came from, is an
-            // internally consistent source for acronym-first CORE
-            // matching. Crossref (when a DOI is available) can offer a
-            // cleaner acronym HAL doesn't expose at all; when it does,
-            // its acronym and full name are used as a pair too, since
-            // for some records (Springer/LNCS proceedings especially)
-            // Crossref's full name alone collapses to a single generic
-            // word ("Middleware 2012") that coincidentally fuzzy-matches
-            // unrelated CORE entries once stripped of its own acronym.
-            // A "... colocated with ..." suffix describes a *different*
-            // (host) venue -- stripped before any matching so its title
-            // never gets fuzzy-matched as if it were this record's own.
-            let venue = crossref.stripColocationSuffix(pub.venue);
-            const wasColocated = venue !== pub.venue;
-            let acronym = crossref.extractTrailingAcronym(venue) || crossref.extractLeadingAcronym(venue);
-            // Skip the Crossref lookup entirely when HAL's own text says
-            // this was co-located: IEEE/ACM often file a co-located
-            // workshop's papers under the *host* conference's DOI
-            // container (see e.g. 10.1109/CISIS.2010.167, whose Crossref
-            // record only ever mentions "CISIS", never the workshop it
-            // was actually published as -- "IMIS"), so Crossref can't be
-            // trusted to know this record's own venue any better than
-            // HAL's colocation-suffix text already told us it can't.
-            if (pub.doi && !wasColocated) {
-                const info = await crossref.getVenueInfo(pub.doi);
+            let { venue, acronym, doiLookupApplies } = resolveHalVenueAcronym(pub);
+            if (doiLookupApplies) {
+                const info = await crossref.getVenueInfo(pub.doi, crossrefPrefetch);
                 if (info?.acronym) {
                     venue = info.fullName || venue;
                     acronym = info.acronym;
@@ -195,9 +269,9 @@ async function rankHalPublications(req, res, publications, label) {
 
             const rank = pub.type === 'COMM'
                 ? (acronym
-                    ? await core.getRankByAcronymAndFullName(acronym, venue, pub.year)
-                    : await core.getRankByFullName(venue, pub.year))
-                : await sjr.getRankByFullName(venue, pub.year);
+                    ? await core.getRankByAcronymAndFullName(acronym, venue, pub.year, rankPrefetch)
+                    : await core.getRankByFullName(venue, pub.year, rankPrefetch))
+                : await sjr.getRankByFullName(venue, pub.year, rankPrefetch);
             return { rank };
         },
         label

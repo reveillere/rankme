@@ -60,8 +60,8 @@ test('streamRankedItems only ranks items isRankable selects, and reports the sma
 });
 
 test('streamRankedItems accepts a priority-scheduled job and behaves normally with no contention', async () => {
-  // Not a rigorous load test -- just confirms the installed Bottleneck
-  // version actually accepts the { priority } option streamRankedItems now
+  // Not a rigorous load test -- just confirms the priority-bucketed
+  // ConcurrencyLimiter (see ranking.js) accepts the priority streamRankedItems
   // passes to schedule() (see priorityFor) without throwing, and that a
   // single small request still completes exactly as before.
   const items = Array.from({ length: 5 }, (_, i) => ({ id: i }));

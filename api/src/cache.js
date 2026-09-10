@@ -31,7 +31,28 @@ export async function get(key) {
         console.log('[redis] get:', key, '=>', cachedResponse ? '\x1b[32mHIT\x1b[0m' : '\x1b[31mMISS\x1b[0m');
     }
     return JSON.parse(cachedResponse);
-} 
+}
+
+// Batch read: one round-trip for many keys instead of one per key. Returns
+// a Map holding only the keys that were actually a HIT (parsed) -- a MISS
+// key is simply absent, same "absent means miss" contract callers already
+// get from a bare `get()` returning null, without forcing every caller to
+// distinguish "null" (missing) from a legitimately cached null-ish value.
+// Empty input short-circuits before touching Redis at all, since mGet on an
+// empty array isn't guaranteed to make sense across all clients/versions.
+export async function mget(keys) {
+    const result = new Map();
+    if (keys.length === 0) return result;
+    const redisClient = await createRedisClient();
+    const values = await redisClient.mGet(keys);
+    for (let i = 0; i < keys.length; i++) {
+        if (values[i] !== null) result.set(keys[i], JSON.parse(values[i]));
+    }
+    if (DEBUG_CACHE) {
+        console.log('[redis] mget:', keys.length, 'keys =>', result.size, 'hits');
+    }
+    return result;
+}
 
 // Caching is best-effort: callers frequently fire this without awaiting it,
 // so a Redis error here must never surface as an unhandled rejection and

@@ -391,11 +391,24 @@ export async function controllerRank2(req, res) {
 // scan independently.
 const inFlightByFullName = new Map();
 
-export async function getRankByFullName(fullName, year) {
-    const key = `rank:${year}:sjr:${fullName}`;
+// Exported so authorStream.js's batch prefetch can compute the exact same
+// key for a bulk MGET without duplicating (and risking drifting from) this
+// format.
+export function rankKey(fullName, year) {
+    return `rank:${year}:sjr:${fullName}`;
+}
 
-    const rank = await cache.get(key);
-    if (rank !== null) return rank;
+// prefetched, when given, is a Map already populated by a bulk MGET (see
+// authorStream.js) -- prefetched.has(key) means that key was definitely
+// checked in that batch, so its value (present or not) is authoritative and
+// worth skipping a redundant Redis round-trip for. A key absent from
+// prefetched just falls back to a normal cache.get, unchanged from before
+// this parameter existed.
+export async function getRankByFullName(fullName, year, prefetched) {
+    const key = rankKey(fullName, year);
+
+    const rank = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
+    if (rank !== null && rank !== undefined) return rank;
 
     return dedupeInFlight(inFlightByFullName, key, async () => {
         const result = await computeRank(fullName, year);
