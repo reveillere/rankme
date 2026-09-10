@@ -1,3 +1,5 @@
+import { needsReview } from './matchOverrides';
+
 // Shared by the dblp (Author.js) and HAL (AuthorHal.js) publication views —
 // kept as a pure function so it can be unit-tested without any React/DOM
 // setup, and so the two views can't drift out of sync with each other.
@@ -7,12 +9,18 @@
 // `.type`, which is already correct for dblp publications; HAL callers pass
 // `pub => getHalCategory(pub.type).cssClass` since HAL's own type codes
 // (ART, COMM, ...) aren't the shared vocabulary.
-export function filterPublications(publications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor = pub => pub.type, filterRanks }) {
+//
+// reviewOnly/portalAccessor: the "Only show matches to review" toggle (see
+// e.g. Author.js) — portalAccessor maps a publication to 'core' or 'sjr'
+// (which local override bucket applies), only needed/passed when
+// reviewOnly is actually on.
+export function filterPublications(publications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor = pub => pub.type, filterRanks, reviewOnly = false, portalAccessor }) {
   return publications
     .filter(pub => {
       const year = yearAccessor(pub);
       return year == null || (year >= filterYears[0] && year <= filterYears[1]);
     })
     .filter(pub => filterCategories[categoryKeyAccessor(pub)])
-    .filter(pub => pub.rank ? filterRanks[pub.rank.value] : true);
+    .filter(pub => pub.rank ? filterRanks[pub.rank.value] : true)
+    .filter(pub => !reviewOnly || needsReview(portalAccessor(pub), pub.rank));
 }

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 // Material-UI Components and Icons
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
@@ -73,6 +75,7 @@ function AuthorShow({ author, pid, onOpenAuthor }) {
 
 
 const yearAccessor = pub => pub.dblp.year;
+const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 
 function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor }) {
   // Years are already known from the initial SSE `init` payload — only
@@ -88,6 +91,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
@@ -95,8 +99,8 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks, reviewOnly, portalAccessor }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -122,8 +126,12 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 
-      <div style={{ margin: '0 0 20px 0' }}>
+      <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+        <FormControlLabel
+          control={<Checkbox checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} size="small" />}
+          label="Only show matches to review"
+        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}

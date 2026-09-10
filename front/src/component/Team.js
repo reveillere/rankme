@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 // Material-UI Components and Icons
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 // Chart.js Components
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
@@ -35,6 +37,7 @@ const yearAccessorFor = source => (source === 'hal' ? (pub => pub.year) : (pub =
 // HAL's own type codes aren't the shared category vocabulary — cssClass
 // maps each one to its dblp-bucket equivalent (see filterPublications.js).
 const categoryKeyAccessorFor = source => (source === 'hal' ? (pub => getHalCategory(pub.type).cssClass) : (pub => pub.type));
+const portalAccessorFor = source => (source === 'hal' ? (pub => pub.type === 'COMM' ? 'core' : 'sjr') : (pub => pub.type === 'inproceedings' ? 'core' : 'sjr'));
 
 export function Team({ teamId, onOpenAuthor, onSearchAuthor }) {
   const team = getTeam(teamId);
@@ -71,6 +74,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
   const isHal = team.source === 'hal';
   const yearAccessor = useMemo(() => yearAccessorFor(team.source), [team.source]);
   const categoryKeyAccessor = useMemo(() => categoryKeyAccessorFor(team.source), [team.source]);
+  const portalAccessor = useMemo(() => portalAccessorFor(team.source), [team.source]);
   const selfIds = useMemo(() => team.members.map(m => m.id), [team]);
 
   const [minYear, maxYear] = useMemo(() => {
@@ -84,6 +88,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
   const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
@@ -91,8 +96,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor, categoryKeyAccessor]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, reviewOnly, portalAccessor }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor, categoryKeyAccessor, reviewOnly, portalAccessor]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -118,8 +123,12 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 
-      <div style={{ margin: '0 0 20px 0' }}>
+      <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+        <FormControlLabel
+          control={<Checkbox checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} size="small" />}
+          label="Only show matches to review"
+        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}

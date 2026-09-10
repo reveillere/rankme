@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
 import { useRankedPublications } from '../useRankedPublications';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
@@ -16,6 +18,7 @@ import '../App.css';
 
 const yearAccessor = pub => pub.year;
 const categoryKeyAccessor = pub => getHalCategory(pub.type).cssClass;
+const portalAccessor = pub => pub.type === 'COMM' ? 'core' : 'sjr';
 
 const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
@@ -80,6 +83,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
   const { filterRanks, filterCategories } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
+  const [reviewOnly, setReviewOnly] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
@@ -87,8 +91,8 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks]);
+    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, reviewOnly, portalAccessor }));
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -112,8 +116,12 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 
-      <div style={{ margin: '0 0 20px 0' }}>
+      <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+        <FormControlLabel
+          control={<Checkbox checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} size="small" />}
+          label="Only show matches to review"
+        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
