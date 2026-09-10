@@ -66,6 +66,13 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
                       </a>
                     </Tooltip>
                   )}
+                  {item.doi && (
+                    <Tooltip title="View DOI" placement="bottom">
+                      <a href={`https://doi.org/${item.doi}`} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+                        <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+                      </a>
+                    </Tooltip>
+                  )}
                 </span>
               </cite>
             </li>

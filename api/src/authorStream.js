@@ -53,11 +53,31 @@ export async function controllerDblpAuthor(req, res) {
                 // (unlike getRank in fetchViaLiveDblp) never call
                 // getVenueFullName.
                 const acronym = crossref.extractTrailingAcronym(pub.venue) || crossref.extractLeadingAcronym(pub.venue) || extractBareAcronym(pub.venue);
-                const rank = pub.type === 'inproceedings'
+                let rank = pub.type === 'inproceedings'
                     ? (acronym
                         ? await core.getRankByAcronymAndFullName(acronym, pub.venue, pub.dblp.year)
                         : await core.getRankByFullName(pub.venue, pub.dblp.year))
                     : await sjr.getRankByFullName(pub.venue, pub.dblp.year);
+                // dblp's own <journal> text is very often a heavily
+                // abbreviated form (e.g. "Empir. Softw. Eng." for
+                // "Empirical Software Engineering") that doesn't fuzzy-
+                // match SJR's own full titles at all -- unlike a
+                // conference's <booktitle>, which usually already IS (or
+                // contains) a usable acronym, so this fallback only
+                // applies to journal articles. Only paid for when the
+                // cheap local match already came back empty, and only
+                // when dblp's own DOI (<ee>) is available to ask Crossref
+                // for the real title -- same fallback the HAL path
+                // already uses (see rankHalPublications).
+                if (pub.type === 'article' && rank.matchType === 'none') {
+                    const doi = crossref.extractDoi(pub.dblp.ee);
+                    if (doi) {
+                        const info = await crossref.getVenueInfo(doi);
+                        if (info?.fullName) {
+                            rank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
+                        }
+                    }
+                }
                 return { rank };
             },
             `dblp:${pid}`

@@ -3,7 +3,18 @@ import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { RankBadge } from './RankBadge';
+
+// dblp's own <ee> element(s) -- usually a DOI link, but a record can carry
+// several (e.g. also an arXiv mirror) and a repeated field comes back as an
+// array rather than a lone string (see admin.js's wireRecordParser) -- so
+// this accepts either shape and returns the first entry that's actually a
+// doi.org link, ready to use directly as an href.
+function findDoiUrl(ee) {
+  const urls = Array.isArray(ee) ? ee : (ee ? [ee] : []);
+  return urls.find(u => /^https?:\/\/doi\.org\//i.test(u)) || null;
+}
 
 export function Publications({ author, data, onOpenAuthor, selfPids }) {
   const pids = selfPids || [author.pid];
@@ -92,8 +103,9 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
 function Venue({ item }) {
   let link;
   let extra;
-  
-  const { type, venue, dblp: { pages, volume, number, year, journal, publisher, isbn } = {} } = item || {};
+
+  const { type, venue, dblp: { pages, volume, number, year, journal, publisher, isbn, ee } = {} } = item || {};
+  const doiUrl = findDoiUrl(ee);
 
   switch(type) {
     case 'article':
@@ -135,10 +147,17 @@ function Venue({ item }) {
               <span>{link}</span>
             </Tooltip>
           </a> 
-          : 
+          :
           link
         }
          {extra}
+        {doiUrl && (
+          <Tooltip title="View DOI" placement="bottom">
+            <a href={doiUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 6, verticalAlign: 'middle' }}>
+              <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+            </a>
+          </Tooltip>
+        )}
       </span>
     </span>
   );

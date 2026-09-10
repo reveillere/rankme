@@ -5,6 +5,21 @@ import fetch from './throttler.js';
 
 const BASE = 'https://api.crossref.org';
 
+// dblp's own <ee> element(s) -- usually a DOI link (https://doi.org/...),
+// but a record can have several (e.g. also an arXiv mirror), and a
+// repeated XML field comes back as an array rather than a lone string (see
+// admin.js's wireRecordParser) -- so this accepts either shape and returns
+// the bare DOI (Crossref's own API wants it without the URL prefix, same
+// as HAL's doiId_s already is) from the first entry that looks like one.
+export function extractDoi(ee) {
+    const urls = Array.isArray(ee) ? ee : (ee ? [ee] : []);
+    for (const url of urls) {
+        const match = /^https?:\/\/doi\.org\/(.+)$/i.exec(url);
+        if (match) return match[1];
+    }
+    return null;
+}
+
 // Crossref's own event/container metadata is far cleaner than HAL's
 // free-text conferenceTitle_s (typed by the depositor at submission time),
 // and it often carries an acronym HAL doesn't expose at all -- letting HAL
