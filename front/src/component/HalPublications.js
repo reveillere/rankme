@@ -17,6 +17,17 @@ import { DoiChip } from './DoiChip';
 // rows whose `item` reference actually changed do any work; a flush that
 // updates 5 ranks out of 10,400 costs roughly 5 rows' worth of rendering,
 // not 10,400.
+//
+// This does NOT fix the very first mount (measured at ~6.4s of blocking
+// main-thread work for the full 10,400-row list) or a filter that swaps in
+// a very different subset (every row is "new" from React's point of view
+// either way) -- only true list virtualization (rendering just the
+// currently-visible rows) fixes those, and a react-virtuoso attempt was
+// reverted here because its ResizeObserver-based measurement couldn't be
+// verified to work at all in this project's browser test tooling. If the
+// initial-load cost for an exceptionally large structure like LaBRI is
+// still a problem, that's the next thing to tackle -- carefully, with a
+// way to actually verify it first.
 const HalPublicationRow = React.memo(function HalPublicationRow({ item, displayYear, selfIds, onOpenAuthor, onSearchAuthor }) {
   const category = getHalCategory(item.type);
 
