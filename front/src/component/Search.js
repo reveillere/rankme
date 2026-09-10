@@ -190,10 +190,17 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
             </ToggleButtonGroup>
             {mode === 'name' ? (
                 <>
-                    <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
-                    {query.trim().length === 0
-                        ? <RecentSearches source={source} onOpenAuthor={onOpenAuthor} />
-                        : <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />}
+                    {/* position: relative -- AuthorSearchResults floats
+                        over whatever's below it (like Teams.js's own
+                        member search) instead of pushing it down the
+                        page, only while there's a live query; the empty-
+                        query Recent panel isn't a dropdown, it's its own
+                        section, so it stays in normal flow. */}
+                    <Box sx={{ position: 'relative', width: 400, maxWidth: '100%', margin: '0 auto' }}>
+                        <AuthorSearchForm source={source} query={query} onInputChange={handleInputChange} queryResult={queryResult} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
+                        {query.trim().length > 0 && <AuthorSearchResults source={source} queryResult={queryResult} queryStatus={queryStatus} onOpenAuthor={onOpenAuthor} />}
+                    </Box>
+                    {query.trim().length === 0 && <RecentSearches source={source} onOpenAuthor={onOpenAuthor} />}
                 </>
             ) : (
                 <AuthorIdForm source={source} onOpenAuthor={onOpenAuthor} disabled={dblpDisabled} />
@@ -334,7 +341,7 @@ function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAut
                     onOpenAuthor(SOURCES[source].toTab(queryResult[0]));
                 }
             }}
-            sx={{ p: '2px 4px', display: 'flex', marginBottom: '40px', alignItems: 'center', width: 400 }}
+            sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: '100%' }}
         >
             <IconButton sx={{ p: '10px' }} aria-label="menu">
                 <AccountCircle />
@@ -356,6 +363,10 @@ function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAut
 
 
 
+// Floats over whatever's below it (like Teams.js's own member search
+// dropdown) instead of pushing the rest of the page down every time a
+// result count changes -- the parent Box (see AuthorSearch's render)
+// supplies the position: relative this is anchored against.
 function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor }) {
 
     const Results = () => {
@@ -364,44 +375,33 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
                 <div key={i}>
                     <ListItem disablePadding>
                         <ListItemButton onClick={() => onOpenAuthor(SOURCES[source].toTab(elt))}>
-                            <div style={{ minWidth: '500px' }}>
-                                <PersonListItemText
-                                    name={elt.author}
-                                    affiliation={elt.affiliation}
-                                    idLabel={SOURCES[source].idLabel}
-                                    idValue={source === 'dblp' ? elt.pid : elt.id}
-                                />
-                            </div>
+                            <PersonListItemText
+                                name={elt.author}
+                                affiliation={elt.affiliation}
+                                idLabel={SOURCES[source].idLabel}
+                                idValue={source === 'dblp' ? elt.pid : elt.id}
+                            />
                         </ListItemButton>
                     </ListItem>
-                    <Divider />
+                    {i < queryResult.length - 1 && <Divider />}
                 </div>
             ));
 
-            return <List>{listItems}</List>;
-        } else return <div>No result!</div>;
+            return <List dense disablePadding>{listItems}</List>;
+        } else return <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>No result!</Typography>;
     };
 
-
     return (
-        <div>
+        <Paper sx={{ position: 'absolute', zIndex: 1, width: '100%', maxHeight: 320, overflow: 'auto', mt: 0.5 }}>
             {queryStatus === 'pending' && (
-                <Box
-                    sx={{
-                        display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        height: '100vh', // Viewport Height
-                    }}
-                >
-                    <IconButton sx={{ p: '10px' }} aria-label="menu">
-                        <CircularProgress /> Searching...
-                    </IconButton>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5 }}>
+                    <CircularProgress size={20} />
+                    <Typography variant="body2" color="text.secondary">Searching…</Typography>
                 </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
-            {queryStatus === 'error' && <div>Search failed, please try again.</div>}
-        </div>
+            {queryStatus === 'error' && <Typography variant="body2" color="error" sx={{ px: 2, py: 1.5 }}>Search failed, please try again.</Typography>}
+        </Paper>
     );
 }
 
