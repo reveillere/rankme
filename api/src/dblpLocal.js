@@ -167,9 +167,20 @@ function toPublication(doc, type, pidByName) {
         const pid = pidByName?.get(name);
         return { $: pid ? { pid } : {}, _: name };
     });
+    // dblp models a CoRR/arXiv report as a regular <article> (journal=
+    // "CoRR") -- structurally a journal entry, but not a peer-reviewed one,
+    // so no SJR quartile is meaningful for it and showing it alongside
+    // real journal articles is misleading. Reclassified as 'informal'
+    // (dblpCategories' own bucket for this, front/src/dblp.js) here, at
+    // the one place every dblp article gets shaped for the front end --
+    // that also takes it out of SJR ranking entirely, since
+    // authorStream.js's isRankable filter only matches 'inproceedings'/
+    // 'article'.
+    const isCoRR = type === 'article' && firstOf(doc.journal) === 'CoRR';
+    const effectiveType = isCoRR ? 'informal' : type;
     return {
-        type,
-        venue: firstOf(type === 'inproceedings' ? doc.booktitle : doc.journal),
+        type: effectiveType,
+        venue: firstOf(effectiveType === 'inproceedings' ? doc.booktitle : doc.journal),
         authors,
         dblp: {
             ...doc,
