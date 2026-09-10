@@ -21,6 +21,10 @@ import '../App.css';
 const yearAccessor = pub => pub.year;
 const categoryKeyAccessor = pub => getHalCategory(pub.type).cssClass;
 const portalAccessor = pub => pub.type === 'COMM' ? 'core' : 'sjr';
+// A stable (never-changing) empty array -- a `[]` literal inline in JSX is
+// a brand new reference every render, which would defeat HalPublicationRow's
+// React.memo for every single row on every render (see HalPublications.js).
+const NO_SELF_IDS = [];
 
 const Alert = React.forwardRef(function Alert(props, ref) {
   return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
@@ -138,7 +142,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       {/* A structure isn't a person, so no author in the list is ever
           "self" -- every author name is a clickable link, none underlined. */}
-      <HalPublications selfIds={[]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+      <HalPublications selfIds={NO_SELF_IDS} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

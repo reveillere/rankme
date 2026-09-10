@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 
@@ -70,6 +70,10 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
+  // A stable reference -- `[id]` as an inline JSX prop is a brand new array
+  // every render, which would defeat HalPublicationRow's React.memo for
+  // every row on every render (see HalPublications.js).
+  const selfIds = useMemo(() => [id], [id]);
 
   useEffect(() => {
     if (done) setShowCompleted(true);
@@ -118,7 +122,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
       <div style={{ height: '50px' }}></div>
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      <HalPublications selfIds={[id]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+      <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
 
       <Snackbar
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

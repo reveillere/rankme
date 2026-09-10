@@ -1,14 +1,35 @@
 const STORAGE_KEY = 'rankme:matchOverrides';
 const CLIENT_ID_KEY = 'rankme:clientId';
 
+// getOverride (called once per publication by RankBadge.js, Publications.js's
+// Venue, and the "Only show matches to review" filter's needsReview, see
+// below) used to call read() -- a fresh localStorage.getItem + JSON.parse --
+// on every single call. Harmless for one badge, but for a large author/
+// structure (LaBRI: ~10,400 publications) that's ~10,400 synchronous
+// localStorage round-trips on every list render, measured at multiple
+// SECONDS of main-thread time on its own -- almost certainly the single
+// biggest contributor to the tab freezing while ranks stream in. Cached in
+// memory instead; write() below keeps the cache in sync directly (no need
+// to even re-parse right after writing), and the native `storage` event
+// invalidates it if another tab/window changes the same localStorage key.
+let cachedOverrides = null;
+
 function read() {
+  if (cachedOverrides) return cachedOverrides;
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    return raw && typeof raw === 'object' ? raw : {};
+    cachedOverrides = raw && typeof raw === 'object' ? raw : {};
   } catch {
-    return {};
+    cachedOverrides = {};
   }
+  return cachedOverrides;
 }
+
+try {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) cachedOverrides = null;
+  });
+} catch { /* non-browser env */ }
 
 function write(overrides) {
   try {
@@ -16,6 +37,7 @@ function write(overrides) {
   } catch {
     // storage full/unavailable — overrides are best-effort, ignore
   }
+  cachedOverrides = overrides;
   notifyChange();
 }
 

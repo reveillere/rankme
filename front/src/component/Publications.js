@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
@@ -17,85 +17,120 @@ function findDoiUrl(ee) {
   return urls.find(u => /^https?:\/\/doi\.org\//i.test(u)) || null;
 }
 
+const title = (o) => {
+  if (typeof o === 'object')
+    return (<>
+      <i>{o.i}</i>{o._}</>
+    );
+  return <>{o}</>;
+}
+
+// A big author/team page re-flushes `data` on a timer while ranks stream in
+// (see useRankedPublications.js) -- each flush only actually changes a
+// handful of items, but every *other* item keeps the exact same object
+// reference (the flush mutates in place). Without memoizing the row itself,
+// React re-executes every row's render function on every flush regardless,
+// which is what actually froze the tab for a large list (see the identical
+// fix and its comment in HalPublications.js). pids/onOpenAuthor need to
+// stay referentially stable for this to pay off -- see the pids useMemo
+// below.
+const PublicationRow = React.memo(function PublicationRow({ item, nr, displayYear, pids, onOpenAuthor }) {
+  const year = item.dblp.year;
+  return (
+    <React.Fragment>
+      {displayYear && <li className="year">{year}</li>}
+      <li className={`entry ${item.type}`}>
+        <Tooltip title={dblpCategories[item.type].name} placement="left">
+          <div className="box">
+            <img alt="paper" src="https://dblp.org/img/n.png" />
+          </div>
+        </Tooltip>
+        <div className="nr">[{nr}]</div>
+        <div className="rank">
+        <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
+        </div>
+        <cite className='data'>
+          {
+            item.authors.length > 0
+              ? item.authors
+                .map((a, i) => (
+                  <span key={i} className="link">
+                    {!a.$.pid ? (
+                      // No pid for this author -- e.g. every
+                      // co-author from the local dump import (see
+                      // dblpLocal.js), which carries no per-author
+                      // pid at all -- so there's nothing to link
+                      // to or compare against pids/selfPids.
+                      <span>{trimLastDigits(a._)}</span>
+                    ) : !pids.includes(a.$.pid) ? (
+                      <a href="#" onClick={(e) => {
+                        e.preventDefault();
+                        onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
+                      }}>
+                        {trimLastDigits(a._)}
+                      </a>
+                    ) : (
+                      <span className="self-author">{trimLastDigits(a._)}</span>
+                    )}
+                  </span>
+                ))
+                .reduce((prev, curr) => [prev, ', ', curr])
+              : <span>No Authors Listed</span>
+          }
+          <br />
+          <span className='title'>
+            {title(item.dblp.title)}
+          </span>
+          <Venue item={item} />
+        </cite>
+      </li>
+    </React.Fragment>
+  );
+});
+
 export function Publications({ author, data, onOpenAuthor, selfPids }) {
-  const pids = selfPids || [author.pid];
-  const pubs = [...data].sort((a, b) => b.year - a.year);
-  const typeCounts = data.reduce((acc, curr) => {
-    acc[curr.type] = (acc[curr.type] || 0) + 1;
-    return acc;
-  }, {});
+  // A stable reference -- `selfPids || [author.pid]` would otherwise
+  // recompute to a brand new array every render (breaking PublicationRow's
+  // memoization above for every single row), even though the actual pid
+  // list only ever changes if selfPids or author.pid themselves change.
+  // author itself is undefined for Team.js's dblp path (selfPids always
+  // provided there instead) -- optional chaining so that path never
+  // touches author.pid at all, consistent with the pre-existing fallback.
+  const pids = useMemo(() => selfPids || [author?.pid], [selfPids, author?.pid]);
 
-  let previousYear = null;
-
-  const title = (o) => {
-    if (typeof o === 'object')
-      return (<>
-        <i>{o.i}</i>{o._}</>
-      );
-    return <>{o}</>;
-  }
-
+  // nr (e.g. "[j5]") numbers each publication within its own category, most
+  // recent first -- depends on iteration order over the sorted list, not
+  // just the item itself, so it's precomputed here in one pass rather than
+  // inside the (memoized, per-item-only) row above.
+  const rows = useMemo(() => {
+    const pubs = [...data].sort((a, b) => b.year - a.year);
+    const typeCounts = data.reduce((acc, curr) => {
+      acc[curr.type] = (acc[curr.type] || 0) + 1;
+      return acc;
+    }, {});
+    let previousYear = null;
+    return pubs.map((item) => {
+      const displayYear = previousYear !== item.dblp.year;
+      previousYear = item.dblp.year;
+      const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
+      return { item, nr, displayYear };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   return (
     <div>
       <ul className='publ-list'>
-        {pubs.map((item) => {
-          const year = item.dblp.year;
-          const displayYear = previousYear !== year;
-          previousYear = year;
-          const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
-
-          return (
-            <React.Fragment key={item.dblp.url}>
-              {displayYear && <li className="year">{year}</li>}
-              <li className={`entry ${item.type}`}>
-                <Tooltip title={dblpCategories[item.type].name} placement="left">
-                  <div className="box">
-                    <img alt="paper" src="https://dblp.org/img/n.png" />
-                  </div>
-                </Tooltip>
-                <div className="nr">[{nr}]</div>
-                <div className="rank">
-                <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
-                </div>
-                <cite className='data'>
-                  {
-                    item.authors.length > 0
-                      ? item.authors
-                        .map((a, i) => (
-                          <span key={i} className="link">
-                            {!a.$.pid ? (
-                              // No pid for this author -- e.g. every
-                              // co-author from the local dump import (see
-                              // dblpLocal.js), which carries no per-author
-                              // pid at all -- so there's nothing to link
-                              // to or compare against pids/selfPids.
-                              <span>{trimLastDigits(a._)}</span>
-                            ) : !pids.includes(a.$.pid) ? (
-                              <a href="#" onClick={(e) => {
-                                e.preventDefault();
-                                onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
-                              }}>
-                                {trimLastDigits(a._)}
-                              </a>
-                            ) : (
-                              <span className="self-author">{trimLastDigits(a._)}</span>
-                            )}
-                          </span>
-                        ))
-                        .reduce((prev, curr) => [prev, ', ', curr])
-                      : <span>No Authors Listed</span>
-                  }
-                  <br />
-                  <span className='title'>
-                    {title(item.dblp.title)}
-                  </span>
-                  <Venue item={item} />
-                </cite>
-              </li>
-            </React.Fragment>
-          );
-        })}
+        {rows.map(({ item, nr, displayYear }) => (
+          <PublicationRow
+            key={item.dblp.url}
+            item={item}
+            nr={nr}
+            displayYear={displayYear}
+            pids={pids}
+            onOpenAuthor={onOpenAuthor}
+          />
+        ))}
       </ul>
     </div>
   );
@@ -179,7 +214,7 @@ function Venue({ item }) {
     case 'book':
       extra = <>{venue} {year} {pages}</>;
       break;
-    case 'incollection': 
+    case 'incollection':
       extra = <>{venue} {year} {pages} ({year})</>;
       break;
     default:
@@ -202,13 +237,3 @@ function Venue({ item }) {
     </span>
   );
 }
-
-
-
-
-
-
-
-
-
-
