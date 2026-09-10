@@ -182,20 +182,29 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, s
       // properties of undefined (reading 'key')").
       initialItemCount={Math.min(30, rows.length)}
       data={rows}
-      computeItemKey={(index, row) => row.key}
+      // row can still be undefined for a transient render -- see
+      // Publications.js's identical comment: `data` can change length
+      // between one flush and the next (a publication's filter/review-only
+      // inclusion can depend on its rank, which arrives asynchronously),
+      // and Virtuoso's own internal range tracking can briefly ask for an
+      // index one tick behind that change. Defensive fallbacks here so that
+      // one-tick mismatch never crashes the page.
+      computeItemKey={(index, row) => row?.key ?? `missing-${index}`}
       components={{ List: HalList, Item: HalItem }}
-      itemContent={(index, row) => row.kind === 'year'
-        ? (row.year || '?')
-        : (
-          <HalPublicationRow
-            item={row.item}
-            category={row.category}
-            selfIds={selfIds}
-            onOpenAuthor={onOpenAuthor}
-            onSearchAuthor={onSearchAuthor}
-            sharedMaps={sharedMaps}
-          />
-        )}
+      itemContent={(index, row) => !row
+        ? null
+        : row.kind === 'year'
+          ? (row.year || '?')
+          : (
+            <HalPublicationRow
+              item={row.item}
+              category={row.category}
+              selfIds={selfIds}
+              onOpenAuthor={onOpenAuthor}
+              onSearchAuthor={onSearchAuthor}
+              sharedMaps={sharedMaps}
+            />
+          )}
     />
   );
 }

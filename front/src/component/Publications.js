@@ -211,11 +211,23 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       // properties of undefined (reading 'key')").
       initialItemCount={Math.min(30, rows.length)}
       data={rows}
-      computeItemKey={(index, row) => row.key}
+      // row can still be undefined for a transient render: `data`
+      // (filteredRecords, computed in the container's effect) can change
+      // length between one flush and the next as ranks resolve -- a
+      // publication's filter/review-only inclusion can depend on its rank,
+      // which arrives asynchronously -- and Virtuoso's own internal range
+      // tracking can briefly ask for an index one tick behind that change.
+      // Defensive fallbacks here (rather than trying to prevent the
+      // transient length change upstream) so that one-tick mismatch never
+      // crashes the whole page; the next render immediately after has the
+      // correct, up-to-date rows.
+      computeItemKey={(index, row) => row?.key ?? `missing-${index}`}
       components={{ List: PublicationsList, Item: PublicationsItem }}
-      itemContent={(index, row) => row.kind === 'year'
-        ? row.year
-        : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} />}
+      itemContent={(index, row) => !row
+        ? null
+        : row.kind === 'year'
+          ? row.year
+          : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} />}
     />
   );
 }
