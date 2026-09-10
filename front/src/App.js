@@ -247,12 +247,16 @@ function App() {
             // Materializes each opened author/team/structure as its own
             // small card sitting on the tab bar -- distinct from the
             // plain Author/Teams/Structure tabs to its left, which are
-            // navigation itself rather than "a page you have open".
+            // navigation itself rather than "a page you have open". A
+            // lighter base grey (vs. the first attempt) leaves room for the
+            // selected one to actually read as more prominent, not just
+            // differently-colored.
             sx={{
-              backgroundColor: '#eeeeee',
+              backgroundColor: tab.id === activeTabId ? '#e0e0e0' : '#f5f5f5',
+              fontWeight: tab.id === activeTabId ? 700 : 400,
               borderTopLeftRadius: 8,
               borderTopRightRadius: 8,
-              minHeight: 40,
+              minHeight: 32,
               mx: 0.5,
             }}
             label={

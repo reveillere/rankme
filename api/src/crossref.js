@@ -20,6 +20,9 @@ export function extractDoi(ee) {
     return null;
 }
 
+const LONG_TTL_S = 60 * 60 * 24 * 365; // 1 year: published DOI metadata rarely changes, and Crossref genuinely having no useful venue info for a DOI is a stable fact too
+const FAILURE_TTL_S = 60 * 60 * 4; // 4 hours: a 429/timeout/network error is transient -- caching that for a year would bake in a rate-limit hit or a blip long after Crossref would have happily answered again
+
 // Crossref's own event/container metadata is far cleaner than HAL's
 // free-text conferenceTitle_s (typed by the depositor at submission time),
 // and it often carries an acronym HAL doesn't expose at all -- letting HAL
@@ -28,11 +31,18 @@ export function extractDoi(ee) {
 export async function getVenueInfo(doi) {
     const key = `crossref:venue:${doi}`;
 
-    let info = await cache.get(key);
-    if (info == null) {
-        info = await fetchVenueInfo(doi);
-        cache.set(key, info, 60 * 60 * 24 * 90); // 90 days: published DOI metadata rarely changes
-    }
+    // Wrapped in { info } rather than caching the bare value: a DOI with no
+    // useful venue info at all is a legitimate, cacheable result (info:
+    // null), but cache.get() returns bare `null` for a cache MISS too --
+    // without the wrapper the two are indistinguishable, and every such DOI
+    // (including one that failed 429 rate-limiting, see fetchVenueInfo) was
+    // silently refetched from Crossref on every single call instead of ever
+    // actually being cached.
+    const cached = await cache.get(key);
+    if (cached !== null) return cached.info;
+
+    const { info, ttlS } = await fetchVenueInfo(doi);
+    cache.set(key, { info }, ttlS);
     return info;
 }
 
@@ -41,7 +51,7 @@ async function fetchVenueInfo(doi) {
         const resp = await fetch(`${BASE}/works/${encodeURIComponent(doi)}`);
         const data = await resp.json();
         const work = data?.message;
-        if (!work) return null;
+        if (!work) return { info: null, ttlS: LONG_TTL_S };
 
         // Springer records list the series name first, then the actual
         // proceedings/book title (e.g. ["Lecture Notes in Computer Science",
@@ -51,10 +61,10 @@ async function fetchVenueInfo(doi) {
         const fullName = containerTitles[containerTitles.length - 1] || work.event?.name || null;
         const acronym = extractAcronym(work, fullName);
 
-        return (fullName || acronym) ? { fullName, acronym } : null;
+        return { info: (fullName || acronym) ? { fullName, acronym } : null, ttlS: LONG_TTL_S };
     } catch (error) {
         console.log('[crossref] Error fetching venue info for', doi, ':', error.message);
-        return null;
+        return { info: null, ttlS: FAILURE_TTL_S };
     }
 }
 
