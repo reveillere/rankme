@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import Box from '@mui/material/Box';
 import TextField from '@mui/material/TextField';
+import InputBase from '@mui/material/InputBase';
 import Button from '@mui/material/Button';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -19,6 +20,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import GroupsIcon from '@mui/icons-material/Groups';
 import AddIcon from '@mui/icons-material/Add';
+import AccountCircle from '@mui/icons-material/AccountCircle';
 
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
@@ -222,15 +224,27 @@ export default function Teams({ onOpenAuthor }) {
 
         {mode === 'name' ? (
           <Box sx={{ position: 'relative' }}>
-            <TextField
-              placeholder="Author name"
-              value={query}
-              onChange={e => handleQueryChange(e.target.value)}
-              fullWidth
-              size="small"
-            />
+            {/* Same Paper + icon + InputBase shape as Search.js's
+                AuthorSearchForm -- was a plain TextField here, which looked
+                like a different, unrelated search control. */}
+            <Paper
+              component="form"
+              onSubmit={e => e.preventDefault()}
+              sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: '100%' }}
+            >
+              <IconButton sx={{ p: '10px' }} aria-label="menu">
+                <AccountCircle />
+              </IconButton>
+              <InputBase
+                sx={{ ml: 1, flex: 1 }}
+                placeholder="Author name"
+                inputProps={{ 'aria-label': 'Author name' }}
+                value={query}
+                onChange={e => handleQueryChange(e.target.value)}
+              />
+            </Paper>
             {results.length > 0 && (
-              <Paper sx={{ position: 'absolute', zIndex: 1, width: '100%', maxHeight: 240, overflow: 'auto' }}>
+              <Paper sx={{ position: 'absolute', zIndex: 1, width: '100%', maxHeight: 240, overflow: 'auto', mt: 0.5 }}>
                 <List dense>
                   {results.map((r, i) => (
                     <ListItem key={i} disablePadding>
@@ -244,18 +258,28 @@ export default function Teams({ onOpenAuthor }) {
             )}
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <TextField
+          // Same Paper + icon + InputBase shape as Search.js's
+          // AuthorIdForm, with Teams' own "Add to the working list" button
+          // in place of Author's "Open" (which opens a tab immediately).
+          <Paper
+            component="form"
+            onSubmit={e => { e.preventDefault(); if (idInput.trim()) addMember(idInput.trim(), idInput.trim()); }}
+            sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: '100%' }}
+          >
+            <IconButton sx={{ p: '10px' }} aria-label="menu">
+              <AccountCircle />
+            </IconButton>
+            <InputBase
+              sx={{ ml: 1, flex: 1 }}
               placeholder={SOURCES[source].idPlaceholder}
+              inputProps={{ 'aria-label': SOURCES[source].idLabel }}
               value={idInput}
               onChange={e => setIdInput(e.target.value)}
-              fullWidth
-              size="small"
             />
-            <Button variant="outlined" disabled={!idInput.trim()} onClick={() => addMember(idInput.trim(), idInput.trim())}>
+            <IconButton type="submit" disabled={!idInput.trim()} aria-label="add member">
               <AddIcon fontSize="small" />
-            </Button>
-          </Box>
+            </IconButton>
+          </Paper>
         )}
 
         {members.length > 0 && (
