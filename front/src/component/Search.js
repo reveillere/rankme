@@ -8,7 +8,6 @@ import AccountCircle from '@mui/icons-material/AccountCircle';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
-import ListItemText from '@mui/material/ListItemText';
 import CircularProgress from '@mui/material/CircularProgress';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
@@ -28,6 +27,7 @@ import { searchAuthor as searchAuthorDblp, fetchAuthor as fetchAuthorDblp, fetch
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getCachedSearch, setCachedSearch } from '../searchCache';
 import { getSearchHistory, removeSearchHistoryByType } from '../searchHistory';
+import { PersonListItemText } from './PersonListItemText';
 import HistoryIcon from '@mui/icons-material/History';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
@@ -355,31 +355,6 @@ function AuthorSearchForm({ source, query, onInputChange, queryResult, onOpenAut
 
 
 
-
-// Shared row content for a person (author) entry, used by both the live
-// search results below and RecentSearches, so a name looks the same
-// whether it came from a fresh query or from history.
-function PersonListItemText({ name, affiliation, idLabel, idValue }) {
-    return (
-        <ListItemText
-            primary={<span style={{ fontWeight: 'bold' }}>{name}</span>}
-            secondary={
-                <>
-                    {(affiliation || []).map((affil, index) => (
-                        <span key={index} style={{ fontStyle: 'italic', display: 'block' }}>
-                            {affil}
-                        </span>
-                    ))}
-                    {idValue && (
-                        <span style={{ fontFamily: 'monospace', fontSize: '0.85em', color: 'gray', display: 'block' }}>
-                            {idLabel}: {idValue}
-                        </span>
-                    )}
-                </>
-            }
-        />
-    );
-}
 
 function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor }) {
 

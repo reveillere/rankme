@@ -25,6 +25,7 @@ import AccountCircle from '@mui/icons-material/AccountCircle';
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getTeams, createTeam, updateTeam, deleteTeam } from '../teamStore';
+import { PersonListItemText } from './PersonListItemText';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 400;
@@ -245,13 +246,20 @@ export default function Teams({ onOpenAuthor }) {
             </Paper>
             {results.length > 0 && (
               <Paper sx={{ position: 'absolute', zIndex: 1, width: '100%', maxHeight: 240, overflow: 'auto', mt: 0.5 }}>
-                <List dense>
+                <List dense disablePadding>
                   {results.map((r, i) => (
-                    <ListItem key={i} disablePadding>
-                      <ListItemButton onClick={() => addMember(SOURCES[source].resultId(r), SOURCES[source].resultLabel(r))}>
-                        <ListItemText primary={SOURCES[source].resultLabel(r)} secondary={SOURCES[source].resultId(r)} />
-                      </ListItemButton>
-                    </ListItem>
+                    <div key={i}>
+                      <ListItem disablePadding>
+                        <ListItemButton onClick={() => addMember(SOURCES[source].resultId(r), SOURCES[source].resultLabel(r))}>
+                          <PersonListItemText
+                            name={SOURCES[source].resultLabel(r)}
+                            idLabel={SOURCES[source].idLabel}
+                            idValue={SOURCES[source].resultId(r)}
+                          />
+                        </ListItemButton>
+                      </ListItem>
+                      {i < results.length - 1 && <Divider />}
+                    </div>
                   ))}
                 </List>
               </Paper>
