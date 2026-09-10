@@ -280,11 +280,17 @@ function App() {
         <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
           {tab.type === 'search' && <AuthorSearch onOpenAuthor={openAuthorTab} searchRequest={searchRequest} />}
           {tab.type === 'teams' && <Teams onOpenAuthor={openAuthorTab} />}
-          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} onNameResolved={(name) => updateTabInfo(tab.id, { label: name })} />}
-          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { authorName: name, label: name })} />}
-          {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} />}
+          {/* isActive (tab.id === activeTabId) is threaded down to each of
+              these four's Publications/HalPublications so a backgrounded
+              tab's row list can skip rendering entirely instead of
+              reconciling on every streamed SSE flush behind display:none --
+              the rest of each page (chart, summary, filters) stays as cheap
+              as it already was and keeps re-rendering normally. */}
+          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} onNameResolved={(name) => updateTabInfo(tab.id, { label: name })} isActive={tab.id === activeTabId} />}
+          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { authorName: name, label: name })} isActive={tab.id === activeTabId} />}
+          {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
           {tab.type === 'structures' && <StructureSearch onOpenStructure={openAuthorTab} />}
-          {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} />}
+          {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} isActive={tab.id === activeTabId} />}
         </div>
       ))}
     </div>

@@ -1,4 +1,5 @@
 import * as cache from './cache.js';
+import { dedupeInFlight } from './inFlight.js';
 
 import fetch from './throttler.js';
 
@@ -67,15 +68,26 @@ export async function controllerAuthor(req, res) {
     }
 }
 
+// Two tabs opening the same author at once (both hitting a cold cache) would
+// otherwise both page all the way through HAL's Solr results independently
+// -- deduped via inFlightAuthorPublications (see dedupeInFlight) instead.
+const inFlightAuthorPublications = new Map();
+
 export async function getAuthorPublications(id) {
     const key = `hal:author:${id}`;
 
-    let publications = await cache.get(key);
-    if (publications == null) {
-        publications = await fetchAuthorPublications(id);
-        cache.set(key, publications, 60 * 60 * 24); // 1 day
-    }
-    return publications;
+    const cached = await cache.get(key);
+    if (cached !== null) return cached;
+
+    return dedupeInFlight(inFlightAuthorPublications, key, async () => {
+        const publications = await fetchAuthorPublications(id);
+        // Awaited -- see corePortal.js's identical comment on its own
+        // dedupeInFlight callers: without this, the map entry above is
+        // cleared before the Redis write lands, leaving a gap where a
+        // caller arriving just after can miss both and re-fetch anyway.
+        await cache.set(key, publications, 60 * 60 * 24); // 1 day
+        return publications;
+    });
 }
 
 // authIdHalFullName_fs entries look like "<idHal_s>_FacetSep_<Full Name>",
@@ -241,15 +253,25 @@ export async function controllerStructurePublications(req, res) {
     }
 }
 
+// Same race as getAuthorPublications above, and the one that actually
+// prompted this fix: a lab-scale structure (LaBRI: 10000+ records, paged
+// PAGE_SIZE at a time) opened in two tabs at once would otherwise double
+// both the HAL fetch cost and the memory held by two independent copies of
+// the full page set while they're in flight.
+const inFlightStructurePublications = new Map();
+
 export async function getStructurePublications(id) {
     const key = `hal:structure:${id}`;
 
-    let publications = await cache.get(key);
-    if (publications == null) {
-        publications = await fetchStructurePublications(id);
-        cache.set(key, publications, 60 * 60 * 24); // 1 day
-    }
-    return publications;
+    const cached = await cache.get(key);
+    if (cached !== null) return cached;
+
+    return dedupeInFlight(inFlightStructurePublications, key, async () => {
+        const publications = await fetchStructurePublications(id);
+        // Awaited -- see getAuthorPublications above.
+        await cache.set(key, publications, 60 * 60 * 24); // 1 day
+        return publications;
+    });
 }
 
 async function fetchStructurePublications(structId) {

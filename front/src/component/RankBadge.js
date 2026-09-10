@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { RankDetailsPopover, MATCH_STYLE } from './RankDetailsPopover';
-import { getOverride, getSharedOverride, fetchSharedOverrides, getUseCommunityOverrides } from '../matchOverrides';
+import { getOverride, getSharedOverride } from '../matchOverrides';
 
 // A rank badge is clickable: it opens RankDetailsPopover, which shows what
 // year/edition it was computed against, what it matched (or why it
@@ -13,27 +13,27 @@ import { getOverride, getSharedOverride, fetchSharedOverrides, getUseCommunityOv
 // title for this record's DOI, when authorStream.js's DOI fallback found
 // one -- passed through so the popover can show it even on a match it
 // *didn't* end up replacing (see RankDetailsPopover's own note on this).
-export function RankBadge({ rank, portal, year, resolvedFullName }) {
+//
+// sharedMaps ({ core, sjr }, or {} while loading/disabled) comes from a
+// single useSharedOverridesMaps() call at the container (Author.js,
+// AuthorHal.js, Structure.js, Team.js) and is threaded down through
+// Publications.js/HalPublications.js's row components -- this badge used to
+// call fetchSharedOverrides itself, which meant every single badge on a
+// large list independently subscribed and re-rendered on resolution.
+//
+// onOverrideChange is threaded the other way: it comes from the enclosing
+// PublicationRow/HalPublicationRow (a per-*row* callback, not a page-wide
+// one) and is just forwarded to the popover below. A personal override
+// change doesn't touch the underlying publication object at all (only what
+// localStorage says about it), so nothing about this row's props changes
+// when one happens -- calling this forces just the one row that made the
+// change to re-render, without the page-wide 'rankme:overridechange' window
+// event this badge used to listen for directly (that's still dispatched by
+// matchOverrides.js's write(), and still drives useOverrideRefreshTick()
+// for the review-count/filter recompute at the container -- just not this).
+export function RankBadge({ rank, portal, year, resolvedFullName, sharedMaps, onOverrideChange }) {
   const [anchorEl, setAnchorEl] = useState(null);
-  // Bumped after a local override is set/cleared to force this render to
-  // re-read localStorage below. NOT computed once via useState(() => ...):
-  // ranks stream in over SSE well after this component first mounts (with
-  // rank still undefined), so a one-time initializer would permanently miss
-  // an override that was already saved for this exact match on an earlier
-  // visit -- it would only ever "see" one set live in the current session.
-  const [refreshTick, setRefreshTick] = useState(0);
-  // Community-confirmed corrections for this portal, fetched once and
-  // shared across every RankBadge on the page (see fetchSharedOverrides) --
-  // null until it resolves, at which point this one badge re-renders to
-  // pick it up. Skipped entirely when the user has turned the feature off.
-  const [sharedMap, setSharedMap] = useState(null);
-
-  useEffect(() => {
-    if (!getUseCommunityOverrides()) return;
-    let cancelled = false;
-    fetchSharedOverrides(portal).then(m => { if (!cancelled) setSharedMap(m); });
-    return () => { cancelled = true; };
-  }, [portal]);
+  const sharedMap = sharedMaps?.[portal];
 
   if (!rank) return null;
 
@@ -72,7 +72,7 @@ export function RankBadge({ rank, portal, year, resolvedFullName }) {
           override={override}
           sharedOverride={sharedOverride}
           resolvedFullName={resolvedFullName}
-          onOverrideChange={() => setRefreshTick(t => t + 1)}
+          onOverrideChange={onOverrideChange}
         />
       )}
     </>

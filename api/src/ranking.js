@@ -9,6 +9,20 @@ import * as activeStreams from './activeStreams.js';
 // keeps peak memory flat regardless of how many publications an author has.
 const ranking_limiter = new Bottleneck({ maxConcurrent: 8 });
 
+// Bottleneck's priority is 0 (highest) .. 9 (lowest), default 5 -- a job at
+// priority 4 always runs before one at 5 regardless of arrival order (see
+// bottleneck.d.ts's JobOptions). Without this, a single global FIFO queue
+// meant a huge structure (thousands of items) could occupy every
+// maxConcurrent slot ahead of a second user's tiny 20-item author lookup,
+// which would otherwise finish almost instantly once actually scheduled.
+// Three tiers is enough -- nothing here is latency-sensitive enough to need
+// a continuous function of item count, just "small requests go first".
+function priorityFor(total) {
+    if (total < 50) return 2;
+    if (total < 500) return 5;
+    return 8;
+}
+
 // Exposed for the admin dashboard: job-level queue pressure, separate from
 // activeStreams' session-level ("how many browsers are waiting") view.
 export function status() {
@@ -53,10 +67,11 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
     const total = rankableIndices.length;
     sse.send('init', { publications: items, total });
 
+    const priority = priorityFor(total);
     const streamId = activeStreams.register(label);
     try {
         let completed = 0;
-        await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(async () => {
+        await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule({ priority }, async () => {
             // The client is already gone -- skip starting work that would
             // just be computed into a dead socket. A task already picked up
             // by the limiter before the disconnect still runs to

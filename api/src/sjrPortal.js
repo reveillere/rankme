@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import fetch from './throttler.js';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
+import { dedupeInFlight } from './inFlight.js';
 import { getVenueFullName }  from './dblp.js';
 import { getClient } from './db.js';
 import { readFile } from 'fs/promises';
@@ -383,15 +384,32 @@ export async function controllerRank2(req, res) {
     }
 }
 
+// Concurrent calls for the same (year, fullName) -- e.g. two publications
+// citing the same journal, ranked within the same ranking_limiter batch or
+// across two different browser sessions -- are deduped via inFlightByFullName
+// (see dedupeInFlight) rather than each running computeRank's full year-data
+// scan independently.
+const inFlightByFullName = new Map();
+
 export async function getRankByFullName(fullName, year) {
     const key = `rank:${year}:sjr:${fullName}`;
 
-    let rank = await cache.get(key);
-    if (rank === null) {
-        rank = await computeRank(fullName, year);
-        cache.set(key, rank, RANK_CACHE_TTL_S);
-    }
-    return rank;
+    const rank = await cache.get(key);
+    if (rank !== null) return rank;
+
+    return dedupeInFlight(inFlightByFullName, key, async () => {
+        const result = await computeRank(fullName, year);
+        // Awaited (unlike cache.set's usual fire-and-forget elsewhere): the
+        // in-flight map entry above is removed the instant this wrapper's
+        // promise settles (see dedupeInFlight), so a caller arriving between
+        // "computed" and "actually written to Redis" would otherwise sail
+        // past both the map (already cleared) and cache.get (not yet
+        // written) and recompute anyway -- observed happening under real
+        // concurrent load (corePortal.js's equivalent) while verifying this
+        // fix.
+        await cache.set(key, result, RANK_CACHE_TTL_S);
+        return result;
+    });
 }
 
 export default { load }

@@ -33,7 +33,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 // initial view of this page.
 const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
-export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved }) {
+export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
   const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/author-stream/${id}`);
 
   if (failed && rankedPublications === null) {
@@ -56,11 +56,12 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onName
       publications={rankedPublications}
       progress={progress}
       done={done}
+      isActive={isActive}
     />
   );
 }
 
-function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done }) {
+function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done, isActive }) {
   // A tab opened directly by id (or reloaded from a bare /hal/:id URL)
   // doesn't know this author's display name yet -- unlike a structure (see
   // Structure.js's structure-info lookup), HAL has no per-author name
@@ -156,7 +157,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
       <div style={{ height: '50px' }}></div>
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+      <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
 
       <Snackbar
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

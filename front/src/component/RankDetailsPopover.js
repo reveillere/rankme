@@ -121,7 +121,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
       const match = found.find(c => c.id === override.candidate.id);
       if (match?.currentValue) {
         const patched = patchOverrideCandidate(override.key, { currentSource: match.currentSource, currentValue: match.currentValue, currentRawValue: match.currentRawValue ?? null });
-        if (patched) onOverrideChange(patched);
+        if (patched) onOverrideChange();
       }
     });
     return () => { cancelled = true; };
@@ -140,20 +140,30 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
     }, DEBOUNCE_MS);
   };
 
+  // Each of these persists via matchOverrides.js's write(), which dispatches
+  // 'rankme:overridechange' globally (picked up by the container's
+  // useOverrideRefreshTick(), for the review-count/filter recompute) -- but
+  // that alone doesn't touch *this* row's own rendered output, since the
+  // underlying publication object itself never changes, only what
+  // localStorage says about it. onOverrideChange (threaded down from
+  // PublicationRow/HalPublicationRow via RankBadge.js) forces just this one
+  // row to re-render with the fresh override, without touching any other
+  // row -- see PublicationRow's own comment for why a global signal isn't
+  // used here.
   const pickCandidate = (candidate) => {
-    const entry = setOverride({ portal, rank, year, candidate });
-    onOverrideChange(entry);
+    setOverride({ portal, rank, year, candidate });
+    onOverrideChange();
     onClose();
   };
 
   const confirmThisMatch = () => {
-    const entry = confirmMatch({ portal, rank, year });
-    onOverrideChange(entry);
+    confirmMatch({ portal, rank, year });
+    onOverrideChange();
   };
 
   const resetToAutomatic = () => {
     clearOverride(override.key);
-    onOverrideChange(null);
+    onOverrideChange();
     onClose();
   };
 

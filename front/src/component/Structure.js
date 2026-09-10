@@ -42,7 +42,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 // when the tab was opened from a search result -- opened directly by id (or
 // reloaded from a bare /structure/:id URL) it arrives undefined, so the name
 // is looked up here instead of just falling back to showing the raw id.
-export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved }) {
+export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
   const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/structure-stream/${structId}`);
   const [resolvedName, setResolvedName] = useState(structureName);
 
@@ -81,11 +81,12 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
       publications={rankedPublications}
       progress={progress}
       done={done}
+      isActive={isActive}
     />
   );
 }
 
-function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done }) {
+function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, isActive }) {
   // Years are already known from the initial SSE `init` payload -- only
   // `.rank` fields arrive later -- so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -158,7 +159,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       {/* A structure isn't a person, so no author in the list is ever
           "self" -- every author name is a clickable link, none underlined. */}
-      <HalPublications selfIds={NO_SELF_IDS} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
+      <HalPublications selfIds={NO_SELF_IDS} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

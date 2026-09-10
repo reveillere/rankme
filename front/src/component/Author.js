@@ -37,7 +37,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 // initial view of this page.
 const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
-export function Author({ pid, onOpenAuthor, onNameResolved }) {
+export function Author({ pid, onOpenAuthor, onNameResolved, isActive }) {
   const [author, setAuthor] = useState(null);
 
   useEffect(() => {
@@ -62,13 +62,13 @@ export function Author({ pid, onOpenAuthor, onNameResolved }) {
   if (author === null)
     return <LoadingSpinner message="Fetching author from DBLP…" />;
 
-  return <AuthorShow author={author?.dblpperson?.$} pid={pid} onOpenAuthor={onOpenAuthor} />;
+  return <AuthorShow author={author?.dblpperson?.$} pid={pid} onOpenAuthor={onOpenAuthor} isActive={isActive} />;
 }
 
 
 
 
-function AuthorShow({ author, pid, onOpenAuthor }) {
+function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
   const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}`);
 
   if (failed && rankedPublications === null)
@@ -77,7 +77,7 @@ function AuthorShow({ author, pid, onOpenAuthor }) {
   if (rankedPublications === null)
     return <LoadingSpinner message="Computing ranks…" progress={progress} />;
 
-  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} onOpenAuthor={onOpenAuthor} />;
+  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} onOpenAuthor={onOpenAuthor} isActive={isActive} />;
 }
 
 
@@ -86,7 +86,7 @@ function AuthorShow({ author, pid, onOpenAuthor }) {
 const yearAccessor = pub => pub.dblp.year;
 const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 
-function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor }) {
+function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor, isActive }) {
   // Years are already known from the initial SSE `init` payload — only
   // `.rank` fields arrive later — so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -154,7 +154,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
 
       <div style={{ height: '50px' }}></div>
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} />
+      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} isActive={isActive} />
 
       <Snackbar
         anchorOrigin={{

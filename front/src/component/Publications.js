@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { dblpCategories } from '../dblp';
 import '../App.css';
@@ -6,7 +6,7 @@ import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
 import { RankBadge } from './RankBadge';
 import { DoiChip } from './DoiChip';
-import { getOverride, getSharedOverride, fetchSharedOverrides, getUseCommunityOverrides } from '../matchOverrides';
+import { getOverride, getSharedOverride } from '../matchOverrides';
 
 // dblp's own <ee> element(s) -- usually a DOI link, but a record can carry
 // several (e.g. also an arXiv mirror) and a repeated field comes back as an
@@ -36,11 +36,34 @@ const title = (o) => {
 // stay referentially stable for this to pay off -- see the pids useMemo
 // below.
 //
+// sharedMaps is threaded all the way down from the container (see
+// Publications() below) instead of RankBadge/Venue each fetching it
+// themselves -- see RankBadge.js's own comment. It only ever changes once,
+// when the community-overrides fetch resolves, so including it here doesn't
+// cost anything beyond that one occasion.
+//
+// A *personal* override change is handled differently: setting/confirming/
+// clearing one doesn't touch the publication object itself (only what
+// localStorage says about it), so nothing about this row's props changes
+// when it happens -- the only way to see it is a callback (overrideChangeTick
+// below), bubbled up from wherever inside this row actually made the change
+// (currently only RankBadge -> RankDetailsPopover, see RankBadge.js), that
+// forces *this* row's own state to change instead. That's deliberately
+// row-scoped, not a page-wide signal: it's what lets React.memo below still
+// skip every *other* row when one row's match gets corrected, on a page
+// that can have thousands of them (see this file's other row-froze comment).
+// The trade-off is that a different row sharing the exact same (portal,
+// edition, venue text) override key won't visually update until it
+// re-renders for some other reason (e.g. the next streamed flush, or a
+// filter change) -- acceptable since that's a rare coincidence, not the
+// common case this fix targets.
+//
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <type>" className) moved to PublicationsItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor }) {
+const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor, sharedMaps }) {
   const year = item.dblp.year;
+  const [, forceRowRefresh] = useState(0);
   return (
     <>
       <Tooltip title={dblpCategories[item.type].name} placement="left">
@@ -50,7 +73,7 @@ const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOp
       </Tooltip>
       <div className="nr">[{nr}]</div>
       <div className="rank">
-      <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
+      <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {
@@ -84,7 +107,7 @@ const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOp
         <span className='title'>
           {title(item.dblp.title)}
         </span>
-        <Venue item={item} />
+        <Venue item={item} sharedMaps={sharedMaps} />
       </cite>
     </>
   );
@@ -104,7 +127,16 @@ const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row,
   return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
-export function Publications({ author, data, onOpenAuthor, selfPids }) {
+// sharedMaps: see PublicationRow's own comment above -- comes from one
+// useSharedOverridesMaps() call at the container (Author.js/Team.js) and is
+// threaded down to every row. isActive is false for a tab currently sitting
+// behind another one (see App.js) -- the row list is the expensive part of
+// this page (it's what re-renders on every streamed SSE flush, ~7x/second
+// while a stream is active), so it's skipped entirely while backgrounded;
+// the data-fetching hook that owns the actual SSE subscription lives in the
+// caller (AuthorContent et al.), not here, so it keeps accumulating
+// regardless and switching back shows current data immediately.
+export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps, isActive = true }) {
   // A stable reference -- `selfPids || [author.pid]` would otherwise
   // recompute to a brand new array every render (breaking PublicationRow's
   // memoization above for every single row), even though the actual pid
@@ -125,6 +157,14 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
   // for why: it's what lets a large list mount only its visible rows
   // instead of every one of them at once.
   const rows = useMemo(() => {
+    // Skipped while backgrounded (isActive false, see App.js) -- this sort
+    // + pass over every publication is real work on a large list, and
+    // there's no Virtuoso below to consume it anyway (see the early return
+    // further down). Still a real useMemo call either way (never
+    // conditional on isActive) so hook order stays identical across
+    // renders; recomputes for real the moment this tab becomes active again,
+    // picking up whatever `data` changed to while hidden.
+    if (!isActive) return [];
     const pubs = [...data].sort((a, b) => b.year - a.year);
     const typeCounts = data.reduce((acc, curr) => {
       acc[curr.type] = (acc[curr.type] || 0) + 1;
@@ -140,7 +180,17 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
       out.push({ kind: 'entry', key: item.dblp.url, item, nr });
     }
     return out;
-  }, [data]);
+  }, [data, isActive]);
+
+  // The row list is what's expensive here (it's what re-renders on every
+  // streamed SSE flush) -- a backgrounded tab still gets this far (pids/rows
+  // above still run, cheaply, so hook order never changes across an
+  // isActive flip) but doesn't need Virtuoso mounted at all behind
+  // display:none. Data keeps accumulating in the caller regardless (its
+  // useRankedPublications/useMergedRankedPublications call lives above this
+  // component, not inside it), so reactivating the tab remounts Virtuoso
+  // straight onto current data.
+  if (!isActive) return null;
 
   return (
     <Virtuoso
@@ -160,12 +210,25 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
       components={{ List: PublicationsList, Item: PublicationsItem }}
       itemContent={(index, row) => row.kind === 'year'
         ? row.year
-        : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} />}
+        : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} />}
     />
   );
 }
 
-function Venue({ item }) {
+// sharedMaps: see PublicationRow's comment above -- threaded down from the
+// container instead of this component fetching it itself. It used to (each
+// row's own Venue independently called fetchSharedOverrides and also
+// subscribed to matchOverrides.js's 'rankme:overridechange' window event to
+// catch a personal override change) -- on a large list that meant every
+// mounted row's Venue re-rendered on *any* override write anywhere on the
+// page, entirely bypassing PublicationRow's React.memo above (each Venue's
+// own state change, not a prop change, is what forced it). Now this
+// component has no state of its own at all: it's a plain function of
+// item/sharedMaps, recomputed whenever PublicationRow itself re-renders --
+// which for a personal override change only happens for the one row whose
+// own RankBadge/popover made the change (see PublicationRow's
+// forceRowRefresh), not for every row on the page.
+function Venue({ item, sharedMaps }) {
   let link;
   let extra;
 
@@ -177,21 +240,7 @@ function Venue({ item }) {
   // that correcting a match here -- via the rank badge's popover -- also
   // updates the venue name shown right next to it, instead of leaving the
   // old (wrong) name displayed under a now-corrected rank.
-  const [sharedMap, setSharedMap] = useState(null);
-  const [, forceRefresh] = useState(0);
-
-  useEffect(() => {
-    if (!getUseCommunityOverrides()) return;
-    let cancelled = false;
-    fetchSharedOverrides(portal).then(m => { if (!cancelled) setSharedMap(m); });
-    return () => { cancelled = true; };
-  }, [portal]);
-
-  useEffect(() => {
-    const onChange = () => forceRefresh(t => t + 1);
-    window.addEventListener('rankme:overridechange', onChange);
-    return () => window.removeEventListener('rankme:overridechange', onChange);
-  }, []);
+  const sharedMap = sharedMaps?.[portal];
 
   const override = item.rank ? getOverride(portal, item.rank) : null;
   const sharedOverride = !override && item.rank ? getSharedOverride(item.rank, sharedMap) : null;

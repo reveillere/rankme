@@ -182,15 +182,38 @@ function toPublication(doc, type, pidByName) {
         type: effectiveType,
         venue: firstOf(effectiveType === 'inproceedings' ? doc.booktitle : doc.journal),
         authors,
+        // Used to spread the entire raw Mongo document here (`...doc`) --
+        // every stray DTD field a record happens to carry (note, crossref,
+        // cite, editor, series, address, mdate, key, ...), most of them
+        // never read anywhere. Harmless per publication, but this object is
+        // sent as-is to the client in streamRankedItems' `init` event for
+        // *every* publication up front -- for a prolific author or, via
+        // getPublicationsByNames, a large co-author list, that's thousands
+        // of oversized objects inflating the SSE payload for fields nothing
+        // ever displays. Projected down to exactly what Publications.js's
+        // Venue/PublicationRow render and authorStream.js's ranking path
+        // reads (year, ee -- see extractDoi).
         dblp: {
-            ...doc,
             title: firstOf(doc.title),
+            year: firstOf(doc.year),
             // <url> is optional per the DTD; <key> (the record's own
             // identifier) is always present, and unique -- a safe
             // fallback so every publication still has a stable value
             // here (used as the React list key and, on the live-fetch
             // path, as the ref for further lookups).
             url: firstOf(doc.url) || doc.key,
+            // <ee> can repeat per the DTD (e.g. a DOI link alongside an
+            // arXiv mirror) -- left as whatever shape doc.ee already is
+            // (string or array), since both findDoiUrl (Publications.js)
+            // and crossref.extractDoi (authorStream.js) already handle
+            // either.
+            ee: doc.ee,
+            pages: firstOf(doc.pages),
+            volume: firstOf(doc.volume),
+            number: firstOf(doc.number),
+            journal: firstOf(doc.journal),
+            publisher: firstOf(doc.publisher),
+            isbn: firstOf(doc.isbn),
         },
     };
 }

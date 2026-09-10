@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import Tooltip from '@mui/material/Tooltip';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -19,10 +19,24 @@ import { DoiChip } from './DoiChip';
 // updates 5 ranks out of 10,400 costs roughly 5 rows' worth of rendering,
 // not 10,400.
 //
+// sharedMaps is threaded down from the container (see HalPublications()
+// below) instead of RankBadge fetching it itself -- see RankBadge.js's own
+// comment. It only ever changes once, when the community-overrides fetch
+// resolves.
+//
+// A personal override change is handled separately: it doesn't touch the
+// publication object itself, so nothing about this row's props changes when
+// one happens. RankBadge's onOverrideChange callback below bumps this row's
+// own local state instead, forcing just this one row to re-render -- see
+// Publications.js's identical PublicationRow for the full reasoning
+// (deliberately row-scoped, not a page-wide signal, so React.memo still
+// skips every other row).
+//
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <category>" className) moved to HalItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor }) {
+const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor, sharedMaps }) {
+  const [, forceRowRefresh] = useState(0);
   return (
     <>
       <Tooltip title={category.name} placement="left">
@@ -31,7 +45,7 @@ const HalPublicationRow = React.memo(function HalPublicationRow({ item, category
         </div>
       </Tooltip>
       <div className="rank">
-        <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} />
+        <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {item.authors.length > 0
@@ -98,7 +112,17 @@ const HalItem = React.forwardRef(function HalItem({ item: row, children, style, 
 // ids) instead of a single author's id. selfIds/onOpenAuthor/onSearchAuthor
 // need to stay referentially stable across re-renders for HalPublicationRow's
 // memoization above to actually pay off -- see Structure.js's NO_SELF_IDS.
-export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor }) {
+//
+// sharedMaps: see HalPublicationRow's own comment above -- one
+// useSharedOverridesMaps() call at the container (AuthorHal.js/Structure.js/
+// Team.js), threaded down to every row. isActive is false for a tab
+// currently sitting behind another one (see App.js) -- the row list is what
+// re-renders on every streamed SSE flush (~7x/second while a stream is
+// active), so it's skipped entirely while backgrounded; the data-fetching
+// hook that owns the actual SSE subscription lives in the caller, not here,
+// so it keeps accumulating regardless and switching back shows current data
+// immediately.
+export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, sharedMaps, isActive = true }) {
   // Flattened so each Virtuoso index is exactly one <li> (a "year" marker
   // or an "entry") -- this is what makes the LaBRI-scale (~10,400 rows)
   // first mount cheap: only the rows actually inside (or just outside) the
@@ -110,6 +134,12 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
   // above -- the category reference stays stable across flushes just like
   // `item` does for an unchanged row.
   const rows = useMemo(() => {
+    // Skipped while backgrounded -- see isActive's own comment above; the
+    // sort + pass over every publication is real work at LaBRI scale, and
+    // there's no Virtuoso below to consume it anyway (see the early return
+    // further down). Still called unconditionally (never skipped itself) so
+    // hook order stays identical across renders regardless of isActive.
+    if (!isActive) return [];
     const sorted = [...data].sort((a, b) => (b.year || 0) - (a.year || 0));
     let previousYear = null;
     const out = [];
@@ -120,7 +150,13 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
       out.push({ kind: 'entry', key: item.docid, item, category: getHalCategory(item.type) });
     }
     return out;
-  }, [data]);
+  }, [data, isActive]);
+
+  // See Publications.js's identical early return for why: the row list is
+  // the expensive part of this page, so it's skipped entirely while this
+  // tab sits behind another one; reactivating remounts Virtuoso straight
+  // onto whatever `data` accumulated while hidden.
+  if (!isActive) return null;
 
   return (
     <Virtuoso
@@ -153,6 +189,7 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor })
             selfIds={selfIds}
             onOpenAuthor={onOpenAuthor}
             onSearchAuthor={onSearchAuthor}
+            sharedMaps={sharedMaps}
           />
         )}
     />

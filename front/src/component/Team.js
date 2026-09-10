@@ -41,17 +41,17 @@ const yearAccessorFor = source => (source === 'hal' ? (pub => pub.year) : (pub =
 const categoryKeyAccessorFor = source => (source === 'hal' ? (pub => getHalCategory(pub.type).cssClass) : (pub => pub.type));
 const portalAccessorFor = source => (source === 'hal' ? (pub => pub.type === 'COMM' ? 'core' : 'sjr') : (pub => pub.type === 'inproceedings' ? 'core' : 'sjr'));
 
-export function Team({ teamId, onOpenAuthor, onSearchAuthor }) {
+export function Team({ teamId, onOpenAuthor, onSearchAuthor, isActive }) {
   const team = getTeam(teamId);
 
   if (!team) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>This team no longer exists.</div>;
   }
 
-  return <TeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />;
+  return <TeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} isActive={isActive} />;
 }
 
-function TeamShow({ team, onOpenAuthor, onSearchAuthor }) {
+function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
   const { publications: rankedPublications, progress, done, failed } = useMergedRankedPublications(team.source, team.members);
 
   if (failed)
@@ -68,11 +68,12 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor }) {
       done={done}
       onOpenAuthor={onOpenAuthor}
       onSearchAuthor={onSearchAuthor}
+      isActive={isActive}
     />
   );
 }
 
-function TeamContent({ team, publications: rankedPublications, progress, done, onOpenAuthor, onSearchAuthor }) {
+function TeamContent({ team, publications: rankedPublications, progress, done, onOpenAuthor, onSearchAuthor, isActive }) {
   const isHal = team.source === 'hal';
   const yearAccessor = useMemo(() => yearAccessorFor(team.source), [team.source]);
   const categoryKeyAccessor = useMemo(() => categoryKeyAccessorFor(team.source), [team.source]);
@@ -146,8 +147,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       {isHal
-        ? <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
-        : <Publications data={filteredRecords} onOpenAuthor={onOpenAuthor} selfPids={selfIds} />}
+        ? <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
+        : <Publications data={filteredRecords} onOpenAuthor={onOpenAuthor} selfPids={selfIds} sharedMaps={sharedMaps} isActive={isActive} />}
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

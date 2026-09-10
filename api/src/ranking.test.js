@@ -59,6 +59,24 @@ test('streamRankedItems only ranks items isRankable selects, and reports the sma
   assert.match(initEvent, /"total":2/);
 });
 
+test('streamRankedItems accepts a priority-scheduled job and behaves normally with no contention', async () => {
+  // Not a rigorous load test -- just confirms the installed Bottleneck
+  // version actually accepts the { priority } option streamRankedItems now
+  // passes to schedule() (see priorityFor) without throwing, and that a
+  // single small request still completes exactly as before.
+  const items = Array.from({ length: 5 }, (_, i) => ({ id: i }));
+  const res = fakeRes();
+  const ranked = [];
+
+  await streamRankedItems(fakeReq(), res, items, () => true, async (item, index) => {
+    ranked.push(index);
+    return { rank: 'ok' };
+  });
+
+  assert.deepEqual(ranked, [0, 1, 2, 3, 4]);
+  assert.ok(res.events.some((e) => e.startsWith('event: done')));
+});
+
 test('streamRankedItems skips scheduling work once the client has already disconnected', async () => {
   const req = fakeReq();
   const res = fakeRes();
