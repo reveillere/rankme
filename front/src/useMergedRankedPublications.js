@@ -16,6 +16,15 @@ const SOURCE_CONFIG = {
   },
 };
 
+// Same rationale as useRankedPublications.js's own FLUSH_INTERVAL_MS: a
+// team merges *every* member's SSE stream, so the combined 'rank' event
+// rate -- and the cost of re-merging every member's publications on each
+// one, see mergeByKey -- is worse than a single author's. Capping how
+// often that merge (and the resulting re-render) happens keeps a
+// many-member team with thousands of combined publications from making
+// the tab unresponsive while ranks stream in.
+const FLUSH_INTERVAL_MS = 150;
+
 function mergeByKey(memberPubsList, dedupKey) {
   const seen = new Map();
   for (const pubs of memberPubsList) {
@@ -60,7 +69,9 @@ export function useMergedRankedPublications(source, members) {
     const memberDone = members.map(() => false);
     const memberFailed = members.map(() => false);
 
+    let flushTimer = null;
     const publish = () => {
+      if (flushTimer != null) { clearTimeout(flushTimer); flushTimer = null; }
       if (memberPubs.some(p => p === null)) return; // wait for every member's `init`
       setPublications(mergeByKey(memberPubs, config.dedupKey));
       setProgress({
@@ -69,6 +80,12 @@ export function useMergedRankedPublications(source, members) {
       });
       setDone(memberDone.every(Boolean));
       setFailed(memberFailed.every(Boolean));
+    };
+    // Immediate for init/done/error (rare, and callers need those
+    // reflected right away -- e.g. "every member errored" for failed);
+    // throttled for the bulk of 'rank' events, see FLUSH_INTERVAL_MS.
+    const schedulePublish = () => {
+      if (flushTimer == null) flushTimer = setTimeout(publish, FLUSH_INTERVAL_MS);
     };
 
     const sources = members.map((member, i) => {
@@ -83,20 +100,20 @@ export function useMergedRankedPublications(source, members) {
 
       es.addEventListener('rank', (e) => {
         const { index, completed, total, ...extra } = JSON.parse(e.data);
-        if (memberPubs[i]) {
-          const next = [...memberPubs[i]];
-          next[index] = { ...next[index], ...extra };
-          memberPubs[i] = next;
-        }
+        // Mutated in place -- unlike the old `[...memberPubs[i]]` copy,
+        // this doesn't cost O(member size) on every single event (and
+        // doesn't need to: only the throttled publish() above actually
+        // reads memberPubs into a new merged array for React).
+        if (memberPubs[i]) memberPubs[i][index] = { ...memberPubs[i][index], ...extra };
         memberProgress[i] = { completed, total };
-        publish();
+        schedulePublish();
       });
 
       es.addEventListener('error', (e) => {
         try {
           const { completed, total } = JSON.parse(e.data);
           memberProgress[i] = { completed, total };
-          publish();
+          schedulePublish();
         } catch {
           // connection-level error, no payload to parse
         }
@@ -122,7 +139,10 @@ export function useMergedRankedPublications(source, members) {
       return es;
     });
 
-    return () => sources.forEach(es => es.close());
+    return () => {
+      sources.forEach(es => es.close());
+      if (flushTimer != null) { clearTimeout(flushTimer); flushTimer = null; }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, memberKey]);
 
