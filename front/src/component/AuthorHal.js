@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
 
 import { useRankedPublications } from '../useRankedPublications';
 import { ranks, useFilterSettings } from '../FilterSettingsContext';
@@ -10,9 +8,12 @@ import DateRangeSlider from './DateRangeSlider';
 import { RanksByYearChart } from './Statistics';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
+import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
+import { needsReview } from '../matchOverrides';
+import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { getHalCategory } from '../hal';
 import '../App.css';
 
@@ -64,15 +65,20 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
+  const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
+  const overrideTick = useOverrideRefreshTick();
 
   useEffect(() => {
     if (done) setShowCompleted(true);
   }, [done]);
 
   useEffect(() => {
-    setFilteredRecords(filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, reviewOnly, portalAccessor }));
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly]);
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks });
+    const toReview = records.filter(pub => needsReview(portalAccessor(pub), pub.rank));
+    setReviewCount(toReview.length);
+    setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -98,18 +104,15 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, public
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
       </div>
 
-      <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+      <div style={{ margin: '0 0 20px 0' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
-        <FormControlLabel
-          control={<Checkbox checked={reviewOnly} onChange={e => setReviewOnly(e.target.checked)} size="small" />}
-          label="Only show matches to review"
-        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
 
       <div style={{ height: '50px' }}></div>
 
+      <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       <HalPublications selfIds={[id]} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} />
 
       <Snackbar
