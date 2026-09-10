@@ -15,12 +15,20 @@ import { streamRankedItems } from './ranking.js';
 // fires when the *entire* string is just that (no other words), so a
 // genuinely descriptive booktitle still falls through to fuzzy full-name
 // matching instead of being misread as an acronym.
+// Case is NOT required to already be upper (e.g. dblp's own booktitle for
+// the Middleware conference is just "Middleware", not "MIDDLEWARE", yet
+// CORE's own acronym field for it is "MIDDLEWARE") --
+// core.getRankByAcronymAndFullName uppercases before comparing against
+// CORE's acronym field (itself always stored upper, see parseRankSource),
+// and when the word turns out not to be a real acronym after all,
+// computeRank's own fallback (an exact title match) is no stricter than
+// what a bare single word gets anyway from the no-acronym fuzzy path
+// (computeRank2's distance tolerance scales down to 0 for a single-word
+// query) -- so there is nothing to lose by trying it regardless of case.
 function extractBareAcronym(text) {
     if (!text) return null;
     const match = text.match(/^([A-Za-z][A-Za-z0-9.\-]{1,15})(?:\s*'?\d{2,4})?$/);
-    if (!match) return null;
-    const acronym = match[1];
-    return acronym === acronym.toUpperCase() ? acronym : null;
+    return match ? match[1] : null;
 }
 
 export async function controllerDblpAuthor(req, res) {

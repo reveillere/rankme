@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { dblpCategories } from '../dblp';
 import '../App.css';
 import { trimLastDigits } from '../utils'
 import Tooltip from '@mui/material/Tooltip';
 import { RankBadge } from './RankBadge';
 import { DoiChip } from './DoiChip';
+import { getOverride, getSharedOverride, fetchSharedOverrides, getUseCommunityOverrides } from '../matchOverrides';
 
 // dblp's own <ee> element(s) -- usually a DOI link, but a record can carry
 // several (e.g. also an arXiv mirror) and a repeated field comes back as an
@@ -106,14 +107,53 @@ function Venue({ item }) {
 
   const { type, venue: rawVenue, dblp: { pages, volume, number, year, journal, publisher, isbn, ee } = {} } = item || {};
   const doiUrl = findDoiUrl(ee);
+  const portal = type === 'inproceedings' ? 'core' : 'sjr';
+
+  // Mirrors RankBadge's own override lookup (personal wins over shared) so
+  // that correcting a match here -- via the rank badge's popover -- also
+  // updates the venue name shown right next to it, instead of leaving the
+  // old (wrong) name displayed under a now-corrected rank.
+  const [sharedMap, setSharedMap] = useState(null);
+  const [, forceRefresh] = useState(0);
+
+  useEffect(() => {
+    if (!getUseCommunityOverrides()) return;
+    let cancelled = false;
+    fetchSharedOverrides(portal).then(m => { if (!cancelled) setSharedMap(m); });
+    return () => { cancelled = true; };
+  }, [portal]);
+
+  useEffect(() => {
+    const onChange = () => forceRefresh(t => t + 1);
+    window.addEventListener('rankme:overridechange', onChange);
+    return () => window.removeEventListener('rankme:overridechange', onChange);
+  }, []);
+
+  const override = item.rank ? getOverride(portal, item.rank) : null;
+  const sharedOverride = !override && item.rank ? getSharedOverride(item.rank, sharedMap) : null;
+  const overrideCandidate = override?.candidate || sharedOverride?.candidate;
+  // Same "title (ACRONYM)" shape RankDetailsPopover.js already shows for a
+  // matched/overridden entry -- without the acronym here, a conference
+  // known mainly by its short name (e.g. "International Conference on
+  // Service Oriented Computing (ICSOC)") would only show the generic long
+  // title, losing exactly the part a reader is most likely to recognize.
+  const withAcronym = (title, acronym) => title ? `${title}${acronym ? ` (${acronym})` : ''}` : null;
   // dblp's own <journal>/<booktitle> text is very often heavily
-  // abbreviated (e.g. "Empir. Softw. Eng."); item.fullName is Crossref's
-  // real title for this record's DOI (see authorStream.js), resolved
-  // whenever the abbreviated form didn't already produce an exact rank
-  // match -- shown here instead of the abbreviation, not just on hover,
-  // since it's clearer for a reader regardless of whether it changed the
-  // rank itself.
-  const venue = item.fullName || rawVenue;
+  // abbreviated (e.g. "Empir. Softw. Eng."), or (for a conference) just a
+  // bare acronym -- names to pick the clearest from, best first: a
+  // manual/community correction of the match (the reader picked this one
+  // on purpose, so it always wins); CORE/SJR's own matchedTitle (the
+  // ranking source's official name for whatever it actually matched, e.g.
+  // "Empirical Software Engineering" or "ACM Symposium on Applied
+  // Computing" -- often cleaner than Crossref's own title, which tends to
+  // carry "Proceedings of the Nth..." framing); item.fullName, Crossref's
+  // title for this record's DOI (see authorStream.js), when there's no
+  // matchedTitle to prefer (no match at all, or an unresolved ambiguity);
+  // and dblp's own raw text as the last resort.
+  const venue = withAcronym(overrideCandidate?.title, overrideCandidate?.acronym)
+    || withAcronym(item.rank?.matchedTitle, item.rank?.matchedAcronym)
+    || item.fullName
+    || rawVenue;
 
   switch(type) {
     case 'article':
@@ -149,7 +189,7 @@ function Venue({ item }) {
   return (
     <span className='link'>
       <span className='venue'>
-        {item.fullName && item.fullName !== rawVenue ? (
+        {venue !== rawVenue ? (
           <Tooltip title={<div>dblp: &quot;{rawVenue}&quot;</div>} placement="bottom">
             <span>{link}</span>
           </Tooltip>

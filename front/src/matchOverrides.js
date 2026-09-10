@@ -16,6 +16,17 @@ function write(overrides) {
   } catch {
     // storage full/unavailable — overrides are best-effort, ignore
   }
+  notifyChange();
+}
+
+// Overrides live in localStorage, not React state, so nothing re-renders
+// automatically when one changes -- RankBadge already refreshes itself
+// directly (it calls this via onOverrideChange), but other components that
+// also read an override for the same rank (e.g. Publications.js's Venue,
+// which shows the corrected name) have no other way to know. A plain
+// window event is enough: same-tab, no need for a pub/sub library.
+function notifyChange() {
+  try { window.dispatchEvent(new Event('rankme:overridechange')); } catch { /* non-browser env */ }
 }
 
 // One override per (portal, ranking edition, exact input text) -- mirrors
