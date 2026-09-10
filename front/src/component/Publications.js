@@ -204,7 +204,12 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       // See HalPublications.js's identical initialItemCount for why: the
       // first-paint probe-and-measure bootstrap depends on a ResizeObserver
       // callback firing, which this forces past instead of waiting on.
-      initialItemCount={30}
+      // Clamped to rows.length -- Virtuoso otherwise asks computeItemKey
+      // for indices past the end of a short list (e.g. a ~20-publication
+      // author, whose rows array is under 30 including year markers),
+      // which crashed the whole page (row was undefined, "Cannot read
+      // properties of undefined (reading 'key')").
+      initialItemCount={Math.min(30, rows.length)}
       data={rows}
       computeItemKey={(index, row) => row.key}
       components={{ List: PublicationsList, Item: PublicationsItem }}

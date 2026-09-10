@@ -176,7 +176,11 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, s
       // fixed batch unconditionally (meant for SSR, where there's no layout
       // to measure yet either); real scrolling afterwards is driven by
       // scroll events, not ResizeObserver, and already works fine.
-      initialItemCount={30}
+      // Clamped to rows.length -- Virtuoso otherwise asks computeItemKey
+      // for indices past the end of a short list (e.g. a small HAL author),
+      // which crashed the whole page (row was undefined, "Cannot read
+      // properties of undefined (reading 'key')").
+      initialItemCount={Math.min(30, rows.length)}
       data={rows}
       computeItemKey={(index, row) => row.key}
       components={{ List: HalList, Item: HalItem }}
