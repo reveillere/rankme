@@ -62,7 +62,12 @@ const SOURCES = {
 // co-author link with no known idHal) to prefill and immediately run a
 // search, switching to the given source if needed.
 export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
-    const [source, setSource] = useState('hal');
+    // DBLP by default again now that the local dump (see dblp.js's
+    // fetchStatus/DblpStatusBanner) is reliably imported -- HAL was the
+    // fallback default while DBLP either needed a live dblp.org fetch
+    // (blocked by their anti-bot protection) or the local import hadn't
+    // run yet.
+    const [source, setSource] = useState('dblp');
     const [mode, setMode] = useState('name'); // 'name' | 'id'
     const [query, setQuery] = useState('');
     const [queryResult, setQueryResult] = useState([]);

@@ -375,8 +375,18 @@ export async function controllerCandidates(req, res) {
     const latestById = latest && latest.source !== sourceKey
       ? new Map((await getSource(latest.source)).map(c => [c.id, c]))
       : null;
+    // Every word in the query must appear somewhere in the title/acronym
+    // (AND across words, not a single-contiguous-substring match) -- so
+    // "distributed computing systems" finds "IEEE/IFIP International
+    // Conference on Dependable Systems and Networks" style titles where
+    // the words aren't adjacent, same idea as dblpLocal.js's author-name
+    // search.
+    const words = q.split(/\s+/).filter(Boolean);
     const results = q.length < 2 ? [] : source
-      .filter(c => c.title.toLowerCase().includes(q) || c.acronym.toLowerCase().includes(q))
+      .filter(c => {
+        const haystack = `${c.title} ${c.acronym}`.toLowerCase();
+        return words.every(w => haystack.includes(w));
+      })
       .slice(0, 50)
       .map(c => {
         const latestEntry = latestById ? latestById.get(c.id) : (latest && latest.source === sourceKey ? c : null);

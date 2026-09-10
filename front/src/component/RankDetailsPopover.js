@@ -276,7 +276,15 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
               {current.currentRawValue && <Typography component="span" variant="body2" color="text.secondary"> ({current.currentRawValue})</Typography>}
               {trend === 'up' && <ArrowUpwardIcon fontSize="inherit" sx={{ color: '#2e7d32', verticalAlign: 'middle', ml: 0.3 }} />}
               {trend === 'down' && <ArrowDownwardIcon fontSize="inherit" sx={{ color: '#c62828', verticalAlign: 'middle', ml: 0.3 }} />}
-              {current.currentValue === displayedValue && <Typography component="span" variant="caption" color="text.secondary"> (unchanged)</Typography>}
+              {current.currentValue === displayedValue && (
+                // MUI's CompareArrowsIcon is actually two separate opposing
+                // arrows stacked on top of each other, not one line with a
+                // head on each end -- the literal ↔ character is simpler
+                // and unambiguous here.
+                <Typography component="span" sx={{ color: '#1976d2', verticalAlign: 'middle', ml: 0.5, fontWeight: 700 }}>
+                  ↔
+                </Typography>
+              )}
             </Typography>
           );
         })()}

@@ -15,6 +15,13 @@ const CSV_DIR = '/data/scimagojr';
 // see the identical constant/reasoning in corePortal.js.
 const RANK_CACHE_TTL_S = 60 * 60 * 24 * 365;
 
+// A query word lands directly in a MongoDB $regex below -- escaped so a
+// character like "+" or "(" (common in journal titles, e.g. "C++") is
+// matched literally instead of being read as a regex operator.
+function escapeRegex(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 
 
         
@@ -167,8 +174,13 @@ export async function controllerCandidates(req, res) {
         }
         const client = await getClient();
         const db = client.db("scimagojr");
+        // Every word in the query must appear in the title (AND across
+        // words, not one contiguous substring) -- same idea as
+        // corePortal.js's controllerCandidates, so "computer science
+        // review" finds a title where those words aren't adjacent.
+        const words = q.split(/\s+/).filter(Boolean);
         const documents = await db.collection(clampedYear.toString())
-            .find({ Title: { $regex: q, $options: 'i' } })
+            .find({ $and: words.map(w => ({ Title: { $regex: escapeRegex(w), $options: 'i' } })) })
             .limit(50)
             .toArray();
         // Each result also carries the same journal's quartile in the latest
