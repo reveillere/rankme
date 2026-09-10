@@ -55,7 +55,7 @@ export function Publications({ author, data, onOpenAuthor, selfPids }) {
                 </Tooltip>
                 <div className="nr">[{nr}]</div>
                 <div className="rank">
-                <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} />
+                <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} />
                 </div>
                 <cite className='data'>
                   {

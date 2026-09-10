@@ -96,7 +96,7 @@ function LabeledRow({ label, children }) {
 // confident that match is, how the same entry ranks today, and a search box
 // to replace it with a different entry -- a correction that's saved to this
 // browser immediately and also mirrored to the server for later analysis.
-export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, sharedOverride, onOverrideChange }) {
+export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, sharedOverride, resolvedFullName, onOverrideChange }) {
   const open = Boolean(anchorEl);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -197,6 +197,16 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
         </Typography>
 
         {rank.queryText && <LabeledRow label="Original text:">&quot;{rank.queryText}&quot;</LabeledRow>}
+        {/* Crossref's own venue name for this record's DOI, when
+            authorStream.js's DOI fallback found one -- shown even when it
+            *didn't* change the match above (only adopted there when
+            clearly better, see that fallback's own comment): the resolved
+            name was still looked up and is worth surfacing, especially
+            since it's what Publications.js's own venue line now shows
+            instead of dblp's abbreviated text. */}
+        {resolvedFullName && resolvedFullName !== rank.queryText && (
+          <LabeledRow label="Resolved via DOI:">&quot;{resolvedFullName}&quot;</LabeledRow>
+        )}
 
         {isManualOverride ? (
           <Box sx={{ my: 1 }}>

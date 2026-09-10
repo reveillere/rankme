@@ -8,8 +8,12 @@ import { getOverride, getSharedOverride, fetchSharedOverrides, getUseCommunityOv
 // couldn't), how confident that match is, and a search box to replace it
 // with a different entry. portal is 'core' (conferences) or 'sjr'
 // (journals) -- it picks which candidate-search endpoint and which local
-// override bucket apply. year is the publication's own year.
-export function RankBadge({ rank, portal, year }) {
+// override bucket apply. year is the publication's own year. resolvedFullName
+// (dblp publications only, see Publications.js) is Crossref's own venue
+// title for this record's DOI, when authorStream.js's DOI fallback found
+// one -- passed through so the popover can show it even on a match it
+// *didn't* end up replacing (see RankDetailsPopover's own note on this).
+export function RankBadge({ rank, portal, year, resolvedFullName }) {
   const [anchorEl, setAnchorEl] = useState(null);
   // Bumped after a local override is set/cleared to force this render to
   // re-read localStorage below. NOT computed once via useState(() => ...):
@@ -66,6 +70,7 @@ export function RankBadge({ rank, portal, year }) {
         rank={rank}
         override={override}
         sharedOverride={sharedOverride}
+        resolvedFullName={resolvedFullName}
         onOverrideChange={() => setRefreshTick(t => t + 1)}
       />
     </>
