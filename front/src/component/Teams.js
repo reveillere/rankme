@@ -55,7 +55,10 @@ export default function Teams({ onOpenAuthor }) {
   const [teams, setTeams] = useState(() => getTeams());
   const [editingId, setEditingId] = useState(null); // null = creating a new team
   const [name, setName] = useState('');
-  const [source, setSource] = useState('hal');
+  // DBLP by default -- see the identical note in Search.js: HAL was only
+  // ever the fallback while DBLP needed a live dblp.org fetch (blocked by
+  // their anti-bot protection) or the local dump hadn't been imported yet.
+  const [source, setSource] = useState('dblp');
   const [members, setMembers] = useState([]); // { id, label }
   const [mode, setMode] = useState('name');
   const [query, setQuery] = useState('');
@@ -77,7 +80,7 @@ export default function Teams({ onOpenAuthor }) {
   const resetForm = () => {
     setEditingId(null);
     setName('');
-    setSource('hal');
+    setSource('dblp');
     setMembers([]);
     setQuery('');
     setIdInput('');
@@ -210,14 +213,6 @@ export default function Teams({ onOpenAuthor }) {
             A team&apos;s source can&apos;t be changed after creation.
           </Typography>
         )}
-        {source === 'dblp' && (
-          // Same anti-bot block as Search.js -- dblp.org isn't answering our
-          // server's requests right now, so every DBLP member lookup fails.
-          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mt: -0.5, mb: 1 }}>
-            DBLP is currently unavailable (blocked by their anti-bot protection). Please use HAL for now.
-          </Typography>
-        )}
-
         <Typography variant="body2" color="text.secondary" gutterBottom>Add {SOURCES[source].label} members</Typography>
 
         <ToggleButtonGroup value={mode} exclusive onChange={(e, v) => v && setMode(v)} size="small" sx={{ mb: 1 }}>
