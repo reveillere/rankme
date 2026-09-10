@@ -72,6 +72,12 @@ export async function controllerDblpAuthor(req, res) {
                 // when the local attempt found nothing -- not swapped in
                 // just because it's a different guess than one we already
                 // had.
+                // Crossref's fullName is also just a better venue name to
+                // show a reader than dblp's own abbreviated <journal>
+                // text (or, for a conference, whatever's in <booktitle>)
+                // -- returned to Publications.js regardless of whether it
+                // ended up changing the rank below.
+                let fullName;
                 if (rank.matchType !== 'exact') {
                     const doi = crossref.extractDoi(pub.dblp.ee);
                     if (doi) {
@@ -87,9 +93,10 @@ export async function controllerDblpAuthor(req, res) {
                         if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none')) {
                             rank = doiRank;
                         }
+                        fullName = info?.fullName;
                     }
                 }
-                return { rank };
+                return { rank, fullName };
             },
             `dblp:${pid}`
         );

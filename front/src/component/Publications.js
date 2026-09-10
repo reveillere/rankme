@@ -104,8 +104,16 @@ function Venue({ item }) {
   let link;
   let extra;
 
-  const { type, venue, dblp: { pages, volume, number, year, journal, publisher, isbn, ee } = {} } = item || {};
+  const { type, venue: rawVenue, dblp: { pages, volume, number, year, journal, publisher, isbn, ee } = {} } = item || {};
   const doiUrl = findDoiUrl(ee);
+  // dblp's own <journal>/<booktitle> text is very often heavily
+  // abbreviated (e.g. "Empir. Softw. Eng."); item.fullName is Crossref's
+  // real title for this record's DOI (see authorStream.js), resolved
+  // whenever the abbreviated form didn't already produce an exact rank
+  // match -- shown here instead of the abbreviation, not just on hover,
+  // since it's clearer for a reader regardless of whether it changed the
+  // rank itself.
+  const venue = item.fullName || rawVenue;
 
   switch(type) {
     case 'article':
@@ -141,15 +149,13 @@ function Venue({ item }) {
   return (
     <span className='link'>
       <span className='venue'>
-        {item.fullName ? 
-          <a>
-            <Tooltip title={<div>{item.fullName}</div>} placement="bottom">
-              <span>{link}</span>
-            </Tooltip>
-          </a> 
-          :
+        {item.fullName && item.fullName !== rawVenue ? (
+          <Tooltip title={<div>dblp: &quot;{rawVenue}&quot;</div>} placement="bottom">
+            <span>{link}</span>
+          </Tooltip>
+        ) : (
           link
-        }
+        )}
          {extra}
         <DoiChip url={doiUrl} />
       </span>
