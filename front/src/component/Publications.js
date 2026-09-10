@@ -122,8 +122,13 @@ const PublicationsList = React.forwardRef(function PublicationsList({ style, chi
   return <ul className='publ-list' ref={ref} style={style} {...props}>{children}</ul>;
 });
 
+// row can be undefined for a transient render -- see the identical
+// computeItemKey/itemContent comment further below (data can change length
+// between flushes while Virtuoso's own internal range tracking is briefly a
+// tick behind). Virtuoso calls this wrapper independently of itemContent,
+// so it needs its own guard rather than relying on itemContent's.
 const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row, children, style, ...props }, ref) {
-  const className = row.kind === 'year' ? 'year' : `entry ${row.item.type}`;
+  const className = !row ? '' : row.kind === 'year' ? 'year' : `entry ${row.item.type}`;
   return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
