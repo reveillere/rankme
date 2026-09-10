@@ -68,10 +68,20 @@ export async function controllerDblpAuthor(req, res) {
                 // available, ask Crossref for the real title/acronym and
                 // retry -- same fallback the HAL path already uses (see
                 // rankHalPublications). Only adopted when it's clearly
-                // better: an authoritative exact match, or anything at all
-                // when the local attempt found nothing -- not swapped in
-                // just because it's a different guess than one we already
-                // had.
+                // better -- an authoritative exact match, or anything at
+                // all when the local attempt had no single usable answer
+                // ('none', or 'ambiguous': e.g. dblp's own booktitle was
+                // just the bare acronym "SAC", shared by two unrelated
+                // CORE entries -- ACM's own Symposium on Applied Computing
+                // and Selected Areas in Cryptography -- with nothing to
+                // break the tie; Crossref's fuller title clearly favors
+                // one even at fuzzy confidence, which is still strictly
+                // more useful than refusing to pick between two options
+                // that don't even agree on a rank) -- not swapped in just
+                // because it's a different guess than a *specific* one we
+                // already had (rank.matchType === 'fuzzy' keeps the
+                // original rather than trading one uncertain single guess
+                // for another).
                 // Crossref's fullName is also just a better venue name to
                 // show a reader than dblp's own abbreviated <journal>
                 // text (or, for a conference, whatever's in <booktitle>)
@@ -90,7 +100,7 @@ export async function controllerDblpAuthor(req, res) {
                         } else if (pub.type === 'article' && info?.fullName) {
                             doiRank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
                         }
-                        if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none')) {
+                        if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none' || rank.matchType === 'ambiguous')) {
                             rank = doiRank;
                         }
                         fullName = info?.fullName;
