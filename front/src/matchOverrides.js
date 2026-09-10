@@ -108,18 +108,17 @@ export function getSharedOverride(rank, sharedMap) {
 }
 
 // Whether a rank's automatic match still needs a human look -- used by the
-// "Only show matches to review" list filter (see filterPublications.js).
-// Anything already 'exact', or already given a personal override/
-// confirmation (both stored the same way, see setOverride/confirmMatch
-// above), is considered resolved. A community-confirmed correction is
-// deliberately NOT treated as resolved here, unlike getSharedOverride's own
-// priority elsewhere: checking it would make every page's filter wait on
-// the shared-overrides fetch before it could show anything, and the badge
-// itself already reads as "Confirmed by the community" rather than a
-// fuzzy/ambiguous/no-match flag, so a reviewer skims past it immediately
-// anyway -- worth the rare extra row, not worth the added latency.
-export function needsReview(portal, rank) {
+// "Only show matches to review" list filter (see ReviewFilterToggle.js).
+// Anything already 'exact', already given a personal override/confirmation
+// (both stored the same way, see setOverride/confirmMatch above), or
+// already community-confirmed (sharedOverride -- the caller looks this up
+// itself via getSharedOverride/fetchSharedOverrides, since it needs the
+// per-portal shared map either way to actually display the match) is
+// considered resolved, same priority as RankBadge.js: personal beats
+// shared, and either beats the plain automatic match.
+export function needsReview(portal, rank, sharedOverride) {
   if (!rank || rank.matchType === 'exact') return false;
+  if (sharedOverride) return false;
   return !getOverride(portal, rank);
 }
 

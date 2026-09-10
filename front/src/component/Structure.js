@@ -12,8 +12,9 @@ import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
-import { needsReview } from '../matchOverrides';
+import { needsReview, getSharedOverride } from '../matchOverrides';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
+import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { getHalCategory } from '../hal';
 import '../App.css';
 
@@ -88,6 +89,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
+  const sharedMaps = useSharedOverridesMaps();
 
   useEffect(() => {
     if (done) setShowCompleted(true);
@@ -95,10 +97,13 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
 
   useEffect(() => {
     const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks });
-    const toReview = records.filter(pub => needsReview(portalAccessor(pub), pub.rank));
+    const toReview = records.filter(pub => {
+      const portal = portalAccessor(pub);
+      return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
+    });
     setReviewCount(toReview.length);
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick]);
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
