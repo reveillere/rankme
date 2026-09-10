@@ -170,7 +170,11 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
     // renders; recomputes for real the moment this tab becomes active again,
     // picking up whatever `data` changed to while hidden.
     if (!isActive) return [];
-    const pubs = [...data].sort((a, b) => b.year - a.year);
+    // .dblp.year, not the nonexistent top-level .year -- this comparator
+    // was always comparing undefined-undefined (NaN, a no-op for sort),
+    // silently relying on dblpLocal.js's own pre-sort of `data` server-side
+    // to already be in the right order.
+    const pubs = [...data].sort((a, b) => (b.dblp.year || 0) - (a.dblp.year || 0));
     const typeCounts = data.reduce((acc, curr) => {
       acc[curr.type] = (acc[curr.type] || 0) + 1;
       return acc;
@@ -182,7 +186,12 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       previousYear = item.dblp.year;
       if (displayYear) out.push({ kind: 'year', key: `year-${item.dblp.year}`, year: item.dblp.year });
       const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
-      out.push({ kind: 'entry', key: item.dblp.url, item, nr });
+      // dblp.key (the record's own <key> attribute), not dblp.url: url
+      // isn't reliably unique (DBLP groups some distinct records, e.g.
+      // several different RFCs, under one shared bibliography page url) --
+      // see dblpLocal.js's identical comment on why this matters for
+      // Virtuoso's row identity specifically.
+      out.push({ kind: 'entry', key: item.dblp.key, item, nr });
     }
     return out;
   }, [data, isActive]);

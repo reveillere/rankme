@@ -196,11 +196,22 @@ function toPublication(doc, type, pidByName) {
         dblp: {
             title: firstOf(doc.title),
             year: firstOf(doc.year),
-            // <url> is optional per the DTD; <key> (the record's own
-            // identifier) is always present, and unique -- a safe
-            // fallback so every publication still has a stable value
-            // here (used as the React list key and, on the live-fetch
-            // path, as the ref for further lookups).
+            // The record's own <key> attribute, always present and unique
+            // per the DTD -- unlike <url> below, which is NOT reliably
+            // unique: DBLP groups some records under a shared bibliography
+            // page (e.g. several different RFCs all point to the same
+            // "journals/rfc/rfc6800-6899.html"), so two distinct
+            // publications can carry the identical url. Publications.js's
+            // Virtuoso list used url as its React/computeItemKey value --
+            // a genuine collision there breaks Virtuoso's row recycling
+            // (confirmed live: rankme.fr/dblp/91/2043 showed one row's
+            // content repeated across many positions while scrolling,
+            // traced to exactly this RFC range-page collision). key is
+            // what's actually unique; use it for identity.
+            key: doc.key,
+            // <url> is optional per the DTD -- doc.key as a fallback here
+            // keeps this field itself always populated, but see the `key`
+            // field above for anything that needs actual uniqueness.
             url: firstOf(doc.url) || doc.key,
             // <ee> can repeat per the DTD (e.g. a DOI link alongside an
             // arXiv mirror) -- left as whatever shape doc.ee already is
