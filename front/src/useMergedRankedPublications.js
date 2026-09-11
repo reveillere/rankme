@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { rankingSourceQueryParam } from './rankingSource';
 
 // Per-source stream endpoint + dedup key. DBLP publications carry their
 // DBLP url (stripped of any '#' fragment — the same key already used for
@@ -7,11 +8,11 @@ import { useEffect, useState } from 'react';
 // counted once — first occurrence wins.
 const SOURCE_CONFIG = {
   dblp: {
-    streamUrl: (id) => `/api/dblp/author-stream/${id}`,
+    streamUrl: (id, rankingSource) => `/api/dblp/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`,
     dedupKey: (pub) => pub.dblp?.url?.split('#')[0],
   },
   hal: {
-    streamUrl: (id) => `/api/hal/author-stream/${id}`,
+    streamUrl: (id, rankingSource) => `/api/hal/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`,
     dedupKey: (pub) => pub.docid,
   },
 };
@@ -43,7 +44,7 @@ function mergeByKey(memberPubsList, dedupKey) {
 // into one merged, deduplicated ranking — no backend changes needed.
 // Returns the same shape as useRankedPublications so it's a drop-in for the
 // existing single-author rendering path.
-export function useMergedRankedPublications(source, members) {
+export function useMergedRankedPublications(source, members, rankingSource) {
   const [publications, setPublications] = useState(null);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [done, setDone] = useState(false);
@@ -89,7 +90,7 @@ export function useMergedRankedPublications(source, members) {
     };
 
     const sources = members.map((member, i) => {
-      const es = new EventSource(config.streamUrl(member.id));
+      const es = new EventSource(config.streamUrl(member.id, rankingSource));
 
       es.addEventListener('init', (e) => {
         const data = JSON.parse(e.data);
@@ -146,7 +147,7 @@ export function useMergedRankedPublications(source, members) {
       if (flushTimer != null) { clearTimeout(flushTimer); flushTimer = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, memberKey]);
+  }, [source, memberKey, rankingSource]);
 
   return { publications, progress, done, failed };
 }

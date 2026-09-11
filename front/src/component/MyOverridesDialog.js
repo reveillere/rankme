@@ -74,7 +74,7 @@ export function MyOverridesDialog({ open, onClose }) {
       <DialogTitle>My match corrections</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-          Corrections you&apos;ve made to CORE/SJR matches, kept in this browser only.
+          Corrections you&apos;ve made to CORE/SJR/CCF matches, kept in this browser only.
         </Typography>
 
         {importMessage && (
@@ -103,14 +103,23 @@ export function MyOverridesDialog({ open, onClose }) {
                   <ListItemText
                     primary={
                       <>
-                        <Chip label={o.portal === 'core' ? 'CORE' : 'SJR'} size="small" sx={{ mr: 1 }} />
+                        <Chip label={o.portal === 'core' ? 'CORE' : o.portal === 'ccf' ? 'CCF' : 'SJR'} size="small" sx={{ mr: 1 }} />
                         {o.type === 'confirmed' && <Chip label="Confirmed" size="small" color="success" variant="outlined" sx={{ mr: 1 }} />}
-                        {o.candidate.title}{o.candidate.acronym ? ` (${o.candidate.acronym})` : ''} — {o.candidate.value}
+                        {/* markAsUnranked's candidate (RankDetailsPopover.js) has no
+                            title at all -- just value: 'Unranked' -- so fall back to
+                            that instead of rendering an empty title. */}
+                        {o.candidate.title || o.candidate.value}{o.candidate.acronym ? ` (${o.candidate.acronym})` : ''} — {o.candidate.value}
                       </>
                     }
                     secondaryTypographyProps={{ component: 'div' }}
                     secondary={
                       <>
+                        {/* The actual publication text this correction applies to
+                            -- always shown, not just for a plain override: "Was"
+                            below is what the *automatic match* guessed, which is
+                            a different (and, for a confirmation, entirely absent)
+                            piece of information from what the venue itself says. */}
+                        {o.queryText && <div>Original text: &quot;{o.queryText}&quot;</div>}
                         {o.type !== 'confirmed' && (
                           <div>Was: {o.previous?.matchedTitle ? `"${o.previous.matchedTitle}" — ${o.previous.value}` : `unmatched (${o.previous?.value ?? '?'})`}</div>
                         )}

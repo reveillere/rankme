@@ -37,6 +37,25 @@ export function normalizeTitle(line) {
 // ***************************************************************************************
 // ***************************************************************************************
 
+const WORKSHOP_WORD = /\bworkshops?\b/i;
+
+// A fuzzy title match between a workshop and some unrelated (usually
+// much better-ranked) conference is a specific, common failure mode: a
+// workshop's own title very often differs from its host/co-located
+// conference's title by only the word "workshop" itself -- e.g. "3rd
+// International Workshop on Program Comprehension" vs "IEEE Conference on
+// Program Comprehension" normalize to ["workshop","program","comprehension"]
+// vs ["program","comprehension"], a single-word insertion (distance 1),
+// comfortably within the fuzzy matcher's normal tolerance despite the two
+// being entirely different venues with usually very different rankings. If
+// the original text says "workshop" but the entry the matcher actually
+// landed on doesn't, that's a strong, specific signal this is exactly that
+// failure rather than a genuine close call -- used by corePortal.js's and
+// ccfPortal.js's own fuzzy paths to downgrade such a match to "no match"
+// instead of reporting it as a plausible approximate one.
+export function isWorkshopMismatch(originalText, matchedText) {
+  return WORKSHOP_WORD.test(originalText || '') && !WORKSHOP_WORD.test(matchedText || '');
+}
 
 export function levenshtein(str1, str2) {
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));

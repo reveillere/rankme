@@ -7,7 +7,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 
 import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
-import { ranks, useFilterSettings } from '../FilterSettingsContext';
+import { useFilterSettings } from '../FilterSettingsContext';
 import { getHalCategory } from '../hal';
 
 // Components
@@ -52,7 +52,12 @@ export function Team({ teamId, onOpenAuthor, onSearchAuthor, isActive }) {
 }
 
 function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
-  const { publications: rankedPublications, progress, done, failed } = useMergedRankedPublications(team.source, team.members);
+  // Read from context, not localStorage directly -- see Author.js's
+  // identical comment for why this is what makes switching sources live
+  // (passed through to the hook below, which needs it in its own effect's
+  // dependency array to actually re-open every member's stream).
+  const { rankingSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed } = useMergedRankedPublications(team.source, team.members, rankingSource);
 
   if (failed)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this team&apos;s members from {team.source === 'hal' ? 'HAL' : 'DBLP'}. Please try again later.</div>;
@@ -88,7 +93,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length, team.source]);
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategories } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -132,9 +137,9 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>

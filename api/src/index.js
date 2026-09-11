@@ -5,6 +5,7 @@ import router from './routes.js';
 import fs from 'fs';
 import * as sjr from './sjrPortal.js';
 import * as core from './corePortal.js'
+import * as ccf from './ccfPortal.js';
 import * as metrics from './metrics.js';
 
 const accessLogStream = fs.createWriteStream('./log/access.log', { flags: 'a' });
@@ -28,6 +29,11 @@ app.use(router);
 async function start() {
   await sjr.load();
   await core.load();
+  // Unlike sjr/core above, ccf.load() never throws (CCF is an opt-in
+  // alternative ranking source, not the default -- see its own comment):
+  // a failed fetch with no local snapshot just leaves it empty, so this
+  // can't fail startup the way the other two deliberately do.
+  await ccf.load();
   app.listen(port, () => {
     console.log(`Server is running ...`);
   });

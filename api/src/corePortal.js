@@ -1,6 +1,6 @@
 import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
-import { normalizeTitle, levenshtein } from './levenshtein.js';
+import { normalizeTitle, levenshtein, isWorkshopMismatch } from './levenshtein.js';
 import * as cache from './cache.js'
 import { dedupeInFlight } from './inFlight.js';
 import { getVenueFullName } from './dblp.js';
@@ -347,12 +347,21 @@ function ambiguousResult(sourceKey, tied) {
 // every branch of computeRank/computeRank2 funnels through this on its way
 // out -- it's what the front end needs, alongside matchedId, to key a
 // user's override to this exact (source edition, input text) pair.
+// The most recent CORE edition available (e.g. { year: 2026, source:
+// 'ICORE2026' }) -- shared by attachCurrentValue/controllerCandidates
+// below (both need it to show "rank in the latest edition") and
+// controllerRankingEditions (routes.js, for Settings' "current CORE
+// edition" display), so there's exactly one place computing it.
+export async function getLatestSource() {
+  const sources = await getSources();
+  return sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
+}
+
 async function attachCurrentValue(rank, queryText) {
   rank = { ...rank, queryText };
   if (rank.matchedId == null) return rank;
   try {
-    const sources = await getSources();
-    const latest = sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
+    const latest = await getLatestSource();
     if (!latest) return rank;
     // Already looking at the latest edition -- its rank IS the current one,
     // no extra lookup needed. Set unconditionally (not just when it turns
@@ -384,8 +393,7 @@ export async function controllerCandidates(req, res) {
   }
   try {
     const { sourceKey, source } = await resolveSource(year);
-    const sources = await getSources();
-    const latest = sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
+    const latest = await getLatestSource();
     // Each result also carries the same entry's rank in the latest edition
     // -- CORE data is small and already in memory, so this is cheap even
     // for 50 results, and it's exactly what a user picking a match to
@@ -448,7 +456,13 @@ async function computeRank(acronym, venueFullName, year) {
       rank = ambiguousResult(sourceKey, tied);
     } else {
       const bestMatch = tied[0];
-      rank = sanitizedRank(bestMatch.conf, bestMatch.score === 0 ? 'exact' : 'fuzzy', bestMatch.score);
+      // See isWorkshopMismatch's own comment -- a fuzzy hit (never an exact
+      // one, score 0) whose matched title doesn't even mention "workshop"
+      // while the original text does is far more likely this specific
+      // false positive than a genuine close call.
+      rank = bestMatch.score !== 0 && isWorkshopMismatch(venueFullName, bestMatch.conf.title)
+        ? unrankedResult(sourceKey)
+        : sanitizedRank(bestMatch.conf, bestMatch.score === 0 ? 'exact' : 'fuzzy', bestMatch.score);
     }
   } else {
     // Unique acronym match -- always high confidence regardless of the
@@ -597,7 +611,14 @@ async function computeRank2(venueFullName, year) {
       rank = ambiguousResult(sourceKey, tied.map(t => ({ conf: t.conf })));
     } else {
       const bestMatch = tied[0];
-      rank = sanitizedRank(bestMatch.conf, bestMatch.levenshtein === 0 ? 'exact' : 'fuzzy', bestMatch.levenshtein);
+      // See isWorkshopMismatch's own comment -- this is exactly the riskiest
+      // path it targets: no acronym to anchor on, matching purely on title
+      // words against the entire database, where a workshop's title
+      // commonly differs from its unrelated host conference's by only the
+      // word "workshop" itself.
+      rank = bestMatch.levenshtein !== 0 && isWorkshopMismatch(venueFullName, bestMatch.conf.title)
+        ? unrankedResult(sourceKey)
+        : sanitizedRank(bestMatch.conf, bestMatch.levenshtein === 0 ? 'exact' : 'fuzzy', bestMatch.levenshtein);
     }
   }
   return attachCurrentValue(rank, venueFullName);

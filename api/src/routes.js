@@ -3,6 +3,7 @@ import * as dblp from './dblp.js';
 import * as hal from './hal.js';
 import * as core from './corePortal.js';
 import * as sjr from './sjrPortal.js';
+import * as ccf from './ccfPortal.js';
 import * as admin from './admin.js';
 import * as authorStream from './authorStream.js';
 import * as matchOverrides from './matchOverrides.js';
@@ -13,6 +14,15 @@ const router = express.Router();
 // up and responsive. Deliberately doesn't touch DBLP/HAL/mongo/redis, so it
 // won't false-positive as unhealthy just because an upstream is degraded.
 router.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// For SettingsDialog.js's ranking-source descriptions -- reads each
+// portal's own live in-process state (core.getLatestSource/
+// sjr.getLatestYear), so it's always accurate after a CORE/SJR update
+// rather than a string someone has to remember to bump by hand.
+router.get('/ranking-editions', async (req, res) => {
+  const latestCore = await core.getLatestSource();
+  res.json({ core: latestCore?.source ?? null, sjr: sjr.getLatestYear() });
+});
 
 router.get('/dblp/status', admin.controllerDblpStatus);
 router.get('/dblp/author/*', dblp.controllerAuthor);
@@ -34,6 +44,7 @@ router.get('/rank/db/journals/*', sjr.controllerRank);
 
 router.get('/rank/core/candidates', core.controllerCandidates);
 router.get('/rank/sjr/candidates', sjr.controllerCandidates);
+router.get('/rank/ccf/candidates', ccf.controllerCandidates);
 
 router.post('/match-overrides', matchOverrides.controllerRecord);
 router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);

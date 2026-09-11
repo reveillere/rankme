@@ -3,8 +3,9 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import Typography from '@mui/material/Typography';
 
 // Shared by Author.js/AuthorHal.js/Team.js/Structure.js: a toggle that
-// narrows the publication list to matches worth a second look (fuzzy,
-// ambiguous, or no match at all -- see needsReview in matchOverrides.js).
+// narrows the publication list to matches worth a second look (fuzzy or
+// ambiguous -- not a plain "no match at all", which has nothing to review,
+// see needsReview in matchOverrides.js).
 // Left-aligned right above the list itself, rather than next to the
 // year-range FilterButton above the chart, since it's a property of the
 // list being reviewed, not a chart filter. Hidden entirely when count is 0

@@ -6,9 +6,13 @@ import { getOverride, getSharedOverride } from '../matchOverrides';
 // A rank badge is clickable: it opens RankDetailsPopover, which shows what
 // year/edition it was computed against, what it matched (or why it
 // couldn't), how confident that match is, and a search box to replace it
-// with a different entry. portal is 'core' (conferences) or 'sjr'
-// (journals) -- it picks which candidate-search endpoint and which local
-// override bucket apply. year is the publication's own year. resolvedFullName
+// with a different entry. portal is 'core' (conferences), 'sjr'
+// (journals), or 'ccf' (both, when the CCF ranking source is selected --
+// see rankingSource.js) -- it picks which candidate-search endpoint and
+// which local override bucket apply (sharedMaps?.[portal] is simply
+// undefined for 'ccf', no community overrides exist for it yet -- personal
+// overrides/confirmations, stored locally, work the same as CORE/SJR).
+// year is the publication's own year. resolvedFullName
 // (dblp publications only, see Publications.js) is Crossref's own venue
 // title for this record's DOI, when authorStream.js's DOI fallback found
 // one -- passed through so the popover can show it even on a match it

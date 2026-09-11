@@ -45,7 +45,7 @@ const HalPublicationRow = React.memo(function HalPublicationRow({ item, category
         </div>
       </Tooltip>
       <div className="rank">
-        <RankBadge rank={item.rank} portal={item.type === 'COMM' ? 'core' : 'sjr'} year={item.year} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
+        <RankBadge rank={item.rank} portal={item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'COMM' ? 'core' : 'sjr')} year={item.year} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {item.authors.length > 0

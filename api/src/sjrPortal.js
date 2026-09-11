@@ -9,6 +9,13 @@ import { readFile } from 'fs/promises';
 
 let config = null;
 
+// The most recent SJR/Scimago year available (e.g. 2025) -- for
+// controllerRankingEditions (routes.js, Settings' "current SJR year"
+// display). null before load() has run.
+export function getLatestYear() {
+  return config?.end ?? null;
+}
+
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 const CSV_DIR = '/data/scimagojr';
 
@@ -170,14 +177,20 @@ export async function load() {
 }
 
 // Structured result shape mirroring corePortal.js's, so the front end can
-// build one shared tooltip/edit UI for both CORE and SJR ranks.
+// build one shared tooltip/edit UI for both CORE and SJR ranks. value is
+// literally 'Unranked' (not some internal short code) -- corePortal.js's
+// own unranked/ambiguous results already use that exact string, and
+// RankBadge.js prints `value` straight to the badge with no translation
+// step in between, so anything other than the real display text here would
+// leak through as-is (this used to be the internal code 'QU', which is
+// exactly what happened).
 function unrankedResult(sourceYear) {
-    return { value: 'QU', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'none', matchedTitle: null, matchedId: null, distance: null };
+    return { value: 'Unranked', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'none', matchedTitle: null, matchedId: null, distance: null };
 }
 
 function ambiguousResult(sourceYear, tied) {
     return {
-        value: 'QU', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'ambiguous',
+        value: 'Unranked', rawValue: null, source: `scimagojr:${sourceYear}`, matchType: 'ambiguous',
         matchedTitle: null, matchedId: null, distance: null,
         ambiguousWith: tied.map(t => ({ title: t.data.Title, id: t.data.Sourceid, value: t.data.BestQuartile })),
     };
@@ -212,7 +225,7 @@ async function attachCurrentValue(rank, queryText) {
         const { bySourceid } = await getYearData(config.end);
         const latest = bySourceid.get(rank.matchedId);
         if (!latest) return rank;
-        return { ...rank, currentSource: latestSource, currentValue: latest.BestQuartile === '-' ? 'QU' : latest.BestQuartile };
+        return { ...rank, currentSource: latestSource, currentValue: latest.BestQuartile === '-' ? 'Unranked' : latest.BestQuartile };
     } catch (error) {
         console.error('[sjr] Error attaching current value', error);
         return rank;
@@ -255,12 +268,12 @@ export async function controllerCandidates(req, res) {
             const latestDocs = await db.collection(latestYear.toString())
                 .find({ Sourceid: { $in: documents.map(d => d.Sourceid) } })
                 .toArray();
-            latestDocs.forEach(d => currentById.set(d.Sourceid, d.BestQuartile === '-' ? 'QU' : d.BestQuartile));
+            latestDocs.forEach(d => currentById.set(d.Sourceid, d.BestQuartile === '-' ? 'Unranked' : d.BestQuartile));
         }
         const results = documents.map(d => ({
-            id: d.Sourceid, title: d.Title, value: d.BestQuartile === '-' ? 'QU' : d.BestQuartile,
+            id: d.Sourceid, title: d.Title, value: d.BestQuartile === '-' ? 'Unranked' : d.BestQuartile,
             currentSource: latestYear ? `scimagojr:${latestYear}` : null,
-            currentValue: latestYear === clampedYear ? (d.BestQuartile === '-' ? 'QU' : d.BestQuartile) : (currentById.get(d.Sourceid) ?? null),
+            currentValue: latestYear === clampedYear ? (d.BestQuartile === '-' ? 'Unranked' : d.BestQuartile) : (currentById.get(d.Sourceid) ?? null),
         }));
         res.json({ source: `scimagojr:${clampedYear}`, results });
     } catch (error) {
@@ -283,15 +296,20 @@ async function computeRank(venueFullName, year) {
         // title words alone against the whole scimagojr list -- same false
         // positive risk as CORE's fuzzy-only path, so kept just as tight.
         const MAX_FUZZY_DISTANCE = 2;
-        // Same rationale as CORE's fuzzy-only path: word-level edit distance
-        // is trivially small between any two short, unrelated title word
-        // lists, so a single normalized word can't be fuzzy-matched safely
-        // at all, and longer queries still need the allowed distance scaled
-        // to their own length rather than a flat cap.
-        if (titleNormalized.length < 2) {
+        if (titleNormalized.length === 0) {
             return { ...unrankedResult(year), queryText: venueFullName };
         }
-        const maxAllowedDistance = Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
+        // Same rationale as CORE's fuzzy-only path: word-level edit distance
+        // is trivially small between any two short, unrelated title word
+        // lists, so a single normalized word can't be *fuzzy*-matched safely
+        // at all -- but it can still be matched *exactly* (distance 0), which
+        // is not a coin flip the way a fuzzy hit would be. E.g. "IEEE
+        // Software" normalizes to just ["software"] (wordsToRemove strips
+        // "ieee"): forcing this down to unranked missed the real, exact
+        // "IEEE Software" (Q2) entry, whose own normalized title is the same
+        // single word. Longer queries still need the allowed distance scaled
+        // to their own length rather than a flat cap.
+        const maxAllowedDistance = titleNormalized.length < 2 ? 0 : Math.min(MAX_FUZZY_DISTANCE, Math.floor(titleNormalized.length / 2));
         const result = docs.map(item => {
             const distance = levenshtein(item.normalizedTitle, titleNormalized);
             return { data: item, distance: distance };

@@ -4,7 +4,8 @@ import MuiAlert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { useRankedPublications } from '../useRankedPublications';
-import { ranks, useFilterSettings } from '../FilterSettingsContext';
+import { rankingSourceQueryParam } from '../rankingSource';
+import { useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
@@ -43,7 +44,10 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 // reloaded from a bare /structure/:id URL) it arrives undefined, so the name
 // is looked up here instead of just falling back to showing the raw id.
 export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/structure-stream/${structId}`);
+  // Read from context, not localStorage directly -- see Author.js's
+  // identical comment for why this is what makes switching sources live.
+  const { rankingSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/structure-stream/${structId}${rankingSourceQueryParam(rankingSource)}`);
   const [resolvedName, setResolvedName] = useState(structureName);
 
   useEffect(() => {
@@ -101,7 +105,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length]);
   const [filterYears, setFilterYears] = useState([minYear, maxYear]);
-  const { filterRanks, filterCategories } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -143,9 +147,9 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>

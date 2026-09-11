@@ -9,7 +9,8 @@ import CircularProgress from '@mui/material/CircularProgress';
 // DBLP
 import { fetchAuthor } from '../dblp';
 import { useRankedPublications } from '../useRankedPublications';
-import { ranks, useFilterSettings } from '../FilterSettingsContext';
+import { rankingSourceQueryParam } from '../rankingSource';
+import { useFilterSettings } from '../FilterSettingsContext';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
@@ -69,7 +70,13 @@ export function Author({ pid, onOpenAuthor, onNameResolved, isActive }) {
 
 
 function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}`);
+  // Read from context (not localStorage directly): switching ranking
+  // source re-renders this with a new rankingSource value, which produces
+  // a new streamUrl string below -- useRankedPublications' own effect
+  // depends on that string, so it tears down and re-opens the stream with
+  // the new source automatically, no page reload needed.
+  const { rankingSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}${rankingSourceQueryParam(rankingSource)}`);
 
   if (failed && rankedPublications === null)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
@@ -97,7 +104,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
     [rankedPublications.length]
   );
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategories } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -141,9 +148,9 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>

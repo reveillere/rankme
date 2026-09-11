@@ -17,6 +17,8 @@ import { Structure } from './component/Structure';
 import StructureSearch from './component/StructureSearch';
 import About, { HIDE_ON_START_KEY } from './component/About';
 import { SettingsDialog } from './component/SettingsDialog';
+import { CategoriesFilterButton } from './component/CategoriesFilterButton';
+import { RankingSourceIndicator } from './component/RankingSourceIndicator';
 import { MyOverridesDialog } from './component/MyOverridesDialog';
 import { recordSearchHistory } from './searchHistory';
 
@@ -191,6 +193,8 @@ function App() {
             </Button>
           </Box>
           <Box display="flex" alignItems="center">
+            <RankingSourceIndicator onOpenSettings={() => setSettingsDialogOpen(true)} />
+            <CategoriesFilterButton />
             <IconButton color="inherit" onClick={() => setOverridesDialogOpen(true)} aria-label="my match corrections">
               <RuleIcon />
             </IconButton>

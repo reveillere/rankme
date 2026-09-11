@@ -73,7 +73,7 @@ const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOp
       </Tooltip>
       <div className="nr">[{nr}]</div>
       <div className="rank">
-      <RankBadge rank={item.rank} portal={item.type === 'inproceedings' ? 'core' : 'sjr'} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
+      <RankBadge rank={item.rank} portal={item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'inproceedings' ? 'core' : 'sjr')} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {
@@ -293,9 +293,26 @@ function Venue({ item, sharedMaps }) {
   // carry "Proceedings of the Nth..." framing); item.fullName, Crossref's
   // title for this record's DOI (see authorStream.js), when there's no
   // matchedTitle to prefer (no match at all, or an unresolved ambiguity);
-  // and dblp's own raw text as the last resort.
+  // and dblp's own raw text as the last resort -- but only for an 'exact'
+  // match: a 'fuzzy' one is just the automatic system's best guess, not
+  // confirmed by anyone yet, so showing its matchedTitle as if it were the
+  // real name would state a guess as fact. ('ambiguous' never sets
+  // matchedTitle at all, so it already falls through on its own.) Once a
+  // reader actually confirms a fuzzy match (confirmMatch, RankDetailsPopover.js)
+  // it becomes an override carrying that same title -- caught by the first
+  // rung above, which is why this rung only needs to gate the *un*confirmed
+  // case.
+  const useMatchedTitle = item.rank?.matchType === 'exact';
+  // A markAsUnranked override (RankDetailsPopover.js) has no title of its
+  // own -- title/acronym are both null, only value ("Unranked") is set --
+  // specifically to say "the automatic match itself was wrong, this venue
+  // isn't ranked at all." Falling through to that same rejected
+  // rank.matchedTitle next would show right back the name the override was
+  // just made to get rid of; skipping straight to the venue's own original
+  // text (fullName/rawVenue) is what "unranked" is actually saying.
+  const isMarkedUnranked = overrideCandidate && overrideCandidate.value === 'Unranked' && !overrideCandidate.title;
   const venue = withAcronym(overrideCandidate?.title, overrideCandidate?.acronym)
-    || withAcronym(item.rank?.matchedTitle, item.rank?.matchedAcronym)
+    || (isMarkedUnranked || !useMatchedTitle ? null : withAcronym(item.rank?.matchedTitle, item.rank?.matchedAcronym))
     || item.fullName
     || rawVenue;
 

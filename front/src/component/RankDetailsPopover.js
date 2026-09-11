@@ -32,8 +32,8 @@ export const MATCH_STYLE = {
 
 // CORE grades and SJR quartiles on one shared best-to-worst scale, so a
 // historical-vs-current rank pair can be compared regardless of portal.
-// "Misc"/"Unranked"/"QU" aren't included: they're not this kind of grade at
-// all, so there's nothing meaningful to say about their trend.
+// "Misc"/"Unranked" aren't included: they're not this kind of grade at all,
+// so there's nothing meaningful to say about their trend.
 const RANK_ORDER = { 'A*': 4, 'A': 3, 'B': 2, 'C': 1, 'Q1': 4, 'Q2': 3, 'Q3': 2, 'Q4': 1 };
 
 function trendOf(fromValue, toValue) {
@@ -167,6 +167,17 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
     onClose();
   };
 
+  // For when the automatic (or even a previously picked) match is simply
+  // wrong and nothing in "Change match" below is the right entry either --
+  // e.g. a workshop whose title happens to fuzzy-match an unrelated
+  // conference. Confirm only ever agrees with the existing guess, and
+  // picking a candidate only ever replaces it with a different *specific*
+  // entry; neither lets a reviewer say "this venue just isn't ranked at
+  // all," which a personal override recording the same synthetic
+  // "Unranked" shape corePortal.js/sjrPortal.js already use for a genuine
+  // no-match can represent perfectly well.
+  const markAsUnranked = () => pickCandidate({ id: null, title: null, value: 'Unranked' });
+
   if (!rank) return null;
 
   const isConfirmed = override?.type === 'confirmed';
@@ -177,6 +188,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   const effectiveMatchType = isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : isShared ? 'shared' : rank.matchType;
   const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
   const isJournal = portal === 'sjr';
+  const isCcf = portal === 'ccf';
   const displayedValue = isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
   // CORE's own category behind a "Misc" bucket (e.g. "Multiconference") --
   // see bucketRank in corePortal.js. Shown alongside the bucket everywhere
@@ -194,7 +206,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
       <Box sx={{ width: 580, maxWidth: '90vw', p: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', mb: 1 }}>
           <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-            {isJournal ? 'SJR' : 'CORE'} ranking{year ? ` — ${year}` : ''}
+            {isCcf ? 'CCF' : isJournal ? 'SJR' : 'CORE'} ranking{year ? ` — ${year}` : ''}
           </Typography>
           <Typography variant="body2" sx={{ color: style.color, fontWeight: 600 }}>
             {style.label}
@@ -222,7 +234,11 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
         {isManualOverride ? (
           <Box sx={{ my: 1 }}>
             <LabeledRow label="You set this to:">
-              <strong>{override.candidate.title}</strong>{override.candidate.acronym ? ` (${override.candidate.acronym})` : ''}
+              {/* markAsUnranked's candidate has no title/id at all -- it isn't
+                  a specific entry, just "this venue isn't ranked" -- so fall
+                  back to its value (always 'Unranked') instead of rendering
+                  an empty <strong> for a title that was never set. */}
+              <strong>{override.candidate.title || override.candidate.value}</strong>{override.candidate.acronym ? ` (${override.candidate.acronym})` : ''}
             </LabeledRow>
             <Typography variant="caption" color="text.secondary">
               Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}${rank.rawValue ? ` (${rank.rawValue})` : ''}` : `no match (${rank.value})`}
@@ -264,6 +280,11 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
                 <CandidateListItem key={i} value={c.value} rawValue={c.rawValue} title={c.title} acronym={c.acronym} onClick={() => pickCandidate(c)} />
               ))}
             </List>
+            <Box sx={{ mt: 1 }}>
+              <Button size="small" color="error" variant="outlined" onClick={markAsUnranked}>
+                None of these — remove this match
+              </Button>
+            </Box>
           </Box>
         ) : rank.matchedTitle ? (
           <Box sx={{ my: 1 }}>
@@ -275,13 +296,22 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
                 Title word distance: {rank.distance}
               </Typography>
             )}
-            {rank.matchType === 'fuzzy' && (
-              <Box sx={{ mt: 1 }}>
+            <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+              {rank.matchType === 'fuzzy' && (
                 <Button size="small" color="success" variant="outlined" onClick={confirmThisMatch}>
                   Confirm this match is correct
                 </Button>
-              </Box>
-            )}
+              )}
+              {/* Shown for 'exact' too, not just 'fuzzy': an acronym or dblp
+                  key can still land on the wrong entry outright -- e.g.
+                  ccfPortal.js's own buildIndex comment notes AsiaCCS's row
+                  pointing at the same dblp key as CCS itself -- so "this
+                  specific match is wrong" needs an escape hatch even when
+                  the system considers it certain. */}
+              <Button size="small" color="error" variant="outlined" onClick={markAsUnranked}>
+                Remove this match
+              </Button>
+            </Box>
           </Box>
         ) : (
           <Typography variant="body2" sx={{ my: 1 }}>No matching entry found in this edition.</Typography>
@@ -317,7 +347,7 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
           size="small"
           fullWidth
           autoFocus
-          placeholder={isJournal ? 'Search journal name…' : 'Search conference name or acronym…'}
+          placeholder={isCcf ? 'Search conference or journal name…' : isJournal ? 'Search journal name…' : 'Search conference name or acronym…'}
           value={query}
           onChange={e => handleQueryChange(e.target.value)}
         />

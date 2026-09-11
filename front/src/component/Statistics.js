@@ -1,5 +1,6 @@
 import { Bar } from 'react-chartjs-2';
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
+import { getEffectiveValue, portalFromRank } from '../matchOverrides';
 
 // Registered here (rather than by each page that renders a chart) so it
 // happens exactly once, wherever this module is first loaded -- Author.js
@@ -71,12 +72,17 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
 
 }
 
-export function RanksByYearChart({ records, selected, ranks, yearAccessor }) {
+// sharedMaps: same { core, sjr } (ccf has no community overrides yet, see
+// RankBadge.js) map RankBadge.js itself reads from, threaded down from the
+// container's one useSharedOverridesMaps() call -- so a personal or
+// community correction changes which bucket a publication counts under
+// here too, not just the badge shown next to it in the list below.
+export function RanksByYearChart({ records, selected, ranks, yearAccessor, sharedMaps }) {
   return (
     <ByYearChart
       records={records}
       selected={selected}
-      fieldAccessor={(pub) => pub.rank?.value}
+      fieldAccessor={(pub) => getEffectiveValue(pub.rank, sharedMaps?.[portalFromRank(pub.rank)])}
       labelAccessor={(key) => ranks[key].name}
       colorAccessor={(key) => ranks[key].color}
       yearAccessor={yearAccessor}

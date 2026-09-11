@@ -48,14 +48,17 @@ function About({ open, onClose }) {
         <Typography variant="body1" gutterBottom>
           rankme looks up an author on <Link href="https://dblp.org" target="_blank" rel="noreferrer">DBLP</Link> or{' '}
           <Link href="https://hal.science" target="_blank" rel="noreferrer">HAL</Link>, pulls their publication list,
-          and matches each venue against two independent ranking sources.
+          and matches each venue against a ranking source.
         </Typography>
         <Typography variant="body1" gutterBottom>
-          Conferences and workshops are ranked by{' '}
+          By default, conferences and workshops are ranked by{' '}
           <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C),
           journals by{' '}
           <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4).
-          A venue with no match in either source is shown as Unranked rather than left out.
+          A venue with no match in either source is shown as Unranked rather than left out. You can switch to{' '}
+          <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
+          instead — a single A/B/C scale covering both conferences and journals — from the ranking badge in the
+          toolbar or the Preferences dialog.
         </Typography>
         <Box
           sx={{

@@ -1,34 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
+import RadioGroup from '@mui/material/RadioGroup';
+import Radio from '@mui/material/Radio';
+import Link from '@mui/material/Link';
 
-import { Selector, CategoriesSelector } from './Selector';
-import { categories, useFilterSettings } from '../FilterSettingsContext';
 import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
-import CorePortal from '../corePortal';
-import SjrPortal from '../sjrPortal';
-
-// article/inproceedings are the only two categories a rank actually applies
-// to — nesting their ranks right under them makes that relationship visible
-// instead of relying on a tooltip to explain a disabled checkbox elsewhere.
-const PLAIN_CATEGORIES = Object.fromEntries(
-  Object.entries(categories).filter(([key]) => key !== 'article' && key !== 'inproceedings')
-);
+import { useFilterSettings } from '../FilterSettingsContext';
 
 export function SettingsDialog({ open, onClose }) {
-  const {
-    filterRanks, setFilterRanks,
-    filterCategories, setFilterCategories,
-  } = useFilterSettings();
   // Not part of FilterSettingsContext: that context is for chart/list
   // filtering (re-applied reactively as you change it), while this is a
   // one-off "trust the crowd or not" preference, read fresh by each
@@ -41,86 +28,62 @@ export function SettingsDialog({ open, onClose }) {
     setUseCommunityOverrides(e.target.checked);
   };
 
+  // Ranking source DOES live in FilterSettingsContext (unlike
+  // useCommunityOverrides above): switching it needs to be visible
+  // everywhere at once -- every open tab's stream, the toolbar badge, the
+  // category filter popover -- without a page reload, which only a shared
+  // reactive value (not a plain localStorage read) can do.
+  const { rankingSource, setRankingSource } = useFilterSettings();
+  const handleRankingSourceChange = (e) => setRankingSource(e.target.value);
+
+  // The edition/year actually being used for CORE/SJR right now -- fetched
+  // fresh each time this dialog opens rather than hardcoded, so it can
+  // never drift out of date the way a string someone has to remember to
+  // bump by hand would (see routes.js's /ranking-editions, which reads
+  // each portal's own live in-process state).
+  const [editions, setEditions] = useState(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetch('/api/ranking-editions').then(r => r.json()).then(data => { if (!cancelled) setEditions(data); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [open]);
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Display settings</DialogTitle>
+      <DialogTitle>Preferences</DialogTitle>
       <DialogContent>
+        <Typography variant="subtitle1" gutterBottom>Ranking source</Typography>
+        <RadioGroup value={rankingSource} onChange={handleRankingSourceChange}>
+          <FormControlLabel value="core-sjr" control={<Radio size="small" />} label={<Typography variant="body2">CORE + SJR (default)</Typography>} />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
+            Conferences ranked by{' '}
+            <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C{editions?.core ? `, ${editions.core}` : ''}),
+            journals by{' '}
+            <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4{editions?.sjr ? `, ${editions.sjr}` : ''}).
+          </Typography>
+          <FormControlLabel value="ccf" control={<Radio size="small" />} label={<Typography variant="body2">CCF</Typography>} />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
+            Ranks both conferences and journals on one shared A/B/C scale, by the{' '}
+            <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
+            (7th edition, 2026).
+          </Typography>
+        </RadioGroup>
+        <Divider sx={{ mt: 2, mb: 2.5 }} />
+
         <Typography variant="subtitle1" gutterBottom>Match corrections</Typography>
         <FormControlLabel
           control={<Checkbox checked={useCommunityOverrides} onChange={handleCommunityOverridesChange} size="small" />}
           label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
         />
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 2 }}>
-          When a CORE/SJR match gets corrected the same way by several different people, everyone sees that correction
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
+          When a match gets corrected the same way by several different people, everyone sees that correction
           by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
         </Typography>
-        <Divider sx={{ mb: 2.5 }} />
-
-        <Typography variant="subtitle1" gutterBottom>Publication categories</Typography>
-
-        <CategoryWithRanks
-          categoryKey="inproceedings"
-          rankData={CorePortal.ranks}
-          filterCategories={filterCategories}
-          setFilterCategories={setFilterCategories}
-          filterRanks={filterRanks}
-          setFilterRanks={setFilterRanks}
-        />
-        <CategoryWithRanks
-          categoryKey="article"
-          rankData={SjrPortal.ranks}
-          filterCategories={filterCategories}
-          setFilterCategories={setFilterCategories}
-          filterRanks={filterRanks}
-          setFilterRanks={setFilterRanks}
-        />
-
-        <CategoriesSelector selected={filterCategories} setSelected={setFilterCategories} categories={PLAIN_CATEGORIES} />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
-  );
-}
-
-// A category and the ranks that only apply to it — each side disables
-// itself while the other is entirely empty, since e.g. a conference rank
-// with no conference category selected can never match anything.
-function CategoryWithRanks({ categoryKey, rankData, filterCategories, setFilterCategories, filterRanks, setFilterRanks }) {
-  const categoryChecked = !!filterCategories[categoryKey];
-  const hasAnyRank = Object.keys(rankData).some(key => filterRanks[key]);
-  const categoryDisabled = !hasAnyRank;
-  const ranksDisabled = !categoryChecked;
-  const categoryLabel = categories[categoryKey].name;
-
-  const toggleCategory = () => setFilterCategories({ ...filterCategories, [categoryKey]: !categoryChecked });
-
-  const checkbox = (
-    <FormControlLabel
-      disabled={categoryDisabled}
-      control={<Checkbox checked={categoryChecked} onChange={toggleCategory} size="small" />}
-      label={<Typography sx={{ fontWeight: 600 }}>{categoryLabel}</Typography>}
-    />
-  );
-
-  return (
-    <Box sx={{ mb: 2.5 }}>
-      {categoryDisabled ? (
-        <Tooltip title="Select at least one matching rank to use this category" placement="right">
-          <span>{checkbox}</span>
-        </Tooltip>
-      ) : checkbox}
-
-      <Box sx={{ pl: 4, opacity: ranksDisabled ? 0.5 : 1 }}>
-        <Selector
-          selected={filterRanks}
-          setSelected={setFilterRanks}
-          data={rankData}
-          disabledKeys={ranksDisabled ? Object.keys(rankData) : []}
-          disabledReason={`Select "${categoryLabel}" above to use these ranks`}
-        />
-      </Box>
-    </Box>
   );
 }

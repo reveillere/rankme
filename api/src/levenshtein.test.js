@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { levenshtein, normalizeTitle } from './levenshtein.js';
+import { levenshtein, normalizeTitle, isWorkshopMismatch } from './levenshtein.js';
 
 test('levenshtein: identical strings have distance 0', () => {
   assert.equal(levenshtein('acmmm', 'acmmm'), 0);
@@ -35,4 +35,29 @@ test('normalizeTitle: two differently-formatted names for the same venue normali
   // acronym) is exactly what pushes the levenshtein distance up rather than
   // matching perfectly, which is the situation computeRank2 is built around.
   assert.ok(levenshtein(a.join(' '), b.join(' ')) > 0);
+});
+
+test('isWorkshopMismatch: flags a workshop fuzzy-matched to a non-workshop entry', () => {
+  assert.equal(
+    isWorkshopMismatch('3rd International Workshop on Program Comprehension', 'IEEE Conference on Program Comprehension'),
+    true
+  );
+});
+
+test('isWorkshopMismatch: does not flag when both sides are workshops', () => {
+  assert.equal(
+    isWorkshopMismatch('3rd International Workshop on Program Comprehension', 'International Workshop on Program Comprehension'),
+    false
+  );
+});
+
+test('isWorkshopMismatch: does not flag when neither side mentions a workshop', () => {
+  assert.equal(
+    isWorkshopMismatch('IEEE Conference on Program Comprehension', 'IEEE Conference on Program Comprehension'),
+    false
+  );
+});
+
+test('isWorkshopMismatch: case-insensitive and matches the plural too', () => {
+  assert.equal(isWorkshopMismatch('International WORKSHOPS on X', 'Conference on X'), true);
 });

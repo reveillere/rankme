@@ -129,6 +129,43 @@ export function getSharedOverride(rank, sharedMap) {
   return sharedMap[rank.queryText] || null;
 }
 
+// Derives which portal a rank came from straight from its own `source`
+// field, rather than needing a publication's type/source (dblp vs HAL,
+// inproceedings vs article) the way Publications.js/HalPublications.js/
+// Team.js's own portalAccessorFor do -- each ranking system's `source`
+// string is already unambiguous on its own: SJR's is always
+// "scimagojr:<year>", CCF's is always "CCF<edition year>", and CORE's is
+// whatever's left (its own source strings aren't consistently prefixed --
+// e.g. "CORE2021" vs "ICORE2026" -- so it's the catch-all, not matched
+// positively). Lets a single record (as counted by Statistics.js's
+// ByYearChart/RankSummary.js) resolve its own override without also
+// needing to know or be told what kind of publication it came from.
+export function portalFromRank(rank) {
+  const source = rank?.source || '';
+  if (source.startsWith('CCF')) return 'ccf';
+  if (source.startsWith('scimagojr:')) return 'sjr';
+  return 'core';
+}
+
+// The value actually shown for a rank once personal and community
+// corrections are taken into account -- same priority RankBadge.js/
+// RankDetailsPopover.js already apply (personal override/confirmation wins,
+// then a shared one, then the plain automatic match). Used by
+// Statistics.js's chart and RankSummary.js's counts so a correction changes
+// what they show too, instead of only the badge next to it -- confirming a
+// fuzzy match doesn't change its value, so effective and automatic count
+// the same there, but a full override (including markAsUnranked's
+// synthetic "Unranked" candidate, see RankDetailsPopover.js) does.
+export function getEffectiveValue(rank, sharedMap) {
+  if (!rank) return undefined;
+  const portal = portalFromRank(rank);
+  const override = getOverride(portal, rank);
+  if (override) return override.candidate.value;
+  const sharedOverride = getSharedOverride(rank, sharedMap);
+  if (sharedOverride) return sharedOverride.candidate.value;
+  return rank.value;
+}
+
 // Whether a rank's automatic match still needs a human look -- used by the
 // "Only show matches to review" list filter (see ReviewFilterToggle.js).
 // Anything already 'exact', already given a personal override/confirmation
@@ -138,8 +175,14 @@ export function getSharedOverride(rank, sharedMap) {
 // per-portal shared map either way to actually display the match) is
 // considered resolved, same priority as RankBadge.js: personal beats
 // shared, and either beats the plain automatic match.
+// 'none' (Unranked -- the venue simply isn't in the ranking source at all)
+// is excluded too: unlike 'fuzzy'/'ambiguous', there's no automatic guess
+// to second-guess -- nothing for a reviewer to actually do (they can still
+// search and set one manually via RankDetailsPopover.js, but that's a
+// deliberate addition, not something to chase down for every unranked row),
+// so it shouldn't inflate the count.
 export function needsReview(portal, rank, sharedOverride) {
-  if (!rank || rank.matchType === 'exact') return false;
+  if (!rank || rank.matchType === 'exact' || rank.matchType === 'none') return false;
   if (sharedOverride) return false;
   return !getOverride(portal, rank);
 }
