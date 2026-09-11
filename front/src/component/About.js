@@ -55,10 +55,9 @@ function About({ open, onClose }) {
           <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C),
           journals by{' '}
           <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4).
-          A venue with no match in either source is shown as Unranked rather than left out. You can switch to{' '}
+          A venue with no match in either source is shown as Unranked rather than left out.{' '}
           <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-          instead — a single A/B/C scale covering both conferences and journals — from the ranking badge in the
-          toolbar or the Preferences dialog.
+          can be selected as an alternative source.
         </Typography>
         <Box
           sx={{
@@ -75,8 +74,8 @@ function About({ open, onClose }) {
           <InfoOutlinedIcon fontSize="small" sx={{ mt: '2px', flexShrink: 0 }} />
           <Typography variant="body2">
             Rank matching is automated and best-effort: venue names and acronyms don&apos;t always line up perfectly
-            across DBLP, HAL, CORE and Scimago, so occasional mismatches are expected. Use rankme as a starting point,
-            not a definitive assessment.
+            across DBLP, HAL, CORE, Scimago and CCF, so occasional mismatches are expected. Use rankme as a starting
+            point, not a definitive assessment.
           </Typography>
         </Box>
 

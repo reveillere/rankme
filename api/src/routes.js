@@ -17,11 +17,12 @@ router.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 // For SettingsDialog.js's ranking-source descriptions -- reads each
 // portal's own live in-process state (core.getLatestSource/
-// sjr.getLatestYear), so it's always accurate after a CORE/SJR update
-// rather than a string someone has to remember to bump by hand.
+// sjr.getLatestYear/ccf.getLatestEditionYear), so it's always accurate
+// after an update rather than a string someone has to remember to bump by
+// hand.
 router.get('/ranking-editions', async (req, res) => {
   const latestCore = await core.getLatestSource();
-  res.json({ core: latestCore?.source ?? null, sjr: sjr.getLatestYear() });
+  res.json({ core: latestCore?.source ?? null, sjr: sjr.getLatestYear(), ccf: ccf.getLatestEditionYear() });
 });
 
 router.get('/dblp/status', admin.controllerDblpStatus);

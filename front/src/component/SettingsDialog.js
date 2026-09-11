@@ -58,15 +58,18 @@ export function SettingsDialog({ open, onClose }) {
           <FormControlLabel value="core-sjr" control={<Radio size="small" />} label={<Typography variant="body2">CORE + SJR (default)</Typography>} />
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
             Conferences ranked by{' '}
-            <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C{editions?.core ? `, ${editions.core}` : ''}),
+            <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C),
             journals by{' '}
-            <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4{editions?.sjr ? `, ${editions.sjr}` : ''}).
+            <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4) —
+            each publication matched against whichever edition was current the year it came out.
+            Latest available: CORE {editions?.core ?? '…'}, SJR {editions?.sjr ?? '…'}.
           </Typography>
           <FormControlLabel value="ccf" control={<Radio size="small" />} label={<Typography variant="body2">CCF</Typography>} />
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
-            Ranks both conferences and journals on one shared A/B/C scale, by the{' '}
-            <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-            (7th edition, 2026).
+            Ranks both conferences and journals on one shared A/B/C scale by the{' '}
+            <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>,
+            the same way — matched against the edition current when each paper was published.
+            Latest available: {editions?.ccf ?? '…'}.
           </Typography>
         </RadioGroup>
         <Divider sx={{ mt: 2, mb: 2.5 }} />

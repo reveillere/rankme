@@ -64,6 +64,15 @@ export function rankKey(editionYear, query) {
 // -- editions[0] is always the current/latest edition.
 let editions = [];
 
+// For SettingsDialog.js's ranking-source description (see routes.js's
+// /ranking-editions, which mirrors core.getLatestSource/sjr.getLatestYear's
+// identical purpose for those two portals) -- read fresh rather than
+// hardcoded, so it can't drift out of date the way a string someone has to
+// remember to bump on every new edition would.
+export function getLatestEditionYear() {
+    return editions[0]?.year ?? null;
+}
+
 function resolveEdition(pubYear) {
     if (editions.length === 0) return null;
     const found = editions.find(e => e.year <= pubYear);
@@ -386,4 +395,4 @@ export async function getRankForHalVenue(acronym, fullName, pubYear) {
     });
 }
 
-export default { load, getRankForDblpUrl, getRankForHalVenue, controllerCandidates, parseCcfText, dblpKeyFromUrl, rankKey, PDF_URL };
+export default { load, getRankForDblpUrl, getRankForHalVenue, controllerCandidates, getLatestEditionYear, parseCcfText, dblpKeyFromUrl, rankKey, PDF_URL };

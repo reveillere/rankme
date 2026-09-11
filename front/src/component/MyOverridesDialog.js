@@ -96,8 +96,10 @@ export function MyOverridesDialog({ open, onClose }) {
                     without this override. */}
                 {i > 0 && <Divider component="li" sx={{ listStyleType: 'none' }} />}
                 <ListItem
+                  alignItems="flex-start"
+                  sx={{ pr: 10 }}
                   secondaryAction={
-                    <Button size="small" onClick={() => handleReset(o.key)}>Reset</Button>
+                    <Button size="small" onClick={() => handleReset(o.key)} sx={{ mt: 0.5 }}>Reset</Button>
                   }
                 >
                   <ListItemText
