@@ -57,7 +57,7 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
   // (passed through to the hook below, which needs it in its own effect's
   // dependency array to actually re-open every member's stream).
   const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed } = useMergedRankedPublications(team.source, team.members, rankingSource);
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useMergedRankedPublications(team.source, team.members, rankingSource);
 
   if (failed)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this team&apos;s members from {team.source === 'hal' ? 'HAL' : 'DBLP'}. Please try again later.</div>;
@@ -71,6 +71,8 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
       publications={rankedPublications}
       progress={progress}
       done={done}
+      queued={queued}
+      queuePosition={queuePosition}
       onOpenAuthor={onOpenAuthor}
       onSearchAuthor={onSearchAuthor}
       isActive={isActive}
@@ -78,7 +80,7 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
   );
 }
 
-function TeamContent({ team, publications: rankedPublications, progress, done, onOpenAuthor, onSearchAuthor, isActive }) {
+function TeamContent({ team, publications: rankedPublications, progress, done, queued, queuePosition, onOpenAuthor, onSearchAuthor, isActive }) {
   const isHal = team.source === 'hal';
   const yearAccessor = useMemo(() => yearAccessorFor(team.source), [team.source]);
   const categoryKeyAccessor = useMemo(() => categoryKeyAccessorFor(team.source), [team.source]);
@@ -157,7 +159,9 @@ function TeamContent({ team, publications: rankedPublications, progress, done, o
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>
-          Update in progress ({updateCompletedPercent}%)
+          {queued
+            ? `Queued${queuePosition != null ? ` — ${queuePosition} ahead of you` : '…'}`
+            : `Update in progress (${updateCompletedPercent}%)`}
         </Alert>
       </Snackbar>
 

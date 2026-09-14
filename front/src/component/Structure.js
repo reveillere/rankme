@@ -47,7 +47,7 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live.
   const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/structure-stream/${structId}${rankingSourceQueryParam(rankingSource)}`);
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/hal/structure-stream/${structId}${rankingSourceQueryParam(rankingSource)}`);
   const [resolvedName, setResolvedName] = useState(structureName);
 
   useEffect(() => {
@@ -85,12 +85,14 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
       publications={rankedPublications}
       progress={progress}
       done={done}
+      queued={queued}
+      queuePosition={queuePosition}
       isActive={isActive}
     />
   );
 }
 
-function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, isActive }) {
+function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, isActive }) {
   // Years are already known from the initial SSE `init` payload -- only
   // `.rank` fields arrive later -- so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -167,7 +169,9 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>
-          Update in progress ({updateCompletedPercent}%)
+          {queued
+            ? `Queued${queuePosition != null ? ` — ${queuePosition} ahead of you` : '…'}`
+            : `Update in progress (${updateCompletedPercent}%)`}
         </Alert>
       </Snackbar>
 

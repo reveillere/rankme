@@ -38,7 +38,7 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live.
   const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/hal/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`);
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/hal/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`);
 
   if (failed && rankedPublications === null) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from HAL. Please try again later.</div>;
@@ -60,12 +60,14 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onName
       publications={rankedPublications}
       progress={progress}
       done={done}
+      queued={queued}
+      queuePosition={queuePosition}
       isActive={isActive}
     />
   );
 }
 
-function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done, isActive }) {
+function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done, queued, queuePosition, isActive }) {
   // A tab opened directly by id (or reloaded from a bare /hal/:id URL)
   // doesn't know this author's display name yet -- unlike a structure (see
   // Structure.js's structure-info lookup), HAL has no per-author name
@@ -168,7 +170,9 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
         open={!done}
       >
         <Alert severity="info" sx={{ width: '100%' }}>
-          Update in progress ({updateCompletedPercent}%)
+          {queued
+            ? `Queued${queuePosition != null ? ` — ${queuePosition} ahead of you` : '…'}`
+            : `Update in progress (${updateCompletedPercent}%)`}
         </Alert>
       </Snackbar>
 

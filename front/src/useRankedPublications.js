@@ -15,6 +15,18 @@ export function useRankedPublications(streamUrl) {
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
+  // True from `init` until the server's own 'started' event (or the first
+  // actual rank/rank-error/done) arrives -- distinguishes "queued behind
+  // other work, nothing computed yet" from "actively computing, 0 of N
+  // done so far", which otherwise look identical (completed stays 0 in
+  // both). See ranking.js's identical comment on why this needed its own
+  // signal rather than being inferrable from progress alone.
+  const [queued, setQueued] = useState(false);
+  // A snapshot from the server's own 'queued' event ("this many were ahead
+  // of you when you joined the queue") -- not a live countdown, see
+  // ranking.js's ConcurrencyLimiter.position for why. null whenever queued
+  // is false, or if the stream never queued long enough to get one at all.
+  const [queuePosition, setQueuePosition] = useState(null);
   // Mutated directly by each 'rank' event, in place -- no per-event array
   // copy or re-render, unlike the `publications` state above (which is
   // only ever replaced by a *reference* to this same array, on the
@@ -31,6 +43,8 @@ export function useRankedPublications(streamUrl) {
     setDone(false);
     setProgress({ completed: 0, total: 0 });
     setFailed(false);
+    setQueued(false);
+    setQueuePosition(null);
     if (!streamUrl) return;
 
     const es = new EventSource(streamUrl);
@@ -50,6 +64,21 @@ export function useRankedPublications(streamUrl) {
       progressRef.current = { completed: 0, total: data.total };
       setPublications(data.publications);
       setProgress(progressRef.current);
+      setQueued(data.total > 0);
+    });
+
+    // Only sent when there's actually something ahead (see ranking.js) --
+    // a stream that starts running immediately never gets one at all.
+    es.addEventListener('queued', (e) => {
+      setQueuePosition(JSON.parse(e.data).position);
+    });
+
+    // Fired once by the server the moment this stream's own work actually
+    // starts running (as opposed to sitting behind other requests in
+    // ranking_limiter) -- see ranking.js's identical comment.
+    es.addEventListener('started', () => {
+      setQueued(false);
+      setQueuePosition(null);
     });
 
     es.addEventListener('rank', (e) => {
@@ -58,6 +87,8 @@ export function useRankedPublications(streamUrl) {
         publicationsRef.current[index] = { ...publicationsRef.current[index], ...extra };
       }
       progressRef.current = { completed, total };
+      setQueued(false); // defensive: a rank event can only follow 'started'
+      setQueuePosition(null);
       scheduleFlush();
     });
 
@@ -70,6 +101,8 @@ export function useRankedPublications(streamUrl) {
     // with at least one per-item ranking error.
     es.addEventListener('rank-error', (e) => {
       progressRef.current = JSON.parse(e.data);
+      setQueued(false);
+      setQueuePosition(null);
       scheduleFlush();
     });
 
@@ -77,6 +110,8 @@ export function useRankedPublications(streamUrl) {
       if (flushTimerRef.current != null) { clearTimeout(flushTimerRef.current); flushTimerRef.current = null; }
       flush();
       setDone(true);
+      setQueued(false);
+      setQueuePosition(null);
       es.close();
     });
 
@@ -95,5 +130,5 @@ export function useRankedPublications(streamUrl) {
     };
   }, [streamUrl]);
 
-  return { publications, progress, done, failed };
+  return { publications, progress, done, failed, queued, queuePosition };
 }

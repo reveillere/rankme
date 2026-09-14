@@ -49,6 +49,17 @@ export function useMergedRankedPublications(source, members, rankingSource) {
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [done, setDone] = useState(false);
   const [failed, setFailed] = useState(false);
+  // True while *every* member's own stream is still queued behind other
+  // work -- see useRankedPublications.js's identical flag/comment. Once
+  // any single member starts actually computing, the team as a whole is
+  // making progress, so the aggregate switches to showing that instead.
+  const [queued, setQueued] = useState(false);
+  // The worst (highest) queue position among still-queued members -- the
+  // team only stops being "queued" once *that* member starts, so it's the
+  // number that actually determines the remaining wait. null members
+  // (never queued, or already past it) don't count. See
+  // useRankedPublications.js's identical flag for the single-stream case.
+  const [queuePosition, setQueuePosition] = useState(null);
 
   const memberKey = (members || []).map(m => m.id).join(',');
   const config = SOURCE_CONFIG[source];
@@ -58,6 +69,8 @@ export function useMergedRankedPublications(source, members, rankingSource) {
     setProgress({ completed: 0, total: 0 });
     setDone(false);
     setFailed(false);
+    setQueued(false);
+    setQueuePosition(null);
 
     if (!members || members.length === 0) {
       setPublications([]);
@@ -69,6 +82,8 @@ export function useMergedRankedPublications(source, members, rankingSource) {
     const memberProgress = members.map(() => ({ completed: 0, total: 0 }));
     const memberDone = members.map(() => false);
     const memberFailed = members.map(() => false);
+    const memberQueued = members.map(() => true);
+    const memberQueuePosition = members.map(() => null);
 
     let flushTimer = null;
     const publish = () => {
@@ -81,6 +96,9 @@ export function useMergedRankedPublications(source, members, rankingSource) {
       });
       setDone(memberDone.every(Boolean));
       setFailed(memberFailed.every(Boolean));
+      setQueued(memberQueued.every(Boolean));
+      const knownPositions = memberQueuePosition.filter((p) => p != null);
+      setQueuePosition(knownPositions.length > 0 ? Math.max(...knownPositions) : null);
     };
     // Immediate for init/done/error (rare, and callers need those
     // reflected right away -- e.g. "every member errored" for failed);
@@ -99,6 +117,22 @@ export function useMergedRankedPublications(source, members, rankingSource) {
         publish();
       });
 
+      // Only sent when there's actually something ahead of this member --
+      // see ranking.js/useRankedPublications.js's identical 'queued'.
+      es.addEventListener('queued', (e) => {
+        memberQueuePosition[i] = JSON.parse(e.data).position;
+        publish();
+      });
+
+      // Fired once by the server the moment this member's own work starts
+      // running rather than sitting queued -- see ranking.js/
+      // useRankedPublications.js's identical 'started' handling.
+      es.addEventListener('started', () => {
+        memberQueued[i] = false;
+        memberQueuePosition[i] = null;
+        publish();
+      });
+
       es.addEventListener('rank', (e) => {
         const { index, completed, total, ...extra } = JSON.parse(e.data);
         // Mutated in place -- unlike the old `[...memberPubs[i]]` copy,
@@ -107,6 +141,8 @@ export function useMergedRankedPublications(source, members, rankingSource) {
         // reads memberPubs into a new merged array for React).
         if (memberPubs[i]) memberPubs[i][index] = { ...memberPubs[i][index], ...extra };
         memberProgress[i] = { completed, total };
+        memberQueued[i] = false; // defensive: a rank event can only follow 'started'
+        memberQueuePosition[i] = null;
         schedulePublish();
       });
 
@@ -119,11 +155,15 @@ export function useMergedRankedPublications(source, members, rankingSource) {
       es.addEventListener('rank-error', (e) => {
         const { completed, total } = JSON.parse(e.data);
         memberProgress[i] = { completed, total };
+        memberQueued[i] = false;
+        memberQueuePosition[i] = null;
         schedulePublish();
       });
 
       es.addEventListener('done', () => {
         memberDone[i] = true;
+        memberQueued[i] = false;
+        memberQueuePosition[i] = null;
         publish();
         es.close();
       });
@@ -135,6 +175,8 @@ export function useMergedRankedPublications(source, members, rankingSource) {
         if (memberPubs[i] === null) memberPubs[i] = [];
         memberFailed[i] = true;
         memberDone[i] = true;
+        memberQueued[i] = false;
+        memberQueuePosition[i] = null;
         publish();
         es.close();
       };
@@ -149,5 +191,5 @@ export function useMergedRankedPublications(source, members, rankingSource) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, memberKey, rankingSource]);
 
-  return { publications, progress, done, failed };
+  return { publications, progress, done, failed, queued, queuePosition };
 }

@@ -76,7 +76,7 @@ function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
   // depends on that string, so it tears down and re-opens the stream with
   // the new source automatically, no page reload needed.
   const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed } = useRankedPublications(`/api/dblp/author-stream/${pid}${rankingSourceQueryParam(rankingSource)}`);
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/dblp/author-stream/${pid}${rankingSourceQueryParam(rankingSource)}`);
 
   if (failed && rankedPublications === null)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
@@ -84,7 +84,7 @@ function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
   if (rankedPublications === null)
     return <LoadingSpinner message="Computing ranks…" progress={progress} />;
 
-  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} onOpenAuthor={onOpenAuthor} isActive={isActive} />;
+  return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} queued={queued} queuePosition={queuePosition} onOpenAuthor={onOpenAuthor} isActive={isActive} />;
 }
 
 
@@ -93,7 +93,7 @@ function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
 const yearAccessor = pub => pub.dblp.year;
 const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 
-function AuthorContent({ author, publications: rankedPublications, progress, done, onOpenAuthor, isActive }) {
+function AuthorContent({ author, publications: rankedPublications, progress, done, queued, queuePosition, onOpenAuthor, isActive }) {
   // Years are already known from the initial SSE `init` payload — only
   // `.rank` fields arrive later — so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -171,7 +171,9 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
         open={!done}
       >
         <Alert severity="info" sx={{ width: '100%' }}>
-          Update in progress ({updateCompletedPercent}%)
+          {queued
+            ? `Queued${queuePosition != null ? ` — ${queuePosition} ahead of you` : '…'}`
+            : `Update in progress (${updateCompletedPercent}%)`}
         </Alert>
       </Snackbar>
 

@@ -82,6 +82,22 @@ class ConcurrencyLimiter {
         for (const bucket of this.buckets.values()) queued += bucket.length;
         return { running: this.running, queued };
     }
+
+    // How many already-queued tasks would be dequeued before a *new* one
+    // at this priority: everything currently sitting in a bucket at this
+    // priority or better (lower number = higher priority, dequeued first;
+    // FIFO within a bucket). A snapshot taken at the moment a stream joins
+    // the queue, not a live countdown -- maxConcurrent slots freeing up
+    // don't change *order*, only how fast that order gets worked through,
+    // so this answers "how many ahead of you", not "how long" (see
+    // streamRankedItems' own use of this for the 'queued' SSE event).
+    position(priority) {
+        let ahead = 0;
+        for (const [p, bucket] of this.buckets) {
+            if (p <= priority) ahead += bucket.length;
+        }
+        return ahead;
+    }
 }
 
 const ranking_limiter = new ConcurrencyLimiter(8);
@@ -144,9 +160,24 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
     sse.send('init', { publications: items, total });
 
     const priority = priorityFor(total);
+    // Snapshot before this batch's own tasks join the queue (so they don't
+    // count themselves) -- skipped entirely at 0 (nothing ahead, 'started'
+    // is about to fire immediately anyway, no point announcing a queue
+    // that isn't really one).
+    const queuePosition = ranking_limiter.position(priority);
+    if (queuePosition > 0) sse.send('queued', { position: queuePosition });
     const streamId = activeStreams.register(label);
     try {
         let completed = 0;
+        // Distinguishes "queued behind other work" from "actively
+        // computing, 0 of N done so far" -- both look identical to a
+        // client that only ever sees completed=0, since `total` (and
+        // therefore a 0% figure) is already known and sent via `init`
+        // before ranking_limiter has picked up a single item. Sent once,
+        // the first moment any item in this batch actually starts running
+        // rather than sitting in a bucket -- see ConcurrencyLimiter's own
+        // queued/running distinction above.
+        let started = false;
         await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(priority, async () => {
             // The client is already gone -- skip starting work that would
             // just be computed into a dead socket. A task already picked up
@@ -154,6 +185,7 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
             // completion (no mid-flight cancellation), but sse.send below
             // is a no-op for it either way.
             if (sse.aborted) return;
+            if (!started) { started = true; sse.send('started', {}); }
             try {
                 const extra = await computeRank(items[index], index);
                 completed++;
