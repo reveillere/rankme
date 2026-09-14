@@ -5,6 +5,12 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>rankme</title>
+    <!-- Self-hosted Umami analytics (see analytics/docker-compose.analytics.yml
+         and About.js's disclosure). Same-origin subpath, no cookies, no IP
+         stored -- see that compose file's comments. 404s harmlessly in local
+         dev, where /analytics/ isn't deployed. data-do-not-track opts a
+         visitor's browser-level Do Not Track setting out of collection. -->
+    <script defer data-do-not-track="true" src="/analytics/script.js" data-website-id="00000000-0000-0000-0000-000000000000"></script>
   </head>
   <body>
     <div id="root"></div>

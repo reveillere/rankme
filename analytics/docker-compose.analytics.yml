@@ -1,0 +1,115 @@
+# Optional visitor-analytics stack: Umami (self-hosted, privacy-by-design
+# web analytics), layered on top of the main prod stack the same way
+# monitoring/docker-compose.monitoring.yml is -- see that file's own "WHY
+# SEPARATE" comment (RAM-constrained VPS, opt-in rather than automatic);
+# the same reasoning applies here.
+#
+# WHY UMAMI, NOT GOOGLE ANALYTICS: self-hosted means visitor data never
+# leaves this server -- no third-country transfer to Google, no ad-tech
+# data sharing, no separate DPA/processor agreement needed. Umami doesn't
+# set tracking cookies and doesn't persist visitor IP addresses: it hashes
+# IP + user-agent + website id with a same-day-rotating salt purely to
+# dedupe a "visit" into one session, then discards the IP -- only the hash
+# is stored. That combination (no cross-site tracking, no persistent
+# identifier, IP not retained, first-party/self-hosted, used solely for
+# this site's own traffic stats) is what lets an audience-measurement tool
+# qualify for CNIL's (French DPA) consent-banner exemption. This is a
+# reasonable-effort compliance posture matching how Umami/Plausible/Fathom
+# are commonly deployed, not a substitute for actual legal advice if that
+# ever matters more formally -- see the short mention added to About.js
+# for the user-facing disclosure side of this.
+#
+# WHY BUILT FROM SOURCE (not the prebuilt ghcr.io image): serving Umami at
+# a subpath (/analytics/, so it rides the same origin/TLS/CSP as the rest
+# of the site -- no new subdomain, no DNS change, and critically no CSP
+# loosening needed at all since same-origin requests are already allowed
+# by the existing `default-src 'self'` policy) requires BASE_PATH, which
+# Umami only supports as a Next.js *build-time* arg (see their Dockerfile)
+# -- there's no runtime-configurable prebuilt image for this. Pinned to a
+# tagged release (not a moving branch) so a rebuild later doesn't silently
+# pick up an unreviewed upstream change.
+#
+# WHAT IT ADDS:
+#   - umami-db: a small dedicated Postgres instance for Umami's own event
+#     data. Kept separate from the app's own mongo/redis -- Umami only
+#     speaks Postgres/MySQL, and giving it its own instance means a schema
+#     issue or runaway growth here can't affect the app's own data.
+#   - umami: the analytics app + its tracking script/collection endpoint,
+#     served at /analytics/ behind the existing reverseproxy (see
+#     reverse-proxy/nginx.conf.prod's `location /analytics/` block) --
+#     same pattern as Grafana's own /grafana/ mount.
+#
+# USAGE (run from the repo root, once the VPS has RAM headroom -- see
+# docker-compose.monitoring.yml's identical note; NOT started
+# automatically by anything):
+#   docker compose -f docker-compose.prod.yml -f analytics/docker-compose.analytics.yml up -d --build
+#
+# UMAMI_DB_PASSWORD and UMAMI_APP_SECRET must be set in the host's .env
+# (generate both with: openssl rand -hex 32) -- there's no safe default
+# the way Grafana's admin/admin fallback is, since APP_SECRET signs
+# session tokens. First login after bringing this up is Umami's own
+# default admin/umami -- change that password immediately (or provision
+# the admin account via Umami's own REST API instead, see the deploy notes
+# this change shipped with).
+#
+# Data retention: Umami keeps event data indefinitely by default -- no
+# automatic pruning is set up here yet. CNIL guidance for audience
+# measurement suggests capping retention around 13 months; worth adding a
+# periodic cleanup (a small cron deleting rows older than N months from
+# umami's own tables) as a follow-up rather than blocking this on it.
+
+services:
+  umami-db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      - POSTGRES_DB=umami
+      - POSTGRES_USER=umami
+      - POSTGRES_PASSWORD=${UMAMI_DB_PASSWORD:?UMAMI_DB_PASSWORD must be set in .env}
+    volumes:
+      - umami-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U umami"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  umami:
+    build:
+      # Pinned release tag, not a branch -- see the file-level comment on
+      # why this is built from source at all (BASE_PATH is build-time-only).
+      context: https://github.com/umami-software/umami.git#v3.3.1
+      args:
+        BASE_PATH: /analytics
+    restart: always
+    depends_on:
+      umami-db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://umami:${UMAMI_DB_PASSWORD:?UMAMI_DB_PASSWORD must be set in .env}@umami-db:5432/umami
+      - DATABASE_TYPE=postgresql
+      - APP_SECRET=${UMAMI_APP_SECRET:?UMAMI_APP_SECRET must be set in .env}
+      # Opts out of Umami's own anonymous "phone home" telemetry to their
+      # servers -- ironic for a self-hosted *privacy* analytics tool to
+      # skip otherwise.
+      - DISABLE_TELEMETRY=1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/analytics/api/heartbeat"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+
+volumes:
+  umami-db-data:

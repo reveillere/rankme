@@ -79,6 +79,11 @@ function About({ open, onClose }) {
           </Typography>
         </Box>
 
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+          This site uses self-hosted, cookie-free analytics (page views, referrers) to understand usage. No
+          personal data or IP address is stored.
+        </Typography>
+
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
           Proudly built by one human manager and a small team of tireless AI developers — no coffee breaks, occasional hallucinations.
         </Typography>

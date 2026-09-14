@@ -85,6 +85,35 @@ http {
             add_header X-Frame-Options "DENY" always;
         }
 
+        # Optional: only resolves/works once analytics/docker-compose.
+        # analytics.yml is deployed alongside this one (see that file) --
+        # until then this location just 502s on request, same harmless
+        # lazy-resolution behavior as /grafana/ above. Deliberately a
+        # same-origin *subpath* (not a separate subdomain) so the tracker
+        # script/data-collection calls the main site's own pages make stay
+        # covered by this server's existing `connect-src 'self'`/
+        # `script-src 'self'` CSP with zero loosening -- see that compose
+        # file's own "WHY BUILT FROM SOURCE" comment for why that mattered
+        # enough to build Umami from source instead of using its prebuilt
+        # image. Own headers for the same reason as /grafana/'s (a location
+        # setting any add_header stops inheriting the parent's, and Umami's
+        # own dashboard UI -- reached by visiting /analytics/ directly --
+        # needs more room than the rest of the site's strict CSP); access
+        # control here is Umami's own login, same as Grafana's.
+        location ^~ /analytics/ {
+            set $umami_upstream umami;
+            proxy_pass http://$umami_upstream:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-Frame-Options "DENY" always;
+        }
+
         listen [::]:443 ssl ipv6only=on;
         listen 443 ssl;
         ssl_certificate /etc/letsencrypt/live/rankme.fr/fullchain.pem;
