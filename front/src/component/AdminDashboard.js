@@ -13,6 +13,8 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Alert from '@mui/material/Alert';
+import Link from '@mui/material/Link';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { Line } from 'react-chartjs-2';
 import {
   Chart,
@@ -176,6 +178,23 @@ export default function AdminDashboard() {
   return (
     <Box sx={{ p: 4, maxWidth: 1100, margin: '0 auto' }}>
       <Typography variant="h4" gutterBottom>rankme — admin</Typography>
+
+      {/* External dashboards this in-app page doesn't try to replace: this
+          page's own "last hour" chart below is a quick live glance, not a
+          substitute for Grafana's real history/retention (infra metrics --
+          request rates, host CPU/memory) or Umami's visitor analytics
+          (traffic, referrers, page views over any range). Both are their
+          own separate optional stacks (see monitoring/ and analytics/) and
+          need their own login. */}
+      <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
+        <Link href="/grafana/" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+          Grafana <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+        </Link>
+        <Link href="/analytics/" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+          Analytics (Umami) <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
+        </Link>
+      </Box>
+
       {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 2, mb: 3 }}>
