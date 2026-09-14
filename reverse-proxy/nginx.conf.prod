@@ -100,7 +100,24 @@ http {
         # own dashboard UI -- reached by visiting /analytics/ directly --
         # needs more room than the rest of the site's strict CSP); access
         # control here is Umami's own login, same as Grafana's.
-        location ^~ /analytics/ {
+        #
+        # No trailing slash on the pattern itself (unlike /api/ and
+        # /grafana/ above) -- Next.js's own BASE_PATH handling (Umami is
+        # built with BASE_PATH=/analytics) redirects "/analytics/" to
+        # "/analytics" as its own canonical root; nginx's location-prefix
+        # matching has the mirror-image behavior for a pattern *with* a
+        # trailing slash (auto-redirecting a request that's missing it back
+        # to add one) -- together those two "helpfully" opposite redirects
+        # is an infinite loop, observed live the first time this deployed.
+        # Dropping the slash here means both "/analytics" and
+        # "/analytics/..." match this one location directly, no redirect
+        # either way. The (minor, accepted) trade-off: a URI that merely
+        # *starts* with the word "analytics" without a following slash --
+        # e.g. a hypothetical "/analyticsfoo" -- would also match this
+        # prefix instead of falling through to the front SPA; nothing else
+        # on this site is named that closely, so this isn't expected to
+        # ever actually collide.
+        location ^~ /analytics {
             set $umami_upstream umami;
             proxy_pass http://$umami_upstream:3000;
             proxy_http_version 1.1;
