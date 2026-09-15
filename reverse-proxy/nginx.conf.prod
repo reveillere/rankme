@@ -69,7 +69,23 @@ http {
         # front is a same-origin Vite bundle with no external scripts; MUI/emotion
         # inject <style> at runtime, hence 'unsafe-inline' for style-src; the
         # co-author avatar images are the one external resource (dblp.org).
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dblp.org; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
+        #
+        # script-src 'unsafe-inline' and worker-src 'self' blob: -- added
+        # 2026-09-15, same day as Anubis itself -- are Anubis's own
+        # documented CSP requirements (anubis.techaro.lol/docs/admin/
+        # configuration/content-security-policy), not something front
+        # needs. Without worker-src, it falls back to script-src's value,
+        # which has no blob: -- Anubis loads its proof-of-work worker from
+        # a blob: URL to avoid fanning out one fetch per hardware thread,
+        # so every worker failed to even instantiate: confirmed live, every
+        # browser hitting the challenge page got "anubis: all proof of work
+        # workers failed at runtime" and couldn't get past it at all.
+        # script-src 'unsafe-inline' is Anubis's own fallback that detects
+        # and retries a worker script that failed to load -- a real (if
+        # narrow) loosening of this site's own XSS protection, accepted
+        # here because the alternative was the entire site being
+        # unreachable through a browser.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://dblp.org; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'" always;
 
         # Serves Let's Encrypt's HTTP-01 challenge files so certbot renew can
         # run unattended (via the existing snap.certbot.renew.timer) instead
