@@ -78,13 +78,23 @@ export async function set(key, value, ttl = null) {
 export async function status() {
     try {
         const redisClient = await createRedisClient();
-        const [pong, dbsize, info] = await Promise.all([
+        const [pong, dbsize, memoryInfo, statsInfo] = await Promise.all([
             redisClient.ping(),
             redisClient.dbSize(),
             redisClient.info('memory'),
+            redisClient.info('stats'),
         ]);
-        const usedMemory = info.match(/used_memory_human:([^\r\n]+)/)?.[1]?.trim() ?? null;
-        return { ok: pong === 'PONG', dbsize, usedMemory };
+        const usedMemory = memoryInfo.match(/used_memory_human:([^\r\n]+)/)?.[1]?.trim() ?? null;
+        // Cumulative since redis's own last restart, not this process's --
+        // the counter redis itself maintains (INFO stats), not anything
+        // this app tracks. hitRate is derived here (not left to the
+        // dashboard) since hits+misses=0 (a freshly started redis) would
+        // otherwise divide by zero.
+        const keyspaceHits = Number(statsInfo.match(/keyspace_hits:(\d+)/)?.[1] ?? 0);
+        const keyspaceMisses = Number(statsInfo.match(/keyspace_misses:(\d+)/)?.[1] ?? 0);
+        const totalLookups = keyspaceHits + keyspaceMisses;
+        const hitRate = totalLookups > 0 ? keyspaceHits / totalLookups : null;
+        return { ok: pong === 'PONG', dbsize, usedMemory, keyspaceHits, keyspaceMisses, hitRate };
     } catch (error) {
         return { ok: false, error: error.message };
     }

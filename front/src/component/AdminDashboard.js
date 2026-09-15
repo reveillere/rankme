@@ -133,7 +133,7 @@ export default function AdminDashboard() {
     return <Box sx={{ p: 4, textAlign: 'center' }}>{error ? <Alert severity="error">{error}</Alert> : 'Loading…'}</Box>;
   }
 
-  const { process, metrics, ranking, mongo, redis, dblp } = stats;
+  const { process, metrics, ranking, mongo, redis, dblp, throttler } = stats;
   const activeStreams = ranking.activeStreams;
 
   const chartData = {
@@ -187,10 +187,14 @@ export default function AdminDashboard() {
           own separate optional stacks (see monitoring/ and analytics/) and
           need their own login. */}
       <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
-        <Link href="/grafana/" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        {/* Deep-linked straight to the one dashboard/view actually used
+            day-to-day, not Grafana's/Umami's own generic landing page --
+            still needs their own login, this just skips the extra click
+            once through it. */}
+        <Link href="/grafana/d/rankme-overview/rankme-overview" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
           Grafana <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
         </Link>
-        <Link href="/analytics/" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        <Link href="/analytics/websites/c5bfde95-4037-450b-82a1-09f2d9b6e235" target="_blank" rel="noreferrer" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
           Analytics (Umami) <OpenInNewIcon sx={{ fontSize: '0.9em' }} />
         </Link>
       </Box>
@@ -215,7 +219,7 @@ export default function AdminDashboard() {
       <Typography variant="h6" gutterBottom>Rankings in progress ({activeStreams.length})</Typography>
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ pb: 1 }}>
-          <Line2 label="Ranking queue" value={`${ranking.queue.QUEUED} queued, ${ranking.queue.RUNNING} running`} />
+          <Line2 label="Ranking queue" value={`${ranking.queue.queued} queued, ${ranking.queue.running} running`} />
         </CardContent>
         <Table size="small">
           <TableHead>
@@ -264,6 +268,11 @@ export default function AdminDashboard() {
           <Line2 label="Status" value={<StatusChip ok={redis.ok} />} />
           <Line2 label="Keys" value={redis.dbsize ?? '—'} />
           <Line2 label="Memory" value={redis.usedMemory ?? '—'} />
+          {/* Cumulative since redis's own last restart (see cache.js's
+              status()), not this process's/this window's -- a lifetime
+              ratio, same spirit as Mongo's/DBLP's own status fields above. */}
+          <Line2 label="Hit rate" value={redis.hitRate != null ? `${(redis.hitRate * 100).toFixed(1)}%` : '—'} />
+          <Line2 label="Hits / misses" value={`${redis.keyspaceHits ?? 0} / ${redis.keyspaceMisses ?? 0}`} />
         </StatCard>
 
         <StatCard title="DBLP local dump">
@@ -276,6 +285,37 @@ export default function AdminDashboard() {
           <Line2 label="Dump MD5" value={dblp?.version ? dblp.version.slice(0, 12) + '…' : '—'} />
         </StatCard>
       </Box>
+
+      <Typography variant="h6" gutterBottom>Outbound requests (this process, since start)</Typography>
+      <Card sx={{ mb: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Host</TableCell>
+              <TableCell align="right">Total</TableCell>
+              <TableCell align="right">OK</TableCell>
+              <TableCell align="right">Failed</TableCell>
+              <TableCell align="right">Rate-limited</TableCell>
+              <TableCell align="right">Last call</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {Object.keys(throttler.outbound).length === 0 && (
+              <TableRow><TableCell colSpan={6} align="center">No outbound calls yet</TableCell></TableRow>
+            )}
+            {Object.entries(throttler.outbound).map(([host, s]) => (
+              <TableRow key={host}>
+                <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8em' }}>{host}</TableCell>
+                <TableCell align="right">{s.total}</TableCell>
+                <TableCell align="right">{s.ok}</TableCell>
+                <TableCell align="right" sx={{ color: s.failed > 0 ? 'error.main' : undefined, fontWeight: s.failed > 0 ? 600 : undefined }}>{s.failed}</TableCell>
+                <TableCell align="right">{s.rateLimited}</TableCell>
+                <TableCell align="right">{s.lastCalledAt ? new Date(s.lastCalledAt).toLocaleTimeString() : '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
 
       <Typography variant="h6" gutterBottom>Requests by route</Typography>
       <Card sx={{ mb: 3 }}>

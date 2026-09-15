@@ -956,6 +956,19 @@ export async function controllerPrometheusMetrics(req, res) {
         lines.push('# TYPE rankme_process_rss_bytes gauge');
         lines.push(formatPrometheusLine('rankme_process_rss_bytes', process.memoryUsage().rss));
 
+        lines.push('# HELP rankme_redis_keyspace_total Redis keyspace hits/misses since redis\'s own last restart');
+        lines.push('# TYPE rankme_redis_keyspace_total counter');
+        lines.push(formatPrometheusLine('rankme_redis_keyspace_total', redisStatus.keyspaceHits ?? 0, { outcome: 'hit' }));
+        lines.push(formatPrometheusLine('rankme_redis_keyspace_total', redisStatus.keyspaceMisses ?? 0, { outcome: 'miss' }));
+
+        lines.push('# HELP rankme_outbound_requests_total Outbound HTTP calls this process has made, by destination host and outcome (see throttler.js)');
+        lines.push('# TYPE rankme_outbound_requests_total counter');
+        for (const [host, s] of Object.entries(throttler.status().outbound)) {
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.ok, { host, outcome: 'ok' }));
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.failed, { host, outcome: 'failed' }));
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.rateLimited, { host, outcome: 'rate_limited' }));
+        }
+
         res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
         res.send(lines.join('\n') + '\n');
     } catch (error) {

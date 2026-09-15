@@ -83,6 +83,28 @@ services:
           memory: 64M
           cpus: "0.2"
 
+  # Per-container CPU/memory usage and limits -- node_exporter above only
+  # sees the host as a whole, so the one thing this app's own RAM incidents
+  # kept needing (which container is actually close to its own limit right
+  # now, mongo especially) had no metrics source at all until this. Doesn't
+  # need --privileged on this VPS's plain Ubuntu cgroups (that's only
+  # needed for process-level metrics or locked-down cgroup setups like
+  # RHEL/CentOS -- see cadvisor's own running.md); the standard read-only
+  # mounts below are enough for container-level cpu/memory stats.
+  cadvisor:
+    image: ghcr.io/google/cadvisor:v0.60.5
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.3"
+
   prometheus:
     image: prom/prometheus:v2.55.1
     restart: always

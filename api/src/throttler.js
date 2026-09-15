@@ -31,6 +31,30 @@ const crossref_limiter = new Bottleneck({
   minTime: 200
 });
 
+// Every outbound call this process makes goes through this one function
+// (admin.js's DBLP dump download, crossref.js, corePortal.js, ccfPortal.js,
+// hal.js, sjrPortal.js), so it's the one place that can answer "what is
+// rankme actually calling out to, and how is that going" -- for the admin
+// dashboard and Prometheus (see admin.js's controllerStats/
+// controllerPrometheusMetrics), not for any behavioral decision here.
+// Keyed by hostname rather than full URL: HAL/Crossref/DBLP-dump URLs
+// each carry a distinct ID/DOI per call, so counting by exact URL would
+// grow this map without bound over the process's lifetime.
+const outboundStats = new Map(); // hostname -> { total, ok, failed, rateLimited, lastCalledAt }
+
+function recordOutbound(url, field) {
+  let hostname;
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    hostname = 'unknown';
+  }
+  const entry = outboundStats.get(hostname) || { total: 0, ok: 0, failed: 0, rateLimited: 0, lastCalledAt: null };
+  entry[field]++;
+  entry.lastCalledAt = Date.now();
+  outboundStats.set(hostname, entry);
+}
+
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -59,14 +83,19 @@ async function fetch(url, options = {}) {
   // limiter.schedule() here would enqueue a new task on the same
   // maxConcurrent:1 limiter while this one is still running (awaiting that
   // very task) — a deadlock that starves the queue for every later request.
+  recordOutbound(url, 'total');
   return limiter.schedule(priority, async () => {
     let retries = retryPolicy.maxRetries;
     while (true) {
       console.log(`\x1b[31m\x1b[1m[Fetch]\x1b[0m Fetching ${url}\x1b[0m`);
-      const response = await fetchWithTimeout(url, options);
+      const response = await fetchWithTimeout(url, options).catch(error => {
+        recordOutbound(url, 'failed');
+        throw error;
+      });
 
       if (response.status === 429 && retries > 0) {
         retries--;
+        recordOutbound(url, 'rateLimited');
         const retryAfter = response.headers.get('Retry-After');
         const requestedWaitMs = (isNaN(parseInt(retryAfter, 10)) ? 60 : parseInt(retryAfter, 10)) * 1000;
         const waitTime = Math.min(requestedWaitMs, retryPolicy.retryWaitCapMs);
@@ -78,9 +107,11 @@ async function fetch(url, options = {}) {
       }
 
       if (!response.ok) {
+        recordOutbound(url, 'failed');
         throw new Error(`\x1b[31m\x1b[1mRequest failed with status: ${response.status}`);
       }
 
+      recordOutbound(url, 'ok');
       return response;
     }
   });
@@ -95,6 +126,10 @@ export function status() {
       default: default_limiter.counts(),
       crossref: crossref_limiter.counts(),
     },
+    // Since process start -- not windowed/rolling like metrics.js's inbound
+    // request stats, since outbound volume is orders of magnitude lower
+    // (HAL/Crossref lookups per ranked publication, not per HTTP request).
+    outbound: Object.fromEntries(outboundStats),
   };
 }
 
