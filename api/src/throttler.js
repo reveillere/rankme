@@ -26,8 +26,16 @@ const default_limiter = new Bottleneck({
   minTime: 300
 });
 
+// minTime: 200 alone already caps sustained throughput at 1000/200 = 5
+// req/s -- confirmed live against Crossref's own response headers
+// (x-rate-limit-limit: 5, x-rate-limit-interval: 1s) on 2026-09-15, not
+// guessed. That's the real ceiling and stays put. maxConcurrent bumped
+// from 2 to 4: minTime still gates how fast new requests can *start*
+// regardless of this value, so raising it only helps when Crossref's own
+// response latency (not our own rate) is what's leaving slots idle
+// between the 200ms ticks -- it can't push us past the 5 req/s limit above.
 const crossref_limiter = new Bottleneck({
-  maxConcurrent: 2,
+  maxConcurrent: 4,
   minTime: 200
 });
 
