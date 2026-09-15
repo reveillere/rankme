@@ -5,6 +5,24 @@ events { worker_connections 1024; }
 http {
     sendfile on;
 
+    # Per-IP rate limiting -- added 2026-09-15 after a distributed scrape
+    # was found hammering /author/*, /dblp/* and /api/dblp/author-stream/*
+    # (248k+ distinct IPs in 10h, ~1 request/IP, rotating a canned pool of
+    # "Chrome on Windows" UAs -- residential-proxy scraping, not a single
+    # abusive IP). This caps any one IP's rate rather than solving the
+    # distributed pattern itself (each bot IP is already under the limit on
+    # its own), but it's still real protection against the requests that do
+    # cluster on one IP (the worst offender that day: 1751 reqs/10h from a
+    # single IP) and against this or any future scrape escalating on fewer
+    # IPs. 20m tracks roughly 320k distinct IPs concurrently (nginx's own
+    # ~64 bytes/entry rule of thumb) -- sized for this site's observed
+    # unique-IP volume, not a guess.
+    limit_req_zone $binary_remote_addr zone=perip_general:20m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=perip_api:20m rate=5r/s;
+    limit_conn_zone $binary_remote_addr zone=perip_conn:20m;
+    limit_req_status 429;
+    limit_conn_status 429;
+
     server {
         listen 80;
         server_name localhost;
@@ -26,6 +44,8 @@ http {
         }
 
         location / {
+            limit_req zone=perip_general burst=20 nodelay;
+            limit_conn perip_conn 20;
             set $front_upstream front;
             proxy_pass http://$front_upstream:80;
             proxy_http_version 1.1;
@@ -48,6 +68,13 @@ http {
         }
 
         location ^~ /api/ {
+            # Stricter than / -- author-stream is the expensive endpoint
+            # (Crossref fetch + CORE/SJR fuzzy matching + mongo queries per
+            # item), while burst=15 still covers one real page load's own
+            # small fan-out (status + author + author-stream + the two
+            # match-overrides/shared calls) without tripping.
+            limit_req zone=perip_api burst=15 nodelay;
+            limit_conn perip_conn 20;
             set $api_upstream api;
             # proxy_pass can't strip the /api/ prefix itself once the
             # upstream is a variable (a documented nginx quirk: URI
