@@ -4,7 +4,7 @@ import MuiAlert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { useRankedPublications } from '../useRankedPublications';
-import { rankingSourceQueryParam } from '../rankingSource';
+import { rankingQueryParams, customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
 import { RankSummary } from './RankSummary';
@@ -13,7 +13,8 @@ import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
-import { needsReview, getSharedOverride } from '../matchOverrides';
+import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
+import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { getHalCategory } from '../hal';
@@ -37,8 +38,8 @@ const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ de
 export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live.
-  const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/hal/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`);
+  const { conferenceSource, journalSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/hal/author-stream/${id}${rankingQueryParams({ conferenceSource, journalSource })}`);
 
   if (failed && rankedPublications === null) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from HAL. Please try again later.</div>;
@@ -101,7 +102,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length]);
   const [filterYears, setFilterYears] = useState([minYear, maxYear]);
-  const { filterRanks, filterCategories, ranks } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -113,20 +114,37 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // every render, which would defeat HalPublicationRow's React.memo for
   // every row on every render (see HalPublications.js).
   const selfIds = useMemo(() => [id], [id]);
+  // See Author.js's identical comment: stable unless a source actually
+  // changes, so it doesn't defeat HalPublicationRow's React.memo either.
+  const activeCustomProfileIds = useMemo(
+    () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+    [conferenceSource, journalSource]
+  );
+  // See Author.js's identical effectiveValueAccessor comment.
+  const effectiveValueAccessor = pub => {
+    if (!pub.rank) return undefined;
+    const portal = portalAccessor(pub);
+    const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+    if (!customProfileId) return pub.rank.value;
+    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+  };
+  // See Author.js's identical customProfileIdAccessor comment.
+  const customProfileIdAccessor = pub => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub));
 
   useEffect(() => {
     if (done) setShowCompleted(true);
   }, [done]);
 
   useEffect(() => {
-    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks });
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor });
     const toReview = records.filter(pub => {
       const portal = portalAccessor(pub);
       return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
     });
     setReviewCount(toReview.length);
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps, activeCustomProfileIds]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -149,9 +167,9 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} yearAccessor={yearAccessor} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>
@@ -163,7 +181,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
       <div style={{ height: '50px' }}></div>
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
+      <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
 
       <Snackbar
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}

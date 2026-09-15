@@ -6,6 +6,9 @@ import TextField from '@mui/material/TextField';
 import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Divider from '@mui/material/Divider';
 import CircularProgress from '@mui/material/CircularProgress';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -13,6 +16,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 import { searchCandidates } from '../rankCandidates';
 import { setOverride, clearOverride, confirmMatch, patchOverrideCandidate } from '../matchOverrides';
+import { ranksForReference, getProfile, getEffectiveCustomValue, setEntry, deleteEntry, entryKeyFor } from '../customRankings';
 
 const DEBOUNCE_MS = 300;
 
@@ -27,6 +31,11 @@ export const MATCH_STYLE = {
   // it's a different-enough shade to tell apart at a glance while still
   // reading as "someone deliberately set this", not a computed result.
   shared: { label: 'Confirmed by the community', color: '#0288d1' },
+  // Distinct from every correction color above (a custom ranking replaces
+  // the automatic match/correction machinery for this axis entirely, see
+  // customRankings.js's own decision 2 comment, rather than being one more
+  // kind of correction on top of it).
+  custom: { label: 'Custom ranking', color: '#6a1b9a' },
   none: { label: 'No match found', color: '#757575' },
 };
 
@@ -96,12 +105,31 @@ function LabeledRow({ label, children }) {
 // confident that match is, how the same entry ranks today, and a search box
 // to replace it with a different entry -- a correction that's saved to this
 // browser immediately and also mirrored to the server for later analysis.
-export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, sharedOverride, resolvedFullName, onOverrideChange }) {
+export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, override, sharedOverride, resolvedFullName, activeCustomProfileId, onOverrideChange }) {
   const open = Boolean(anchorEl);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef();
+  // "Apply to all editions" / "also apply to these years" -- see decision 4
+  // in the implementation plan. Not reset via an effect for the same reason
+  // query/results below aren't: this component only exists while the
+  // popover is open (RankBadge unmounts it on close), so a fresh mount
+  // always starts from these defaults.
+  const [applyToAllEditions, setApplyToAllEditions] = useState(false);
+  const [extraYears, setExtraYears] = useState([]);
+  // Only fetched when actually needed (a custom profile is active for this
+  // axis) -- coreYears/sjrYears (routes.js's /api/ranking-editions) feed
+  // the "also apply to these years" picker below; every other consumer of
+  // this same endpoint (SettingsDialog.js) already fetches it independently
+  // for its own display, so there's no shared cache to plug into here.
+  const [editionYears, setEditionYears] = useState(null);
+  useEffect(() => {
+    if (!open || !activeCustomProfileId) return;
+    let cancelled = false;
+    fetch('/api/ranking-editions').then(r => r.json()).then(data => { if (!cancelled) setEditionYears(data); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, activeCustomProfileId]);
 
   // No effect resetting query/results on close: RankBadge now only renders
   // this component at all while anchorEl is set (see RankBadge.js), so
@@ -178,6 +206,24 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   // no-match can represent perfectly well.
   const markAsUnranked = () => pickCandidate({ id: null, title: null, value: 'Unranked' });
 
+  // Sets/replaces this venue's letter in the active custom profile --
+  // applyToAllEditions/extraYears above decide which edition(s) it lands on
+  // (see customRankings.js's setEntry, decision 4). Doesn't close the
+  // popover (unlike pickCandidate): picking a letter is something a user
+  // plausibly does more than once in a row while reviewing a profile,
+  // unlike replacing a match, which is a one-shot action.
+  const setCustomValue = (value) => {
+    setEntry({ profileId: activeCustomProfileId, portal, rank, override, year, value, applyToAllEditions, alsoApplyToYears: extraYears });
+    onOverrideChange();
+  };
+
+  const clearCustomEntry = () => {
+    deleteEntry(activeCustomProfileId, entryKeyFor(portal, rank, override));
+    onOverrideChange();
+  };
+
+  const toggleExtraYear = (y) => setExtraYears(prev => (prev.includes(y) ? prev.filter(v => v !== y) : [...prev, y]));
+
   if (!rank) return null;
 
   const isConfirmed = override?.type === 'confirmed';
@@ -185,16 +231,61 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   // A personal override/confirmation always wins over a shared one -- the
   // shared correction only applies when this browser hasn't set its own.
   const isShared = !override && !!sharedOverride;
-  const effectiveMatchType = isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : isShared ? 'shared' : rank.matchType;
+  // A custom ranking takes over the headline value/style entirely once
+  // active for this axis -- same priority customRankings.js's own
+  // getDisplayValue applies, and RankBadge.js mirrors for the badge itself.
+  // `rank` here is already the automatic result for the profile's own
+  // reference ranking (CORE/SJR/CCF -- rankingSource.js's rankingQueryParams
+  // sends confSource/journalSource=ccf whenever the reference is 'ccf', so
+  // the server computes the right one), so getEffectiveCustomValue's own
+  // fallback to rank.value is exactly "the reference ranking's answer" for
+  // anything not explicitly overridden -- see customRankings.js's own
+  // comment on this. The "Matched"/"Change match" sections further down
+  // stay driven by the real automatic match regardless: they're what
+  // entryKeyFor's own identity resolution (customRankings.js) keys off, so
+  // correcting the underlying match still matters even while a custom
+  // letter is shown on top of it.
+  const customValue = activeCustomProfileId ? getEffectiveCustomValue(activeCustomProfileId, portal, rank, override, year) : null;
+  const customProfile = activeCustomProfileId ? getProfile(activeCustomProfileId) : null;
+  // Only the letters this profile's own reference ranking actually uses --
+  // e.g. no Q1-Q4 chips for a CORE-referenced profile, nothing overriding a
+  // conference/journal could ever legitimately take that value (see
+  // customRankings.js's ranksForReference). Empty (no profile at all,
+  // activeCustomProfileId falsy) never renders the chip row below anyway.
+  const customPalette = customProfile ? ranksForReference(customProfile.reference) : {};
+  const effectiveMatchType = customValue ? 'custom' : isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : isShared ? 'shared' : rank.matchType;
   const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
   const isJournal = portal === 'sjr';
   const isCcf = portal === 'ccf';
-  const displayedValue = isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
+  const displayedValue = customValue ? customValue.value : isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
   // CORE's own category behind a "Misc" bucket (e.g. "Multiconference") --
   // see bucketRank in corePortal.js. Shown alongside the bucket everywhere
   // the value itself is shown, so "Misc" never hides what CORE actually
-  // says.
-  const displayedRawValue = isManualOverride ? override.candidate.rawValue : isShared ? sharedOverride.candidate.rawValue : rank.rawValue;
+  // says. A custom value is never a CORE rawValue -- it's a letter someone
+  // picked from the reference's own palette directly (customPalette below),
+  // nothing to expand on.
+  const displayedRawValue = customValue ? null : isManualOverride ? override.candidate.rawValue : isShared ? sharedOverride.candidate.rawValue : rank.rawValue;
+  // CORE's discrete edition list (non-contiguous, see corePortal.js's
+  // getAllYears) vs SJR's contiguous span (sjrPortal.js's getYearRange,
+  // expanded here into the same flat year array CORE's own list already
+  // is). A CCF-*referenced* custom profile (see customRankings.js's
+  // createProfile) can land here with portal 'ccf' -- CCF has no equally
+  // fine-grained year list of its own (routes.js's /api/ranking-editions
+  // doesn't expose one, and its own editions are sparser -- see
+  // ccfPortal.js's HISTORICAL_EDITIONS), so the union of CORE's and SJR's
+  // own year lists stands in as the broadest reasonable set of "other
+  // years" to pick from -- not perfectly on-theme, but every one of them is
+  // still a real publication year this entry's byEdition could legitimately
+  // key on.
+  const availableYears = portal === 'sjr'
+    ? (editionYears?.sjrYears ? Array.from({ length: editionYears.sjrYears.end - editionYears.sjrYears.start + 1 }, (_, i) => editionYears.sjrYears.start + i) : [])
+    : portal === 'core'
+      ? (editionYears?.coreYears || [])
+      : [...new Set([
+          ...(editionYears?.coreYears || []),
+          ...(editionYears?.sjrYears ? Array.from({ length: editionYears.sjrYears.end - editionYears.sjrYears.start + 1 }, (_, i) => editionYears.sjrYears.start + i) : []),
+        ])].sort((a, b) => a - b);
+  const currentYearNumber = Number(year);
 
   return (
     <Popover
@@ -229,6 +320,58 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
             instead of dblp's abbreviated text. */}
         {resolvedFullName && resolvedFullName !== rank.queryText && (
           <LabeledRow label="Resolved via DOI:">&quot;{resolvedFullName}&quot;</LabeledRow>
+        )}
+
+        {activeCustomProfileId && (
+          <Box sx={{ my: 1.5, p: 1.5, border: '1px solid', borderColor: MATCH_STYLE.custom.color, borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ color: MATCH_STYLE.custom.color, fontWeight: 700, mb: 1 }}>
+              Custom ranking: {customProfile?.name ?? 'Unknown profile'}
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+              {Object.keys(customPalette).map(value => (
+                <Chip
+                  key={value}
+                  label={value}
+                  size="small"
+                  clickable
+                  onClick={() => setCustomValue(value)}
+                  color={customValue?.value === value ? 'secondary' : 'default'}
+                  sx={customValue?.value === value ? { backgroundColor: MATCH_STYLE.custom.color, color: '#fff' } : undefined}
+                />
+              ))}
+            </Box>
+            <FormControlLabel
+              control={<Checkbox size="small" checked={applyToAllEditions} onChange={e => setApplyToAllEditions(e.target.checked)} />}
+              label={<Typography variant="body2">Apply to all editions</Typography>}
+            />
+            {/* Only meaningful while "all editions" isn't checked -- ALL
+                already covers every year setEntry (customRankings.js) could
+                otherwise be told to also cover. */}
+            {!applyToAllEditions && availableYears.length > 0 && (
+              <Box sx={{ mt: 0.5 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  Also apply to these years (in addition to {year}):
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {availableYears.filter(y => y !== currentYearNumber).map(y => (
+                    <Chip
+                      key={y}
+                      label={y}
+                      size="small"
+                      clickable
+                      variant={extraYears.includes(y) ? 'filled' : 'outlined'}
+                      onClick={() => toggleExtraYear(y)}
+                    />
+                  ))}
+                </Box>
+              </Box>
+            )}
+            {customValue?.hasEntry && (
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" onClick={clearCustomEntry}>Clear this venue&apos;s custom entry</Button>
+              </Box>
+            )}
+          </Box>
         )}
 
         {isManualOverride ? (

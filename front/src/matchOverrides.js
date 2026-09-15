@@ -293,7 +293,11 @@ const CSV_COLUMNS = [
   'savedAt',
 ];
 
-function csvEscape(value) {
+// Exported: customRankings.js's own CSV export/import (a custom ranking
+// profile, not a match correction, but the same RFC4180 quoting/parsing
+// needs apply -- venue text and profile names both routinely contain
+// commas) reuses these instead of a second copy that could drift.
+export function csvEscape(value) {
   const s = value == null ? '' : String(value);
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
@@ -316,7 +320,7 @@ export function overridesToCSV() {
 // Minimal RFC4180 parser -- handles quoted fields with embedded commas,
 // newlines, and escaped ("") quotes, which a plain split(',')/split('\n')
 // would corrupt given queryText's free-text venue names.
-function parseCSV(text) {
+export function parseCSV(text) {
   const rows = [];
   let row = [];
   let field = '';

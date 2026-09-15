@@ -55,9 +55,10 @@ function About({ open, onClose }) {
           <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C),
           journals by{' '}
           <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4).
-          A venue with no match in either source is shown as Unranked rather than left out.{' '}
+          A venue with no match in either source is shown as Unranked rather than left out. Conferences and journals
+          can each be switched independently to{' '}
           <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-          can be selected as an alternative source.
+          instead, from the ranking badge in the toolbar or the Preferences dialog.
         </Typography>
         <Box
           sx={{

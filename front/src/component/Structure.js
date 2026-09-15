@@ -4,7 +4,7 @@ import MuiAlert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { useRankedPublications } from '../useRankedPublications';
-import { rankingSourceQueryParam } from '../rankingSource';
+import { rankingQueryParams, customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
 import { RankSummary } from './RankSummary';
@@ -13,7 +13,8 @@ import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
-import { needsReview, getSharedOverride } from '../matchOverrides';
+import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
+import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { getHalCategory } from '../hal';
@@ -22,10 +23,6 @@ import '../App.css';
 const yearAccessor = pub => pub.year;
 const categoryKeyAccessor = pub => getHalCategory(pub.type).cssClass;
 const portalAccessor = pub => pub.type === 'COMM' ? 'core' : 'sjr';
-// A stable (never-changing) empty array -- a `[]` literal inline in JSX is
-// a brand new reference every render, which would defeat HalPublicationRow's
-// React.memo for every single row on every render (see HalPublications.js).
-const NO_SELF_IDS = [];
 
 // Lazy: pulls in chart.js (a meaningfully sized dependency) as its own
 // chunk, since the chart renders below the fold rather than gating the
@@ -46,8 +43,8 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live.
-  const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/hal/structure-stream/${structId}${rankingSourceQueryParam(rankingSource)}`);
+  const { conferenceSource, journalSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition, memberIds } = useRankedPublications(`/api/hal/structure-stream/${structId}${rankingQueryParams({ conferenceSource, journalSource })}`);
   const [resolvedName, setResolvedName] = useState(structureName);
 
   useEffect(() => {
@@ -87,12 +84,13 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
       done={done}
       queued={queued}
       queuePosition={queuePosition}
+      memberIds={memberIds}
       isActive={isActive}
     />
   );
 }
 
-function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, isActive }) {
+function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, memberIds, isActive }) {
   // Years are already known from the initial SSE `init` payload -- only
   // `.rank` fields arrive later -- so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -107,7 +105,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length]);
   const [filterYears, setFilterYears] = useState([minYear, maxYear]);
-  const { filterRanks, filterCategories, ranks } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -115,20 +113,37 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
+  // See Author.js's identical comment: stable unless a source actually
+  // changes, so it doesn't defeat HalPublicationRow's React.memo.
+  const activeCustomProfileIds = useMemo(
+    () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+    [conferenceSource, journalSource]
+  );
+  // See Author.js's identical effectiveValueAccessor comment.
+  const effectiveValueAccessor = pub => {
+    if (!pub.rank) return undefined;
+    const portal = portalAccessor(pub);
+    const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+    if (!customProfileId) return pub.rank.value;
+    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+  };
+  // See Author.js's identical customProfileIdAccessor comment.
+  const customProfileIdAccessor = pub => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub));
 
   useEffect(() => {
     if (done) setShowCompleted(true);
   }, [done]);
 
   useEffect(() => {
-    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks });
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor });
     const toReview = records.filter(pub => {
       const portal = portalAccessor(pub);
       return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
     });
     setReviewCount(toReview.length);
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps, activeCustomProfileIds]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -149,9 +164,9 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} yearAccessor={yearAccessor} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>
@@ -163,9 +178,11 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
       <div style={{ height: '50px' }}></div>
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      {/* A structure isn't a person, so no author in the list is ever
-          "self" -- every author name is a clickable link, none underlined. */}
-      <HalPublications selfIds={NO_SELF_IDS} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
+      {/* memberIds: every idHal personally affiliated with this structure
+          (not just a co-author on one of its papers -- see
+          controllerHalStructure/structureMembersOf), so their name reads
+          the same underlined way a Team's own members' names do. */}
+      <HalPublications selfIds={memberIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

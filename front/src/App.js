@@ -6,6 +6,7 @@ import { AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab, Divide
 import CloseIcon from '@mui/icons-material/Close';
 import SettingsIcon from '@mui/icons-material/Settings';
 import RuleIcon from '@mui/icons-material/Rule';
+import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 
 // Custom Components
 import AuthorSearch from './component/Search';
@@ -20,6 +21,7 @@ import { SettingsDialog } from './component/SettingsDialog';
 import { CategoriesFilterButton } from './component/CategoriesFilterButton';
 import { RankingSourceIndicator } from './component/RankingSourceIndicator';
 import { MyOverridesDialog } from './component/MyOverridesDialog';
+import { MyCustomRankingsDialog } from './component/MyCustomRankingsDialog';
 import { recordSearchHistory } from './searchHistory';
 
 // Styles and Other
@@ -83,6 +85,7 @@ function App() {
   const [aboutDialogOpen, setAboutDialogOpen] = useState(() => localStorage.getItem(HIDE_ON_START_KEY) !== 'true');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [overridesDialogOpen, setOverridesDialogOpen] = useState(false);
+  const [customRankingsDialogOpen, setCustomRankingsDialogOpen] = useState(false);
   const [tabs, setTabs] = useState(() => {
     const fromUrl = tabFromPath(location.pathname);
     return PERSISTENT_TABS.some(t => t.id === fromUrl.id) ? PERSISTENT_TABS : [...PERSISTENT_TABS, fromUrl];
@@ -198,6 +201,9 @@ function App() {
             <IconButton color="inherit" onClick={() => setOverridesDialogOpen(true)} aria-label="my match corrections">
               <RuleIcon />
             </IconButton>
+            <IconButton color="inherit" onClick={() => setCustomRankingsDialogOpen(true)} aria-label="my custom rankings">
+              <LeaderboardIcon />
+            </IconButton>
             <IconButton color="inherit" onClick={() => setSettingsDialogOpen(true)} aria-label="settings">
               <SettingsIcon />
             </IconButton>
@@ -206,8 +212,9 @@ function App() {
       </AppBar>
 
       <About open={aboutDialogOpen} onClose={handleAboutClose} />
-      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} />
+      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} onManageCustomRankings={() => setCustomRankingsDialogOpen(true)} />
       <MyOverridesDialog open={overridesDialogOpen} onClose={() => setOverridesDialogOpen(false)} />
+      <MyCustomRankingsDialog open={customRankingsDialogOpen} onClose={() => setCustomRankingsDialogOpen(false)} />
 
       <Tabs
         value={activeTabId}

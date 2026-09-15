@@ -27,6 +27,10 @@ export function useRankedPublications(streamUrl) {
   // ranking.js's ConcurrencyLimiter.position for why. null whenever queued
   // is false, or if the stream never queued long enough to get one at all.
   const [queuePosition, setQueuePosition] = useState(null);
+  // Only ever set once, from `init` -- unused by most callers (Author.js,
+  // AuthorHal.js), populated by controllerHalStructure (see
+  // authorStream.js) for Structure.js's own-member underlining.
+  const [memberIds, setMemberIds] = useState([]);
   // Mutated directly by each 'rank' event, in place -- no per-event array
   // copy or re-render, unlike the `publications` state above (which is
   // only ever replaced by a *reference* to this same array, on the
@@ -45,6 +49,7 @@ export function useRankedPublications(streamUrl) {
     setFailed(false);
     setQueued(false);
     setQueuePosition(null);
+    setMemberIds([]);
     if (!streamUrl) return;
 
     const es = new EventSource(streamUrl);
@@ -65,6 +70,7 @@ export function useRankedPublications(streamUrl) {
       setPublications(data.publications);
       setProgress(progressRef.current);
       setQueued(data.total > 0);
+      if (data.memberIds) setMemberIds(data.memberIds);
     });
 
     // Only sent when there's actually something ahead (see ranking.js) --
@@ -130,5 +136,5 @@ export function useRankedPublications(streamUrl) {
     };
   }, [streamUrl]);
 
-  return { publications, progress, done, failed, queued, queuePosition };
+  return { publications, progress, done, failed, queued, queuePosition, memberIds };
 }

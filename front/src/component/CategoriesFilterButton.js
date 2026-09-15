@@ -70,8 +70,9 @@ function CategoryWithRanks({ categoryKey, rankData, filterCategories, setFilterC
 // Settings.
 export function CategoriesFilterButton() {
   const [anchorEl, setAnchorEl] = useState(null);
-  const { filterRanks, setFilterRanks, filterCategories, setFilterCategories, rankingSource } = useFilterSettings();
-  const categoryRankData = rankingSource === 'ccf' ? CcfPortal.ranks : null;
+  const { filterRanks, setFilterRanks, filterCategories, setFilterCategories, conferenceSource, journalSource } = useFilterSettings();
+  const conferenceRankData = conferenceSource === 'ccf' ? CcfPortal.ranks : CorePortal.ranks;
+  const journalRankData = journalSource === 'ccf' ? CcfPortal.ranks : SjrPortal.ranks;
 
   return (
     <>
@@ -90,7 +91,7 @@ export function CategoriesFilterButton() {
 
           <CategoryWithRanks
             categoryKey="inproceedings"
-            rankData={categoryRankData || CorePortal.ranks}
+            rankData={conferenceRankData}
             filterCategories={filterCategories}
             setFilterCategories={setFilterCategories}
             filterRanks={filterRanks}
@@ -98,7 +99,7 @@ export function CategoriesFilterButton() {
           />
           <CategoryWithRanks
             categoryKey="article"
-            rankData={categoryRankData || SjrPortal.ranks}
+            rankData={journalRankData}
             filterCategories={filterCategories}
             setFilterCategories={setFilterCategories}
             filterRanks={filterRanks}

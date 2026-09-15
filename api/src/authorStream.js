@@ -33,18 +33,26 @@ function extractBareAcronym(text) {
     return match ? match[1] : null;
 }
 
-// 'ccf' swaps in the CCF (China Computer Federation) recommended list
-// instead of CORE+SJR for every publication regardless of type -- CCF
-// ranks both conferences and journals on the same A/B/C scale, so this
-// replaces the pub.type === 'inproceedings' ? core : sjr split entirely
-// rather than nesting inside it. Absent/anything else = today's default.
-function rankingSourceFrom(req) {
-    return req.query.source === 'ccf' ? 'ccf' : 'core-sjr';
+// Conferences and journals now pick their ranking source independently
+// (front/src/rankingSource.js) -- 'ccf' on either axis swaps CCF's own
+// A/B/C list in for that axis only, decided per publication by its type
+// rather than once for the whole request. A custom ranking profile (a
+// later addition -- see the implementation plan's Partie B) never reaches
+// here at all: rankingQueryParams() omits the query param entirely for a
+// custom:* value, so the server always computes an ordinary CORE/SJR match
+// for it, same as the default. Absent/anything else = today's default.
+function confSourceFrom(req) {
+    return req.query.confSource === 'ccf' ? 'ccf' : 'core';
+}
+
+function journalSourceFrom(req) {
+    return req.query.journalSource === 'ccf' ? 'ccf' : 'sjr';
 }
 
 export async function controllerDblpAuthor(req, res) {
     const pid = req.params[0];
-    const source = rankingSourceFrom(req);
+    const confSource = confSourceFrom(req);
+    const journalSource = journalSourceFrom(req);
     try {
         // Local dump only for now -- dblp.org itself is behind Anubis
         // anti-bot protection (see throttler.js's dblp_scrape_limiter
@@ -70,8 +78,11 @@ export async function controllerDblpAuthor(req, res) {
                 // CCF's own list carries a dblp url per entry too, so this
                 // is a direct, non-fuzzy match (see ccfPortal.js). No
                 // Crossref fallback here: unlike CORE/SJR's free-text venue
-                // matching, there's nothing fuzzy to improve on.
-                if (source === 'ccf') {
+                // matching, there's nothing fuzzy to improve on. Which axis
+                // applies is decided per publication by its own type, not
+                // once for the whole request -- conferences and journals
+                // can independently be on CCF or not.
+                if ((pub.type === 'inproceedings' ? confSource : journalSource) === 'ccf') {
                     const rank = await ccf.getRankForDblpUrl(pub.dblp.url, pub.dblp.year);
                     // ccf.getRankForDblpUrl's own queryText is the dblp path
                     // key (e.g. "conf/srds") -- right for cache/matching
@@ -255,42 +266,46 @@ function halRankKeyFor(pub, venue, acronym) {
 // collapse that into two MGETs; anything not covered by them (a genuine
 // cache miss) falls through to the exact same per-item logic as before,
 // unchanged.
-async function rankHalPublications(req, res, publications, label) {
-    const source = rankingSourceFrom(req);
+async function rankHalPublications(req, res, publications, label, extra = {}) {
+    const confSource = confSourceFrom(req);
+    const journalSource = journalSourceFrom(req);
+    // COMM = conference, ART = journal (see the pub.type checks below) --
+    // which axis's source applies to a given item, decided per item rather
+    // than once for the whole request.
+    const sourceFor = (pub) => (pub.type === 'COMM' ? confSource : journalSource);
     const rankable = publications.filter(pub => pub.type === 'COMM' || pub.type === 'ART');
 
     // The batch prefetches below only feed CORE/SJR's own rank lookups
     // further down -- CCF has no HAL-side prefetch of its own yet (its
     // fuzzy match, see ccfPortal.js, isn't batched the way core/sjr's rank
-    // keys are), so skip building them entirely for that source rather than
-    // doing work nothing will read.
-    let crossrefPrefetch, rankPrefetch;
-    if (source !== 'ccf') {
-        // Phase 0: every DOI the per-item Crossref lookup would consult
-        // anyway, batched into one MGET instead of one GET per publication.
-        // Several publications can share the same DOI-bearing proceedings,
-        // so dedupe first.
-        const doisToPrefetch = [...new Set(
-            rankable.filter(pub => resolveHalVenueAcronym(pub).doiLookupApplies).map(pub => pub.doi)
-        )];
-        crossrefPrefetch = await cache.mget(doisToPrefetch.map(doi => crossref.venueKey(doi)));
+    // keys are), so only items whose own axis isn't on CCF are considered,
+    // rather than doing work nothing will read for the rest.
+    const prefetchable = rankable.filter(pub => sourceFor(pub) !== 'ccf');
 
-        // Phase 1: guess each publication's final venue/acronym using Phase
-        // 0's prefetched Crossref info (via applyCachedCrossrefOverride --
-        // the same override the per-item pass below will independently
-        // arrive at, whenever crossrefPrefetch actually has the data),
-        // collect the resulting rank keys (deduped -- many publications
-        // share a venue/year), and MGET all of them in one round-trip.
-        const rankKeysToPrefetch = new Set();
-        for (const pub of rankable) {
-            let { venue, acronym, doiLookupApplies } = resolveHalVenueAcronym(pub);
-            if (doiLookupApplies) {
-                ({ venue, acronym } = applyCachedCrossrefOverride(venue, acronym, pub.doi, crossrefPrefetch));
-            }
-            rankKeysToPrefetch.add(halRankKeyFor(pub, venue, acronym));
+    // Phase 0: every DOI the per-item Crossref lookup would consult
+    // anyway, batched into one MGET instead of one GET per publication.
+    // Several publications can share the same DOI-bearing proceedings,
+    // so dedupe first.
+    const doisToPrefetch = [...new Set(
+        prefetchable.filter(pub => resolveHalVenueAcronym(pub).doiLookupApplies).map(pub => pub.doi)
+    )];
+    const crossrefPrefetch = await cache.mget(doisToPrefetch.map(doi => crossref.venueKey(doi)));
+
+    // Phase 1: guess each publication's final venue/acronym using Phase
+    // 0's prefetched Crossref info (via applyCachedCrossrefOverride --
+    // the same override the per-item pass below will independently
+    // arrive at, whenever crossrefPrefetch actually has the data),
+    // collect the resulting rank keys (deduped -- many publications
+    // share a venue/year), and MGET all of them in one round-trip.
+    const rankKeysToPrefetch = new Set();
+    for (const pub of prefetchable) {
+        let { venue, acronym, doiLookupApplies } = resolveHalVenueAcronym(pub);
+        if (doiLookupApplies) {
+            ({ venue, acronym } = applyCachedCrossrefOverride(venue, acronym, pub.doi, crossrefPrefetch));
         }
-        rankPrefetch = await cache.mget([...rankKeysToPrefetch]);
+        rankKeysToPrefetch.add(halRankKeyFor(pub, venue, acronym));
     }
+    const rankPrefetch = await cache.mget([...rankKeysToPrefetch]);
 
     await streamRankedItems(
         req, res, publications,
@@ -309,7 +324,7 @@ async function rankHalPublications(req, res, publications, label) {
             // reference against (see the dblp-source path above) -- fall
             // back to CCF's fuzzy acronym/fullname match, same inputs
             // CORE's own acronym-first match below would have used.
-            if (source === 'ccf') {
+            if (sourceFor(pub) === 'ccf') {
                 return { rank: await ccf.getRankForHalVenue(acronym, venue, pub.year) };
             }
 
@@ -320,7 +335,8 @@ async function rankHalPublications(req, res, publications, label) {
                 : await sjr.getRankByFullName(venue, pub.year, rankPrefetch);
             return { rank };
         },
-        label
+        label,
+        extra
     );
 }
 
@@ -338,8 +354,8 @@ export async function controllerHalAuthor(req, res) {
 export async function controllerHalStructure(req, res) {
     const id = req.params[0];
     try {
-        const publications = await getStructurePublications(id);
-        await rankHalPublications(req, res, publications, `hal-structure:${id}`);
+        const { publications, memberIds } = await getStructurePublications(id);
+        await rankHalPublications(req, res, publications, `hal-structure:${id}`, { memberIds });
     } catch (error) {
         console.error('[authorStream] hal structure error', error);
         if (!res.headersSent) res.status(400).json({ error: error.message }); else res.end();

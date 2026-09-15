@@ -357,6 +357,18 @@ export async function getLatestSource() {
   return sources.reduce((max, s) => (s.year > max.year ? s : max), sources[0]);
 }
 
+// Every year CORE actually published a distinct source for (routes.js's
+// /api/ranking-editions, feeding RankDetailsPopover.js's "also apply to
+// these years" picker for a custom ranking entry) -- unlike SJR's
+// contiguous 1999-2025 span (see sjrPortal.js's getYearRange), CORE's own
+// editions are irregular (e.g. no separate 2020 source), so this has to be
+// the actual list, not a {start, end} range a caller could reconstruct by
+// counting.
+export async function getAllYears() {
+  const sources = await getSources();
+  return sources.map(s => s.year).sort((a, b) => a - b);
+}
+
 async function attachCurrentValue(rank, queryText) {
   rank = { ...rank, queryText };
   if (rank.matchedId == null) return rank;

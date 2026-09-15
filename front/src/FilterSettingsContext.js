@@ -3,7 +3,12 @@ import { dblpCategories } from './dblp';
 import * as CorePortal from './corePortal';
 import * as SjrPortal from './sjrPortal';
 import * as CcfPortal from './ccfPortal';
-import { getRankingSource, setRankingSource as persistRankingSource } from './rankingSource';
+import { ranksForReference, getProfile as getCustomProfile } from './customRankings';
+import {
+  getConferenceSource, setConferenceSource as persistConferenceSource,
+  getJournalSource, setJournalSource as persistJournalSource,
+  customProfileIdFrom,
+} from './rankingSource';
 
 // Categories are shared between the dblp and HAL author views: every HAL
 // category already declares which of these 6 dblp buckets it belongs to
@@ -13,12 +18,32 @@ import { getRankingSource, setRankingSource as persistRankingSource } from './ra
 // filterCategories.
 export const categories = dblpCategories;
 
-// CORE+SJR merged, or CCF alone (see rankingSource.js) -- computed fresh
+// Each axis's own rank vocabulary (see rankingSource.js) -- computed fresh
 // from whichever source is currently live in context, not a static export,
-// so switching sources updates every consumer (charts, stats, the category
-// filter popover) immediately rather than only after a reload.
-function ranksForSource(source) {
-  return source === 'ccf' ? CcfPortal.ranks : { ...CorePortal.ranks, ...SjrPortal.ranks };
+// so switching either source updates every consumer (charts, stats, the
+// category filter popover) immediately rather than only after a reload.
+// Merged together below into a single `ranks` object: CCF picked for one
+// axis and not the other still needs both vocabularies represented (e.g.
+// conferences on CCF's A/B/C alongside journals on SJR's Q1-Q4). A
+// custom:* source (customRankings.js) uses whichever letters its own
+// *reference* ranking actually has (ranksForReference) -- a CORE-referenced
+// profile's checkboxes/legend are exactly CORE's own A*/A/B/C/Misc/Unranked,
+// not a blanket merge of every reference's letters, since nothing it covers
+// could ever take a value outside its own reference's vocabulary. A stale
+// or already-deleted profile (getCustomProfile returns null/undefined --
+// the self-healing effect below will resolve the axis itself shortly after)
+// falls back to ranksForReference's own default (CORE's set) rather than
+// crashing in the meantime.
+function ranksForConferenceSource(source) {
+  if (source === 'ccf') return CcfPortal.ranks;
+  const profileId = customProfileIdFrom(source);
+  return profileId ? ranksForReference(getCustomProfile(profileId)?.reference) : CorePortal.ranks;
+}
+
+function ranksForJournalSource(source) {
+  if (source === 'ccf') return CcfPortal.ranks;
+  const profileId = customProfileIdFrom(source);
+  return profileId ? ranksForReference(getCustomProfile(profileId)?.reference) : SjrPortal.ranks;
 }
 
 const allSelected = (data) => Object.keys(data).reduce((acc, key) => ({ ...acc, [key]: true }), {});
@@ -77,26 +102,60 @@ function usePersistedSelection(storageKey, data) {
 const FilterSettingsContext = createContext(null);
 
 export function FilterSettingsProvider({ children }) {
-  const [rankingSource, setRankingSourceState] = useState(getRankingSource);
-  const ranks = ranksForSource(rankingSource);
+  const [conferenceSource, setConferenceSourceState] = useState(getConferenceSource);
+  const [journalSource, setJournalSourceState] = useState(getJournalSource);
+  const ranks = { ...ranksForConferenceSource(conferenceSource), ...ranksForJournalSource(journalSource) };
 
-  // Keyed by ranking source (not just 'rankme:filterRanks'): CORE+SJR and
-  // CCF have different rank vocabularies that happen to share some literal
-  // key names ("A", "B", "C", "Unranked") -- a single shared storage key
-  // meant a selection saved under one source (e.g. unchecking CORE's "A*")
-  // could silently carry over and mis-filter the other's same-named key
-  // after switching.
-  const [filterRanks, setFilterRanks] = usePersistedSelection(`rankme:filterRanks:${rankingSource}`, ranks);
+  // Keyed by both sources (not just 'rankme:filterRanks'): CORE/CCF and
+  // SJR/CCF have different rank vocabularies that happen to share some
+  // literal key names ("A", "B", "C", "Unranked") -- a single shared
+  // storage key meant a selection saved under one pair (e.g. unchecking
+  // CORE's "A*") could silently carry over and mis-filter the same-named
+  // key under a different pair after switching either axis.
+  const [filterRanks, setFilterRanks] = usePersistedSelection(`rankme:filterRanks:${conferenceSource}:${journalSource}`, ranks);
   const [filterCategories, setFilterCategories] = usePersistedSelection('rankme:filterCategories', categories);
 
-  const setRankingSource = (value) => {
-    persistRankingSource(value);
-    setRankingSourceState(value);
+  const setConferenceSource = (value) => {
+    persistConferenceSource(value);
+    setConferenceSourceState(value);
   };
+
+  const setJournalSource = (value) => {
+    persistJournalSource(value);
+    setJournalSourceState(value);
+  };
+
+  // Decision 5: a custom profile currently selected as an axis's source can
+  // be deleted (from MyCustomRankingsDialog.js, or another tab/window)
+  // without that axis ever being touched directly -- silently fall back to
+  // the default (CORE/SJR) the moment that happens, rather than leaving the
+  // axis pointed at a profile that no longer resolves to anything (ranks
+  // above would still render *some* palette -- ranksForReference's own
+  // CORE fallback -- but getDisplayValue would have nothing to look up).
+  // Checked once on mount (covers a profile
+  // deleted in another tab before this one even loaded) and again on every
+  // customRankings.js write (covers a deletion from a dialog within this
+  // same page) -- persisted via the real setters, not just computed
+  // in-memory, so Settings' own radio group reflects the fallback too
+  // instead of showing neither option selected.
+  useEffect(() => {
+    const healIfStale = () => {
+      const confProfileId = customProfileIdFrom(conferenceSource);
+      if (confProfileId && !getCustomProfile(confProfileId)) setConferenceSource('core');
+      const journalProfileId = customProfileIdFrom(journalSource);
+      if (journalProfileId && !getCustomProfile(journalProfileId)) setJournalSource('sjr');
+    };
+    healIfStale();
+    window.addEventListener('rankme:customrankingchange', healIfStale);
+    return () => window.removeEventListener('rankme:customrankingchange', healIfStale);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conferenceSource, journalSource]);
 
   return (
     <FilterSettingsContext.Provider value={{
-      rankingSource, setRankingSource, ranks,
+      conferenceSource, setConferenceSource,
+      journalSource, setJournalSource,
+      ranks,
       filterRanks, setFilterRanks,
       filterCategories, setFilterCategories,
     }}>

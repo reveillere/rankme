@@ -35,8 +35,14 @@ import { DoiChip } from './DoiChip';
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <category>" className) moved to HalItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor, sharedMaps }) {
+const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds }) {
   const [, forceRowRefresh] = useState(0);
+  const portal = item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'COMM' ? 'core' : 'sjr');
+  // See Publications.js's identical PublicationRow comment: item.type (not
+  // `portal`) picks the right half of activeCustomProfileIds, since a
+  // custom profile can only ever be active for a genuinely CORE/SJR-sourced
+  // item (decision 2).
+  const activeCustomProfileId = item.type === 'COMM' ? activeCustomProfileIds?.conference : activeCustomProfileIds?.journal;
   return (
     <>
       <Tooltip title={category.name} placement="left">
@@ -45,7 +51,7 @@ const HalPublicationRow = React.memo(function HalPublicationRow({ item, category
         </div>
       </Tooltip>
       <div className="rank">
-        <RankBadge rank={item.rank} portal={item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'COMM' ? 'core' : 'sjr')} year={item.year} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
+        <RankBadge rank={item.rank} portal={portal} year={item.year} sharedMaps={sharedMaps} activeCustomProfileId={activeCustomProfileId} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {item.authors.length > 0
@@ -127,7 +133,7 @@ const HalItem = React.forwardRef(function HalItem({ item: row, children, style, 
 // hook that owns the actual SSE subscription lives in the caller, not here,
 // so it keeps accumulating regardless and switching back shows current data
 // immediately.
-export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, sharedMaps, isActive = true }) {
+export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds, isActive = true }) {
   // Flattened so each Virtuoso index is exactly one <li> (a "year" marker
   // or an "entry") -- this is what makes the LaBRI-scale (~10,400 rows)
   // first mount cheap: only the rows actually inside (or just outside) the
@@ -208,6 +214,7 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, s
               onOpenAuthor={onOpenAuthor}
               onSearchAuthor={onSearchAuthor}
               sharedMaps={sharedMaps}
+              activeCustomProfileIds={activeCustomProfileIds}
             />
           )}
     />

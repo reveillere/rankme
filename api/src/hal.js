@@ -118,8 +118,8 @@ async function fetchAuthorPublications(id) {
 // this API gives (numFound is somewhat unreliable/racy across pages).
 const PAGE_SIZE = 10000;
 
-async function fetchPublicationsByFilter(filter) {
-    const fields = 'docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s';
+async function fetchPublicationsByFilter(filter, { extraFields, onDoc } = {}) {
+    const fields = `docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s${extraFields ? `,${extraFields}` : ''}`;
     // publicationDateY_i is only a YEAR -- thousands of docs share the same
     // value for a lab-sized structure, so it alone isn't a stable sort key
     // for deep `start`-based pagination: Solr is free to order same-year
@@ -143,6 +143,10 @@ async function fetchPublicationsByFilter(filter) {
             if (seenDocids.has(doc.docid)) continue;
             seenDocids.add(doc.docid);
             docs.push(doc);
+            // Raw doc, before the clean-shape mapping below strips whatever
+            // extraFields asked for -- the only place a caller can still
+            // see e.g. authIdHasStructure_fs (see fetchStructurePublications).
+            onDoc?.(doc);
         }
         if (page.length < PAGE_SIZE) break;
     }
@@ -245,7 +249,7 @@ async function getStructureInfo(id) {
 export async function controllerStructurePublications(req, res) {
     const id = req.params[0];
     try {
-        const publications = await getStructurePublications(id);
+        const { publications } = await getStructurePublications(id);
         res.json(publications);
     } catch (error) {
         console.log('Error during HAL structure computation', error);
@@ -260,20 +264,74 @@ export async function controllerStructurePublications(req, res) {
 // the full page set while they're in flight.
 const inFlightStructurePublications = new Map();
 
+// Returns { publications, memberIds } -- memberIds is every idHal found to
+// be personally affiliated with this structure (see structureMembersOf),
+// computed in the same paginated pass as the publications themselves so
+// this never costs an extra HAL round-trip.
+// Cache key bumped to v2: pre-existing `hal:structure:<id>` entries (up to a
+// day old) hold the old shape (a bare publications array, no memberIds) --
+// `{ publications, memberIds } = <array>` destructures `publications` as
+// undefined, crashing rankHalPublications -- a version bump avoids waiting
+// out that day-long TTL on deploy.
 export async function getStructurePublications(id) {
-    const key = `hal:structure:${id}`;
+    const key = `hal:structure:v2:${id}`;
 
     const cached = await cache.get(key);
     if (cached !== null) return cached;
 
     return dedupeInFlight(inFlightStructurePublications, key, async () => {
-        const publications = await fetchStructurePublications(id);
+        const result = await fetchStructurePublications(id);
         // Awaited -- see getAuthorPublications above.
-        await cache.set(key, publications, 60 * 60 * 24); // 1 day
-        return publications;
+        await cache.set(key, result, 60 * 60 * 24); // 1 day
+        return result;
     });
 }
 
+// A publication tagged structId_i:X can still have co-authors from a
+// completely different institution (a paper is "affiliated with X" as soon
+// as *any* author is, see fetchStructurePublications below) -- so knowing
+// who's actually a member of X, as opposed to just a co-author on one of
+// its papers, needs each author's OWN affiliations, not the document's.
+// authIdHasStructure_fs carries exactly that: one entry per (author,
+// structure they're personally affiliated with) pair, e.g.
+// "<authIdFormPerson>_FacetSep_<authFullName>_JoinSep_<structId>_FacetSep_<structName>"
+// -- verified live against HAL's API (a doc with 3 co-authors, only 2 of
+// them affiliated with LaBRI, correctly listed structId 3102 only under
+// those 2's own entries). authIdFormPerson_s/authIdHalFullName_fs are
+// aligned parallel arrays (same index = same author, confirmed the same
+// way) -- the join key between the two facets is authIdFormPerson, not
+// idHal, since not every author has claimed a HAL account (parseAuthors's
+// own idHal-may-be-empty handling applies here identically).
+function structureMembersOf(doc, structId) {
+    const target = String(structId);
+    const affiliatedFormPersons = new Set();
+    for (const entry of doc.authIdHasStructure_fs || []) {
+        const joinIdx = entry.indexOf('_JoinSep_');
+        if (joinIdx < 0) continue;
+        const formPerson = entry.slice(0, entry.indexOf('_FacetSep_'));
+        const sid = entry.slice(joinIdx + '_JoinSep_'.length).split('_FacetSep_')[0];
+        if (sid === target) affiliatedFormPersons.add(formPerson);
+    }
+    if (affiliatedFormPersons.size === 0) return [];
+
+    const formPersons = doc.authIdFormPerson_s || [];
+    const idHalFacets = doc.authIdHalFullName_fs || [];
+    const sep = '_FacetSep_';
+    const members = [];
+    formPersons.forEach((formPerson, i) => {
+        if (!affiliatedFormPersons.has(formPerson)) return;
+        const facet = idHalFacets[i] || '';
+        const idHal = facet.includes(sep) ? facet.slice(0, facet.indexOf(sep)) : '';
+        if (idHal) members.push(idHal);
+    });
+    return members;
+}
+
 async function fetchStructurePublications(structId) {
-    return fetchPublicationsByFilter(`structId_i:${structId}`);
+    const memberIds = new Set();
+    const publications = await fetchPublicationsByFilter(`structId_i:${structId}`, {
+        extraFields: 'authIdFormPerson_s,authIdHasStructure_fs',
+        onDoc: (doc) => { for (const id of structureMembersOf(doc, structId)) memberIds.add(id); },
+    });
+    return { publications, memberIds: [...memberIds] };
 }

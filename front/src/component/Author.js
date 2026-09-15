@@ -9,7 +9,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 // DBLP
 import { fetchAuthor } from '../dblp';
 import { useRankedPublications } from '../useRankedPublications';
-import { rankingSourceQueryParam } from '../rankingSource';
+import { rankingQueryParams, customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 
 // Components
@@ -20,7 +20,8 @@ import { FilterButton } from './FilterButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
-import { needsReview, getSharedOverride } from '../matchOverrides';
+import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
+import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 
@@ -70,13 +71,13 @@ export function Author({ pid, onOpenAuthor, onNameResolved, isActive }) {
 
 
 function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
-  // Read from context (not localStorage directly): switching ranking
-  // source re-renders this with a new rankingSource value, which produces
-  // a new streamUrl string below -- useRankedPublications' own effect
-  // depends on that string, so it tears down and re-opens the stream with
-  // the new source automatically, no page reload needed.
-  const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/dblp/author-stream/${pid}${rankingSourceQueryParam(rankingSource)}`);
+  // Read from context (not localStorage directly): switching either ranking
+  // source re-renders this with new conferenceSource/journalSource values,
+  // which produce a new streamUrl string below -- useRankedPublications'
+  // own effect depends on that string, so it tears down and re-opens the
+  // stream with the new source(s) automatically, no page reload needed.
+  const { conferenceSource, journalSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useRankedPublications(`/api/dblp/author-stream/${pid}${rankingQueryParams({ conferenceSource, journalSource })}`);
 
   if (failed && rankedPublications === null)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
@@ -104,7 +105,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
     [rankedPublications.length]
   );
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategories, ranks } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -112,20 +113,48 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
+  // Stable across renders unless a source actually changes -- see
+  // Publications.js's PublicationRow, whose React.memo this would otherwise
+  // defeat for every row on every render (same reasoning as `pids` above).
+  const activeCustomProfileIds = useMemo(
+    () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+    [conferenceSource, journalSource]
+  );
+  // Substitutes a custom ranking's own value in place of the raw automatic
+  // match, but only for an axis that actually has a profile active
+  // (customProfileIdForPortal) -- identical to pub.rank.value otherwise, so
+  // filterPublications' filterRanks checkboxes behave exactly as before for
+  // anyone not using a custom profile (see filterPublications.js's own
+  // default parameter).
+  const effectiveValueAccessor = pub => {
+    if (!pub.rank) return undefined;
+    const portal = portalAccessor(pub);
+    const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+    if (!customProfileId) return pub.rank.value;
+    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+  };
+  // For RanksByYearChart/RankSummary: same type-based axis resolution as
+  // effectiveValueAccessor above (portalAccessor never returns 'ccf'), not
+  // portalFromRank(pub.rank) -- a CCF-*referenced* custom profile means a
+  // CCF-sourced rank no longer implies "no custom profile active" the way
+  // it used to (see customRankings.js's createProfile), so those two
+  // components can no longer derive this themselves from the rank alone.
+  const customProfileIdAccessor = pub => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub));
 
   useEffect(() => {
     if (done) setShowCompleted(true);
   }, [done]);
 
   useEffect(() => {
-    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks });
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, filterRanks, effectiveValueAccessor });
     const toReview = records.filter(pub => {
       const portal = portalAccessor(pub);
       return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
     });
     setReviewCount(toReview.length);
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps, activeCustomProfileIds]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -148,9 +177,9 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} yearAccessor={yearAccessor} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>
@@ -161,7 +190,7 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
 
       <div style={{ height: '50px' }}></div>
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
-      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} isActive={isActive} />
+      <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
 
       <Snackbar
         anchorOrigin={{

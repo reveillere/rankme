@@ -9,6 +9,7 @@ import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
 import { useFilterSettings } from '../FilterSettingsContext';
 import { getHalCategory } from '../hal';
+import { customProfileIdFrom } from '../rankingSource';
 
 // Components
 import DateRangeSlider from './DateRangeSlider';
@@ -19,7 +20,8 @@ import { FilterButton } from './FilterButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
-import { needsReview, getSharedOverride } from '../matchOverrides';
+import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
+import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 
@@ -54,10 +56,10 @@ export function Team({ teamId, onOpenAuthor, onSearchAuthor, isActive }) {
 function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live
-  // (passed through to the hook below, which needs it in its own effect's
+  // (passed through to the hook below, which needs them in its own effect's
   // dependency array to actually re-open every member's stream).
-  const { rankingSource } = useFilterSettings();
-  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useMergedRankedPublications(team.source, team.members, rankingSource);
+  const { conferenceSource, journalSource } = useFilterSettings();
+  const { publications: rankedPublications, progress, done, failed, queued, queuePosition } = useMergedRankedPublications(team.source, team.members, conferenceSource, journalSource);
 
   if (failed)
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this team&apos;s members from {team.source === 'hal' ? 'HAL' : 'DBLP'}. Please try again later.</div>;
@@ -95,7 +97,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length, team.source]);
   const [filterYears, setFilterYears] = React.useState([minYear, maxYear]);
-  const { filterRanks, filterCategories, ranks } = useFilterSettings();
+  const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(false);
   const [reviewOnly, setReviewOnly] = useState(false);
@@ -103,20 +105,42 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
+  // See Author.js's identical comment: stable unless a source actually
+  // changes, so it doesn't defeat Publications.js/HalPublications.js's own
+  // row-level React.memo.
+  const activeCustomProfileIds = useMemo(
+    () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+    [conferenceSource, journalSource]
+  );
+  // See Author.js's identical effectiveValueAccessor comment -- portalAccessor
+  // here is itself already memoized on team.source (above), so this only
+  // needs its own on top of that plus activeCustomProfileIds.
+  const effectiveValueAccessor = useMemo(() => (pub) => {
+    if (!pub.rank) return undefined;
+    const portal = portalAccessor(pub);
+    const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+    if (!customProfileId) return pub.rank.value;
+    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+  }, [portalAccessor, yearAccessor, activeCustomProfileIds]);
+  // See Author.js's identical customProfileIdAccessor comment.
+  const customProfileIdAccessor = useMemo(
+    () => (pub) => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub)),
+    [portalAccessor, activeCustomProfileIds]
+  );
 
   useEffect(() => {
     if (done) setShowCompleted(true);
   }, [done]);
 
   useEffect(() => {
-    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks });
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor });
     const toReview = records.filter(pub => {
       const portal = portalAccessor(pub);
       return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
     });
     setReviewCount(toReview.length);
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor, categoryKeyAccessor, reviewOnly, portalAccessor, overrideTick, sharedMaps]);
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, yearAccessor, categoryKeyAccessor, reviewOnly, portalAccessor, overrideTick, sharedMaps, effectiveValueAccessor]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -131,7 +155,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   return (
     <div className='App'>
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>Records of {team.name} ({team.members.length} members)</h1>
+        <h1>{isHal ? 'HAL' : 'DBLP'} records of {team.name} ({team.members.length} members)</h1>
         <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
@@ -139,9 +163,9 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
-          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} />
+          <RanksByYearChart records={filteredRecords} selected={filterRanks} ranks={ranks} yearAccessor={yearAccessor} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} />
         </React.Suspense>
-        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} />
+        <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} yearAccessor={yearAccessor} />
       </div>
 
       <div style={{ margin: '0 0 20px 0' }}>
@@ -154,8 +178,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
 
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       {isHal
-        ? <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} isActive={isActive} />
-        : <Publications data={filteredRecords} onOpenAuthor={onOpenAuthor} selfPids={selfIds} sharedMaps={sharedMaps} isActive={isActive} />}
+        ? <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
+        : <Publications data={filteredRecords} onOpenAuthor={onOpenAuthor} selfPids={selfIds} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />}
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

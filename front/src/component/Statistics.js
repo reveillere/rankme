@@ -1,6 +1,7 @@
 import { Bar } from 'react-chartjs-2';
 import { ArcElement, Chart, LinearScale, BarController, BarElement, CategoryScale, Tooltip } from 'chart.js';
-import { getEffectiveValue, portalFromRank } from '../matchOverrides';
+import { getOverride, portalFromRank } from '../matchOverrides';
+import { getDisplayValue } from '../customRankings';
 
 // Registered here (rather than by each page that renders a chart) so it
 // happens exactly once, wherever this module is first loaded -- Author.js
@@ -77,12 +78,25 @@ function ByYearChart({ records, selected, fieldAccessor, labelAccessor, colorAcc
 // container's one useSharedOverridesMaps() call -- so a personal or
 // community correction changes which bucket a publication counts under
 // here too, not just the badge shown next to it in the list below.
-export function RanksByYearChart({ records, selected, ranks, yearAccessor, sharedMaps }) {
+// customProfileIdAccessor(pub) -> profileId|null: see RankSummary.js's
+// identical comment -- portalFromRank(pub.rank) can no longer double as
+// "which axis is this" now that a CCF-*referenced* custom profile means a
+// CCF-sourced rank doesn't imply "no custom profile active" the way it used
+// to. Each container passes its own type-based resolution (the same one
+// effectiveValueAccessor already uses for filterPublications) instead.
+// portalFromRank is still right for sharedMaps/getOverride below, which
+// genuinely want the rank's own resolved portal.
+export function RanksByYearChart({ records, selected, ranks, yearAccessor, sharedMaps, customProfileIdAccessor }) {
   return (
     <ByYearChart
       records={records}
       selected={selected}
-      fieldAccessor={(pub) => getEffectiveValue(pub.rank, sharedMaps?.[portalFromRank(pub.rank)])}
+      fieldAccessor={(pub) => {
+        const portal = portalFromRank(pub.rank);
+        const customProfileId = customProfileIdAccessor?.(pub) ?? null;
+        const override = getOverride(portal, pub.rank);
+        return getDisplayValue(pub.rank, { portal, sharedMap: sharedMaps?.[portal], customProfileId, override, year: yearAccessor(pub) });
+      }}
       labelAccessor={(key) => ranks[key].name}
       colorAccessor={(key) => ranks[key].color}
       yearAccessor={yearAccessor}

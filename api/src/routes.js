@@ -19,10 +19,16 @@ router.get('/health', (req, res) => res.json({ status: 'ok' }));
 // portal's own live in-process state (core.getLatestSource/
 // sjr.getLatestYear/ccf.getLatestEditionYear), so it's always accurate
 // after an update rather than a string someone has to remember to bump by
-// hand.
+// hand. coreYears/sjrYears are additive (RankDetailsPopover.js's custom-
+// ranking "also apply to these years" picker, see corePortal.js/
+// sjrPortal.js) -- existing fields untouched so this stays a drop-in for
+// SettingsDialog.js's own pre-existing fetch.
 router.get('/ranking-editions', async (req, res) => {
   const latestCore = await core.getLatestSource();
-  res.json({ core: latestCore?.source ?? null, sjr: sjr.getLatestYear(), ccf: ccf.getLatestEditionYear() });
+  res.json({
+    core: latestCore?.source ?? null, sjr: sjr.getLatestYear(), ccf: ccf.getLatestEditionYear(),
+    coreYears: await core.getAllYears(), sjrYears: sjr.getYearRange(),
+  });
 });
 
 router.get('/dblp/status', admin.controllerDblpStatus);

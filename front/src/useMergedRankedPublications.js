@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { rankingSourceQueryParam } from './rankingSource';
+import { rankingQueryParams } from './rankingSource';
 
 // Per-source stream endpoint + dedup key. DBLP publications carry their
 // DBLP url (stripped of any '#' fragment — the same key already used for
@@ -8,11 +8,11 @@ import { rankingSourceQueryParam } from './rankingSource';
 // counted once — first occurrence wins.
 const SOURCE_CONFIG = {
   dblp: {
-    streamUrl: (id, rankingSource) => `/api/dblp/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`,
+    streamUrl: (id, sources) => `/api/dblp/author-stream/${id}${rankingQueryParams(sources)}`,
     dedupKey: (pub) => pub.dblp?.url?.split('#')[0],
   },
   hal: {
-    streamUrl: (id, rankingSource) => `/api/hal/author-stream/${id}${rankingSourceQueryParam(rankingSource)}`,
+    streamUrl: (id, sources) => `/api/hal/author-stream/${id}${rankingQueryParams(sources)}`,
     dedupKey: (pub) => pub.docid,
   },
 };
@@ -44,7 +44,7 @@ function mergeByKey(memberPubsList, dedupKey) {
 // into one merged, deduplicated ranking — no backend changes needed.
 // Returns the same shape as useRankedPublications so it's a drop-in for the
 // existing single-author rendering path.
-export function useMergedRankedPublications(source, members, rankingSource) {
+export function useMergedRankedPublications(source, members, conferenceSource, journalSource) {
   const [publications, setPublications] = useState(null);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [done, setDone] = useState(false);
@@ -108,7 +108,7 @@ export function useMergedRankedPublications(source, members, rankingSource) {
     };
 
     const sources = members.map((member, i) => {
-      const es = new EventSource(config.streamUrl(member.id, rankingSource));
+      const es = new EventSource(config.streamUrl(member.id, { conferenceSource, journalSource }));
 
       es.addEventListener('init', (e) => {
         const data = JSON.parse(e.data);
@@ -189,7 +189,7 @@ export function useMergedRankedPublications(source, members, rankingSource) {
       if (flushTimer != null) { clearTimeout(flushTimer); flushTimer = null; }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source, memberKey, rankingSource]);
+  }, [source, memberKey, conferenceSource, journalSource]);
 
   return { publications, progress, done, failed, queued, queuePosition };
 }

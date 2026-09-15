@@ -153,11 +153,13 @@ export function startSSE(req, res) {
 // computeRank(item, index) -> Promise<object> (fields merged into the `rank` event)
 // label: optional human-readable id (e.g. "dblp:11/1262") shown in the
 // admin dashboard's "rankings in progress" list.
-export async function streamRankedItems(req, res, items, isRankable, computeRank, label = 'unknown') {
+// extra: merged into the `init` payload as-is (e.g. controllerHalStructure's
+// own memberIds) -- nothing here reads or depends on its shape.
+export async function streamRankedItems(req, res, items, isRankable, computeRank, label = 'unknown', extra = {}) {
     const sse = startSSE(req, res);
     const rankableIndices = items.flatMap((item, i) => (isRankable(item) ? [i] : []));
     const total = rankableIndices.length;
-    sse.send('init', { publications: items, total });
+    sse.send('init', { publications: items, total, ...extra });
 
     const priority = priorityFor(total);
     // Snapshot before this batch's own tasks join the queue (so they don't

@@ -61,9 +61,17 @@ const title = (o) => {
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <type>" className) moved to PublicationsItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor, sharedMaps }) {
+const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor, sharedMaps, activeCustomProfileIds }) {
   const year = item.dblp.year;
   const [, forceRowRefresh] = useState(0);
+  const portal = item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'inproceedings' ? 'core' : 'sjr');
+  // Same item.type split as `portal` above, since a custom profile can only
+  // ever be active for a genuinely CORE/SJR-sourced item anyway (decision
+  // 2 -- see customRankings.js's customProfileIdForPortal) -- picking the
+  // right half of activeCustomProfileIds this way, not from `portal`
+  // itself, is what lets it stay correct even for the (never actually
+  // reached together) 'ccf' case.
+  const activeCustomProfileId = item.type === 'inproceedings' ? activeCustomProfileIds?.conference : activeCustomProfileIds?.journal;
   return (
     <>
       <Tooltip title={dblpCategories[item.type].name} placement="left">
@@ -73,7 +81,7 @@ const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOp
       </Tooltip>
       <div className="nr">[{nr}]</div>
       <div className="rank">
-      <RankBadge rank={item.rank} portal={item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'inproceedings' ? 'core' : 'sjr')} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
+      <RankBadge rank={item.rank} portal={portal} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} activeCustomProfileId={activeCustomProfileId} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
       <cite className='data'>
         {
@@ -141,7 +149,7 @@ const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row,
 // the data-fetching hook that owns the actual SSE subscription lives in the
 // caller (AuthorContent et al.), not here, so it keeps accumulating
 // regardless and switching back shows current data immediately.
-export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps, isActive = true }) {
+export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps, activeCustomProfileIds, isActive = true }) {
   // A stable reference -- `selfPids || [author.pid]` would otherwise
   // recompute to a brand new array every render (breaking PublicationRow's
   // memoization above for every single row), even though the actual pid
@@ -241,7 +249,7 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
         ? null
         : row.kind === 'year'
           ? row.year
-          : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} />}
+          : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />}
     />
   );
 }

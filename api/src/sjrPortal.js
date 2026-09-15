@@ -16,6 +16,15 @@ export function getLatestYear() {
   return config?.end ?? null;
 }
 
+// SJR's own years are one contiguous span (unlike CORE's irregular editions
+// -- see corePortal.js's getAllYears), so the {start, end} already sitting
+// in `config` is all routes.js's /api/ranking-editions needs to hand
+// RankDetailsPopover.js's "also apply to these years" picker; the front end
+// expands it into the actual year list itself.
+export function getYearRange() {
+  return config ? { start: config.start, end: config.end } : null;
+}
+
 const BASE = 'https://www.scimagojr.com/journalrank.php?out=xls&year=';
 const CSV_DIR = '/data/scimagojr';
 
