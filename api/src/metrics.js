@@ -7,9 +7,20 @@ const MAX_RECENT_ERRORS = 50;
 const BUCKET_MS = 60 * 1000; // 1-minute buckets
 const HISTORY_BUCKETS = 60; // last hour
 
+// Coarser, longer-retained rollup for the admin dashboard's 24h/30d traffic
+// views (the minute buckets above only ever cover the last hour). No `ips`
+// Set per bucket here on purpose, unlike the minute buckets below -- 744 of
+// those (31 days) would multiply this process's own memory footprint by
+// ~12x for a per-hour distinct-IP count nothing currently needs; the admin
+// dashboard's "Distinct clients" tile stays all-time (allClientIps below)
+// regardless of the selected range.
+const HOUR_MS = 60 * 60 * 1000;
+const HISTORY_HOURS = 31 * 24; // ~1 month
+
 const routeStats = new Map(); // `${method} ${route}` -> { count, statusCounts, durations }
 const recentErrors = [];
 const buckets = new Map(); // bucketStart(ms) -> { count, errors, ips: Set }
+const hourlyBuckets = new Map(); // hourStart(ms) -> { count, errors }
 const allClientIps = new Set();
 let totalRequests = 0;
 let totalErrors = 0;
@@ -34,10 +45,21 @@ function currentBucketStart(now = Date.now()) {
   return Math.floor(now / BUCKET_MS) * BUCKET_MS;
 }
 
+function currentHourStart(now = Date.now()) {
+  return Math.floor(now / HOUR_MS) * HOUR_MS;
+}
+
 function pruneOldBuckets() {
   const cutoff = currentBucketStart() - HISTORY_BUCKETS * BUCKET_MS;
   for (const key of buckets.keys()) {
     if (key < cutoff) buckets.delete(key);
+  }
+}
+
+function pruneOldHourlyBuckets() {
+  const cutoff = currentHourStart() - HISTORY_HOURS * HOUR_MS;
+  for (const key of hourlyBuckets.keys()) {
+    if (key < cutoff) hourlyBuckets.delete(key);
   }
 }
 
@@ -81,6 +103,16 @@ export function middleware(req, res, next) {
     bucket.count++;
     if (res.statusCode >= 400) bucket.errors++;
     bucket.ips.add(ip);
+
+    const hourStart = currentHourStart();
+    let hourlyBucket = hourlyBuckets.get(hourStart);
+    if (!hourlyBucket) {
+      hourlyBucket = { count: 0, errors: 0 };
+      hourlyBuckets.set(hourStart, hourlyBucket);
+      pruneOldHourlyBuckets();
+    }
+    hourlyBucket.count++;
+    if (res.statusCode >= 400) hourlyBucket.errors++;
   });
 
   next();
@@ -114,6 +146,15 @@ export function snapshot() {
     });
   }
 
+  // Ascending, oldest first -- whatever's still within HISTORY_HOURS'
+  // pruning window, not a fixed-length array like `history` above (a
+  // freshly started process has few hours of this yet, and padding it out
+  // with zero-count placeholder hours would misleadingly look like real
+  // quiet periods rather than "no data yet").
+  const hourlyHistory = [...hourlyBuckets.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([time, b]) => ({ time, count: b.count, errors: b.errors }));
+
   return {
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     totalRequests,
@@ -121,6 +162,7 @@ export function snapshot() {
     errorRate: totalRequests ? totalErrors / totalRequests : 0,
     totalDistinctClients: allClientIps.size,
     history,
+    hourlyHistory,
     routes,
     recentErrors: [...recentErrors].reverse(),
   };

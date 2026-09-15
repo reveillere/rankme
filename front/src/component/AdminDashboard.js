@@ -7,6 +7,8 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import LinearProgress from '@mui/material/LinearProgress';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import ToggleButton from '@mui/material/ToggleButton';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -52,6 +54,29 @@ function formatElapsed(ms) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+// Shared by the Traffic and Outbound requests sections below -- both offer
+// the same four ranges over the same two data shapes the API exposes
+// (metrics.js's/throttler.js's minute-or-hourly rollups): a fixed-length
+// recent window (1h, at whatever resolution that section's own "recent"
+// array already has) and 24h/30d windows filtered out of an hourly
+// rollup, or "full" for the lifetime total the backend never prunes.
+const RANGE_MS = { '1h': 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000, '30d': 30 * 24 * 60 * 60 * 1000 };
+
+function inWindow(bucket, rangeMs) {
+  return bucket.time >= Date.now() - rangeMs;
+}
+
+function RangeSelector({ value, onChange }) {
+  return (
+    <ToggleButtonGroup size="small" value={value} exclusive onChange={(e, v) => v && onChange(v)}>
+      <ToggleButton value="1h">1h</ToggleButton>
+      <ToggleButton value="24h">24h</ToggleButton>
+      <ToggleButton value="30d">30d</ToggleButton>
+      <ToggleButton value="full">Full</ToggleButton>
+    </ToggleButtonGroup>
+  );
+}
+
 // Lightweight in-app admin dashboard: no Prometheus/Grafana/Loki here on
 // purpose (see api/src/metrics.js) — this polls a single JSON endpoint the
 // API already computes in memory.
@@ -60,6 +85,8 @@ export default function AdminDashboard() {
   const [tokenInput, setTokenInput] = useState('');
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  const [trafficRange, setTrafficRange] = useState('1h');
+  const [outboundRange, setOutboundRange] = useState('24h');
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -133,15 +160,34 @@ export default function AdminDashboard() {
     return <Box sx={{ p: 4, textAlign: 'center' }}>{error ? <Alert severity="error">{error}</Alert> : 'Loading…'}</Box>;
   }
 
-  const { process, metrics, ranking, mongo, redis, dblp, throttler } = stats;
+  const { process, metrics, ranking, mongo, redis, dblp, throttler, containers } = stats;
   const activeStreams = ranking.activeStreams;
 
+  // The 1h view uses metrics.history (minute-resolution, exactly today's
+  // previous default) with its own per-minute distinct-clients line; 24h/30d/
+  // full use metrics.hourlyHistory (hourly-resolution, no per-bucket distinct
+  // clients -- see metrics.js's own comment on why) filtered to the range,
+  // or left as-is for "full" (already bounded to ~31 days server-side).
+  const trafficSeries = trafficRange === '1h'
+    ? metrics.history
+    : metrics.hourlyHistory.filter(h => trafficRange === 'full' || inWindow(h, RANGE_MS[trafficRange]));
+  const trafficLabelFormat = trafficRange === '1h'
+    ? (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : (t) => new Date(t).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit' });
+
+  // Requests/error rate tiles follow the same range as the chart, except
+  // "full": that's metrics' own never-pruned totals directly (exact),
+  // rather than summing hourlyHistory which only covers ~31 days.
+  const trafficTotals = trafficRange === 'full'
+    ? { requests: metrics.totalRequests, errors: metrics.totalErrors }
+    : trafficSeries.reduce((acc, h) => ({ requests: acc.requests + h.count, errors: acc.errors + h.errors }), { requests: 0, errors: 0 });
+
   const chartData = {
-    labels: metrics.history.map(h => new Date(h.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+    labels: trafficSeries.map(h => trafficLabelFormat(h.time)),
     datasets: [
       {
-        label: 'Requests/min',
-        data: metrics.history.map(h => h.count),
+        label: trafficRange === '1h' ? 'Requests/min' : 'Requests/hour',
+        data: trafficSeries.map(h => h.count),
         borderColor: '#196ca3',
         backgroundColor: 'rgba(25, 108, 163, 0.15)',
         fill: true,
@@ -149,16 +195,16 @@ export default function AdminDashboard() {
         pointRadius: 0,
         yAxisID: 'y',
       },
-      {
+      ...(trafficRange === '1h' ? [{
         label: 'Distinct clients/min',
-        data: metrics.history.map(h => h.distinctClients),
+        data: trafficSeries.map(h => h.distinctClients),
         borderColor: '#c32b72',
         backgroundColor: 'transparent',
         borderDash: [4, 3],
         tension: 0.3,
         pointRadius: 0,
         yAxisID: 'y',
-      },
+      }] : []),
     ],
   };
 
@@ -203,16 +249,25 @@ export default function AdminDashboard() {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 2, mb: 3 }}>
         <SummaryTile label="Uptime" value={formatDuration(process.uptimeSeconds)} />
-        <SummaryTile label="Requests" value={metrics.totalRequests} />
-        <SummaryTile label="Error rate" value={`${(metrics.errorRate * 100).toFixed(1)}%`} highlight={metrics.errorRate > 0.05} />
-        <SummaryTile label="Distinct clients" value={metrics.totalDistinctClients} />
+        <SummaryTile label={`Requests (${trafficRange})`} value={trafficTotals.requests} />
+        <SummaryTile
+          label={`Error rate (${trafficRange})`}
+          value={`${trafficTotals.requests ? ((trafficTotals.errors / trafficTotals.requests) * 100).toFixed(1) : '0.0'}%`}
+          highlight={trafficTotals.requests > 0 && trafficTotals.errors / trafficTotals.requests > 0.05}
+        />
+        <SummaryTile label="Distinct clients (all-time)" value={metrics.totalDistinctClients} />
         <SummaryTile label="Rankings in progress" value={activeStreams.length} highlight={activeStreams.length > 0} />
       </Box>
 
-      <Typography variant="h6" gutterBottom>Traffic — last hour</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h6">Traffic</Typography>
+        <RangeSelector value={trafficRange} onChange={setTrafficRange} />
+      </Box>
       <Card sx={{ mb: 3, p: 2 }}>
         <Box sx={{ height: 220 }}>
-          <Line data={chartData} options={chartOptions} />
+          {trafficSeries.length === 0
+            ? <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', pt: 8 }}>No data yet for this range</Typography>
+            : <Line data={chartData} options={chartOptions} />}
         </Box>
       </Card>
 
@@ -254,11 +309,6 @@ export default function AdminDashboard() {
       </Card>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 2, mb: 3 }}>
-        <StatCard title="API process">
-          <Line2 label="RSS" value={formatBytes(process.memory.rss)} />
-          <Line2 label="Heap used" value={formatBytes(process.memory.heapUsed)} />
-        </StatCard>
-
         <StatCard title="Mongo">
           <Line2 label="Status" value={<StatusChip ok={mongo.ok} />} />
           <Line2 label="Venues cached" value={mongo.venuesCount ?? '—'} />
@@ -286,7 +336,69 @@ export default function AdminDashboard() {
         </StatCard>
       </Box>
 
-      <Typography variant="h6" gutterBottom>Outbound requests (this process, since start)</Typography>
+      {/* Sourced from Prometheus/cAdvisor (see admin.js's getContainerMemory)
+          -- null when the monitoring/ stack isn't deployed, not an error,
+          same as dblp's own "not imported yet" states above. Replaces the
+          old standalone "API process" card: that showed process.memoryUsage()
+          (this Node process's own RSS/heap) with no limit to compare it
+          against, which is exactly what made it hard to read at a glance --
+          the api container's own row here carries the same cgroup-level
+          number every other container's row does, against its own
+          docker-compose memory limit. */}
+      <Typography variant="h6" gutterBottom>Containers — memory</Typography>
+      <Card sx={{ mb: 3 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Container</TableCell>
+              <TableCell align="right">Used</TableCell>
+              <TableCell align="right">Limit</TableCell>
+              <TableCell sx={{ width: '30%' }}>% of limit</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {containers == null && (
+              <TableRow><TableCell colSpan={4} align="center">Not available — the monitoring/ stack (Prometheus + cAdvisor) isn&apos;t deployed</TableCell></TableRow>
+            )}
+            {containers?.length === 0 && (
+              <TableRow><TableCell colSpan={4} align="center">No container metrics yet</TableCell></TableRow>
+            )}
+            {containers?.map(c => (
+              <TableRow key={c.name}>
+                <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8em' }}>{c.name}</TableCell>
+                <TableCell align="right">{formatBytes(c.usedBytes)}</TableCell>
+                <TableCell align="right">{c.limitBytes ? formatBytes(c.limitBytes) : '—'}</TableCell>
+                <TableCell>
+                  {c.pct != null ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={Math.min(100, c.pct)}
+                        color={c.pct > 90 ? 'error' : c.pct > 75 ? 'warning' : 'primary'}
+                        sx={{ flexGrow: 1, borderRadius: 4, height: 6 }}
+                      />
+                      <Typography variant="caption" color={c.pct > 90 ? 'error.main' : 'text.secondary'} sx={{ minWidth: '3.5em' }}>
+                        {c.pct.toFixed(1)}%
+                      </Typography>
+                    </Box>
+                  ) : '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      {/* Every external call this process makes (DBLP dump, Crossref, CORE,
+          CCF, HAL, SJR -- see throttler.js). "Full" is the exact lifetime
+          total (never pruned); 1h/24h/30d sum throttler.js's own hourly
+          rollup for that host, filtered to the range -- outbound volume is
+          low enough (per ranked publication, not per HTTP request) that
+          hourly is plenty of resolution even for the "1h" view. */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Typography variant="h6">Outbound requests</Typography>
+        <RangeSelector value={outboundRange} onChange={setOutboundRange} />
+      </Box>
       <Card sx={{ mb: 3 }}>
         <Table size="small">
           <TableHead>
@@ -303,16 +415,23 @@ export default function AdminDashboard() {
             {Object.keys(throttler.outbound).length === 0 && (
               <TableRow><TableCell colSpan={6} align="center">No outbound calls yet</TableCell></TableRow>
             )}
-            {Object.entries(throttler.outbound).map(([host, s]) => (
-              <TableRow key={host}>
-                <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8em' }}>{host}</TableCell>
-                <TableCell align="right">{s.total}</TableCell>
-                <TableCell align="right">{s.ok}</TableCell>
-                <TableCell align="right" sx={{ color: s.failed > 0 ? 'error.main' : undefined, fontWeight: s.failed > 0 ? 600 : undefined }}>{s.failed}</TableCell>
-                <TableCell align="right">{s.rateLimited}</TableCell>
-                <TableCell align="right">{s.lastCalledAt ? new Date(s.lastCalledAt).toLocaleTimeString() : '—'}</TableCell>
-              </TableRow>
-            ))}
+            {Object.entries(throttler.outbound).map(([host, { full, hourlyHistory }]) => {
+              const s = outboundRange === 'full'
+                ? full
+                : hourlyHistory.filter(h => inWindow(h, RANGE_MS[outboundRange]))
+                    .reduce((acc, h) => ({ total: acc.total + h.total, ok: acc.ok + h.ok, failed: acc.failed + h.failed, rateLimited: acc.rateLimited + h.rateLimited }),
+                      { total: 0, ok: 0, failed: 0, rateLimited: 0 });
+              return (
+                <TableRow key={host}>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8em' }}>{host}</TableCell>
+                  <TableCell align="right">{s.total}</TableCell>
+                  <TableCell align="right">{s.ok}</TableCell>
+                  <TableCell align="right" sx={{ color: s.failed > 0 ? 'error.main' : undefined, fontWeight: s.failed > 0 ? 600 : undefined }}>{s.failed}</TableCell>
+                  <TableCell align="right">{s.rateLimited}</TableCell>
+                  <TableCell align="right">{full.lastCalledAt ? new Date(full.lastCalledAt).toLocaleTimeString() : '—'}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Card>

@@ -40,7 +40,27 @@ const crossref_limiter = new Bottleneck({
 // Keyed by hostname rather than full URL: HAL/Crossref/DBLP-dump URLs
 // each carry a distinct ID/DOI per call, so counting by exact URL would
 // grow this map without bound over the process's lifetime.
-const outboundStats = new Map(); // hostname -> { total, ok, failed, rateLimited, lastCalledAt }
+const outboundAllTime = new Map(); // hostname -> { total, ok, failed, rateLimited, lastCalledAt } (never pruned -- the admin dashboard's "full" range)
+
+// Hourly rollup for the admin dashboard's 1h/24h/30d views -- same
+// resolution/retention tradeoff as metrics.js's own hourlyBuckets (outbound
+// volume is far lower than inbound HTTP, so even 1h would be a single
+// point at hourly resolution, but consistency with the traffic section's
+// own bucket size matters more here than precision).
+const HOUR_MS = 60 * 60 * 1000;
+const HISTORY_HOURS = 31 * 24; // ~1 month
+const outboundHourly = new Map(); // hostname -> Map(hourStart(ms) -> { total, ok, failed, rateLimited })
+
+function currentHourStart(now = Date.now()) {
+  return Math.floor(now / HOUR_MS) * HOUR_MS;
+}
+
+function pruneOldHourly(hostBuckets) {
+  const cutoff = currentHourStart() - HISTORY_HOURS * HOUR_MS;
+  for (const key of hostBuckets.keys()) {
+    if (key < cutoff) hostBuckets.delete(key);
+  }
+}
 
 function recordOutbound(url, field) {
   let hostname;
@@ -49,10 +69,25 @@ function recordOutbound(url, field) {
   } catch {
     hostname = 'unknown';
   }
-  const entry = outboundStats.get(hostname) || { total: 0, ok: 0, failed: 0, rateLimited: 0, lastCalledAt: null };
-  entry[field]++;
-  entry.lastCalledAt = Date.now();
-  outboundStats.set(hostname, entry);
+
+  const allTimeEntry = outboundAllTime.get(hostname) || { total: 0, ok: 0, failed: 0, rateLimited: 0, lastCalledAt: null };
+  allTimeEntry[field]++;
+  allTimeEntry.lastCalledAt = Date.now();
+  outboundAllTime.set(hostname, allTimeEntry);
+
+  let hostBuckets = outboundHourly.get(hostname);
+  if (!hostBuckets) {
+    hostBuckets = new Map();
+    outboundHourly.set(hostname, hostBuckets);
+  }
+  const hourStart = currentHourStart();
+  let hourlyEntry = hostBuckets.get(hourStart);
+  if (!hourlyEntry) {
+    hourlyEntry = { total: 0, ok: 0, failed: 0, rateLimited: 0 };
+    hostBuckets.set(hourStart, hourlyEntry);
+    pruneOldHourly(hostBuckets);
+  }
+  hourlyEntry[field]++;
 }
 
 async function fetchWithTimeout(url, options) {
@@ -121,15 +156,19 @@ async function fetch(url, options = {}) {
 // Bottleneck, already a dependency) shows queue pressure without needing a
 // separate metrics system.
 export function status() {
+  const outbound = {};
+  for (const [hostname, full] of outboundAllTime) {
+    const hourlyHistory = [...(outboundHourly.get(hostname)?.entries() ?? [])]
+      .sort(([a], [b]) => a - b)
+      .map(([time, b]) => ({ time, ...b }));
+    outbound[hostname] = { full, hourlyHistory };
+  }
   return {
     limiters: {
       default: default_limiter.counts(),
       crossref: crossref_limiter.counts(),
     },
-    // Since process start -- not windowed/rolling like metrics.js's inbound
-    // request stats, since outbound volume is orders of magnitude lower
-    // (HAL/Crossref lookups per ranked publication, not per HTTP request).
-    outbound: Object.fromEntries(outboundStats),
+    outbound,
   };
 }
 

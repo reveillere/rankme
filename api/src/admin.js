@@ -847,15 +847,71 @@ export function requireAdminToken(req, res, next) {
     next();
 }
 
+// Per-container memory usage vs each container's own docker-compose
+// deploy.resources.limits.memory, for the admin dashboard's "Containers"
+// table -- sourced from Prometheus (which cAdvisor already feeds, see
+// monitoring/docker-compose.monitoring.yml), not read from cgroups
+// directly here, so this app doesn't need its own copy of cAdvisor's own
+// host-mount access. A plain node-fetch (not throttler.js's fetch): this
+// is an internal service-to-service call on the same compose network, not
+// an external API this app is calling out to -- routing it through
+// throttler would misclassify it in the very outbound-request stats that
+// function exists to report (see throttler.js's own comment) and apply an
+// external-API-tuned rate limit to a same-host query that should just be
+// fast or fail fast.
+//
+// Prometheus (and the whole monitoring/ stack) is itself optional -- see
+// that directory's own "WHY SEPARATE" comment -- so `prometheus` may not
+// resolve at all if it isn't deployed. Returns null in that case (and on
+// any other failure/timeout) rather than letting it take controllerStats
+// down with it; the dashboard already renders "not available" for other
+// optional/degraded fields the same way (see e.g. dblp below).
+const PROMETHEUS_URL = 'http://prometheus:9090';
+const PROMETHEUS_TIMEOUT_MS = 3000;
+
+async function queryPrometheus(promql) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PROMETHEUS_TIMEOUT_MS);
+    try {
+        const resp = await fetch(`${PROMETHEUS_URL}/api/v1/query?query=${encodeURIComponent(promql)}`, { signal: controller.signal });
+        const data = await resp.json();
+        if (data.status !== 'success') return [];
+        return data.data.result;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
+
+async function getContainerMemory() {
+    try {
+        const [usedResults, limitResults] = await Promise.all([
+            queryPrometheus('container_memory_working_set_bytes{name!=""}'),
+            queryPrometheus('container_spec_memory_limit_bytes{name!=""}'),
+        ]);
+        const limitByName = new Map(limitResults.map(r => [r.metric.name, Number(r.value[1])]));
+        return usedResults
+            .map(r => {
+                const name = r.metric.name;
+                const usedBytes = Number(r.value[1]);
+                const limitBytes = limitByName.get(name) ?? null;
+                return { name, usedBytes, limitBytes, pct: limitBytes ? (usedBytes / limitBytes) * 100 : null };
+            })
+            .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+    } catch {
+        return null;
+    }
+}
+
 export async function controllerStats(req, res) {
     try {
         const client = await getClient();
         const db = client.db('dblp');
 
-        const [venuesCount, mongoOk, redisStatus] = await Promise.all([
+        const [venuesCount, mongoOk, redisStatus, containers] = await Promise.all([
             db.collection('venues').countDocuments().catch(() => null),
             db.admin().ping().then(() => true).catch(() => false),
             cache.status(),
+            getContainerMemory(),
         ]);
 
         res.json({
@@ -872,6 +928,7 @@ export async function controllerStats(req, res) {
             mongo: { ok: mongoOk, venuesCount },
             redis: redisStatus,
             dblp: await getDblpStatus(),
+            containers,
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -963,10 +1020,10 @@ export async function controllerPrometheusMetrics(req, res) {
 
         lines.push('# HELP rankme_outbound_requests_total Outbound HTTP calls this process has made, by destination host and outcome (see throttler.js)');
         lines.push('# TYPE rankme_outbound_requests_total counter');
-        for (const [host, s] of Object.entries(throttler.status().outbound)) {
-            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.ok, { host, outcome: 'ok' }));
-            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.failed, { host, outcome: 'failed' }));
-            lines.push(formatPrometheusLine('rankme_outbound_requests_total', s.rateLimited, { host, outcome: 'rate_limited' }));
+        for (const [host, { full }] of Object.entries(throttler.status().outbound)) {
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', full.ok, { host, outcome: 'ok' }));
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', full.failed, { host, outcome: 'failed' }));
+            lines.push(formatPrometheusLine('rankme_outbound_requests_total', full.rateLimited, { host, outcome: 'rate_limited' }));
         }
 
         res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
