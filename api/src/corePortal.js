@@ -3,7 +3,6 @@ import HTMLParser from 'node-html-parser';
 import { normalizeTitle, levenshtein, isWorkshopMismatch } from './levenshtein.js';
 import * as cache from './cache.js'
 import { dedupeInFlight } from './inFlight.js';
-import { getVenueFullName } from './dblp.js';
 import { writeFile, readFile, mkdir } from 'fs/promises';
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
@@ -238,40 +237,6 @@ async function parseRankSource(txt) {
 }
 
 
-export async function controllerRank(req, res) {
-  const ref = 'db/conf/' + req.params[0];
-  const year = req.query.year;
-  const acronym = req.query.acronym;
-
-  if (!year || !acronym) {
-    res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
-    return;
-  }
-
-  try {
-    const rank = await getRank(acronym.toUpperCase(), ref, year);
-    res.json(rank);
-  } catch (error) {
-    console.error('[core] Error during rank computation', error);
-    res.status(400).json({ error: 'Internal Server Error', message: error.message });
-  }
-}
-
-export async function getRank(acronym, ref, year) {
-  const key = `rank:${year}:${ref}`;
-
-  let rank = await cache.get(key);
-  if (rank === null) {
-    const venueFullName = await getVenueFullName(ref);
-    rank = await computeRank(acronym.toUpperCase(), venueFullName, year);
-    // TTL'd (not permanent): a transient miss — e.g. sources still being
-    // (re)loaded by load() at startup — would otherwise get cached as
-    // "no ranking found" forever.
-    cache.set(key, rank, RANK_CACHE_TTL_S);
-  }
-  return rank;
-}
-
 // Both computeRank (acronym-first, dblp path) and computeRank2 (fuzzy-only,
 // HAL path — no acronym available) need the same yearly source snapshot and
 // the same rank-message shaping; only the actual matching strategy differs.
@@ -492,22 +457,6 @@ async function computeRank(acronym, venueFullName, year) {
 // ************************************************************************************
 
 
-
-export async function controllerRank2(req, res) {
-  const { fullName, year } = req.body
-  if (!year || !fullName) {
-    res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
-    return;
-  }
-
-  try {
-    const rank = await getRankByFullName(fullName, year);
-    res.json(rank);
-  } catch (error) {
-    console.error('[core] Error during rank computation', error);
-    res.status(400).json({ error: 'Internal Server Error', message: error.message });
-  }
-}
 
 // Concurrent calls for the same (year, fullName) -- e.g. two HAL structure
 // tabs opened at once, or two publications with the same venue text -- are

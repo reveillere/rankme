@@ -34,7 +34,6 @@ router.get('/ranking-editions', async (req, res) => {
 router.get('/dblp/status', admin.controllerDblpStatus);
 router.get('/dblp/author/*', dblp.controllerAuthor);
 router.get('/dblp/search/*', dblp.controllerSearch);
-router.get('/dblp/venue/*', dblp.controllerVenue);
 router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
 
 router.get('/hal/author/*', hal.controllerAuthor);
@@ -45,9 +44,6 @@ router.get('/hal/structure/*', hal.controllerStructurePublications);
 router.get('/hal/structure-search/*', hal.controllerSearchStructure);
 router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
-
-router.get('/rank/db/conf/*', core.controllerRank);
-router.get('/rank/db/journals/*', sjr.controllerRank);
 
 router.get('/rank/core/candidates', core.controllerCandidates);
 router.get('/rank/sjr/candidates', sjr.controllerCandidates);
@@ -62,12 +58,6 @@ router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedLis
 router.get('/admin/venues', admin.requireAdminToken, admin.controllerVenues);
 router.get('/admin/stats', admin.requireAdminToken, admin.controllerStats);
 router.get('/admin/metrics', admin.requireAdminToken, admin.controllerPrometheusMetrics);
-
-
-router.post('/rank/db/conf2', core.controllerRank2);
-router.post('/rank/db/journals2', sjr.controllerRank2);
-
-
 
 export default router;
 

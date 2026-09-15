@@ -3,7 +3,6 @@ import fetch from './throttler.js';
 import { normalizeTitle, levenshtein } from './levenshtein.js';
 import * as cache from './cache.js'
 import { dedupeInFlight } from './inFlight.js';
-import { getVenueFullName }  from './dblp.js';
 import { getClient } from './db.js';
 import { readFile } from 'fs/promises';
 
@@ -354,62 +353,11 @@ async function computeRank(venueFullName, year) {
 
 
 
-export async function controllerRank(req, res) {
-    const ref = 'db/journals/' + req.params[0];
-    const year = req.query.year;
-
-    if (!year) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
-        return;
-    }
-
-    try {
-        const rank = await getRank(ref, year);
-        res.json(rank);
-    } catch (error) {
-        console.error('Error during rank computation', error);
-        res.status(400).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
-
-export async function getRank(ref, year) {
-    const key = `rank:${year}:${ref}`;
-
-    let rank = await cache.get(key);
-    if (rank === null) {
-      const venueFullName = await getVenueFullName(ref);
-      rank = await computeRank(venueFullName, year);
-      // TTL'd (not permanent): a transient miss — e.g. this year's
-      // scimagojr collection still being populated by load() at startup —
-      // would otherwise get cached as "no ranking found" forever.
-      cache.set(key, rank, RANK_CACHE_TTL_S);
-    }
-    return rank;
-}
-
-
-
 // ************************************************************************************
 // ************************************************************************************
 // Rank by full journal name directly (no dblp ref available, e.g. HAL publications)
 
 
-
-export async function controllerRank2(req, res) {
-    const { fullName, year } = req.body;
-    if (!year || !fullName) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing query parameters' });
-        return;
-    }
-
-    try {
-        const rank = await getRankByFullName(fullName, year);
-        res.json(rank);
-    } catch (error) {
-        console.error('Error during rank computation', error);
-        res.status(400).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
 
 // Concurrent calls for the same (year, fullName) -- e.g. two publications
 // citing the same journal, ranked within the same ranking_limiter batch or

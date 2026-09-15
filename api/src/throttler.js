@@ -26,31 +26,10 @@ const default_limiter = new Bottleneck({
   minTime: 300
 });
 
-const dblp_limiter = new Bottleneck({
-  maxConcurrent: 1,
-  minTime: 1000
-});
-
-// dblp.org/db/... venue-page scraping (searchTitle/getVenueFullName in dblp.js)
-// is heavier and less essential than the search/author-lookup APIs above, and
-// is the traffic pattern that preceded the ~16h DBLP block found in prod logs
-// (a burst of dozens of .xml page fetches). Throttled and circuit-broken
-// separately so a burst here can't eat the budget of, or get DBLP annoyed on
-// behalf of, interactive search/author requests.
-const dblp_scrape_limiter = new Bottleneck({
-  maxConcurrent: 1,
-  minTime: 2500
-});
-
 const crossref_limiter = new Bottleneck({
   maxConcurrent: 2,
   minTime: 200
 });
-
-let scrapeFailureStreak = 0;
-let scrapeCooldownUntil = 0;
-const SCRAPE_FAILURE_THRESHOLD = 5;
-const SCRAPE_COOLDOWN_MS = 5 * 60 * 1000;
 
 async function fetchWithTimeout(url, options) {
   const controller = new AbortController();
@@ -70,19 +49,8 @@ async function fetchWithTimeout(url, options) {
 async function fetch(url, options = {}) {
   let priority = { priority: 5 };
   let limiter = default_limiter;
-  let isScrape = false;
   let retryPolicy = RETRY_POLICY.default;
-  if (url.startsWith('https://dblp.org/')) {
-    if (url.startsWith('https://dblp.org/db/')) {
-      limiter = dblp_scrape_limiter;
-      isScrape = true;
-    } else {
-      limiter = dblp_limiter;
-      if (url.startsWith('https://dblp.org/search/author')) {
-        priority = { priority: 1 };
-      }
-    }
-  } else if (url.startsWith('https://api.crossref.org/')) {
+  if (url.startsWith('https://api.crossref.org/')) {
     limiter = crossref_limiter;
     retryPolicy = RETRY_POLICY.crossref;
   }
@@ -92,25 +60,10 @@ async function fetch(url, options = {}) {
   // maxConcurrent:1 limiter while this one is still running (awaiting that
   // very task) — a deadlock that starves the queue for every later request.
   return limiter.schedule(priority, async () => {
-    // Checked here, at execution time, not before scheduling: a burst of
-    // concurrent callers (e.g. streaming ranks for every publication of an
-    // author) can all pass a pre-schedule check before any of them has
-    // failed yet, queuing dozens of doomed requests that would otherwise
-    // keep running throughout the "paused" window.
-    if (isScrape && Date.now() < scrapeCooldownUntil) {
-      throw new Error(`DBLP venue scraping paused after repeated failures, retrying after ${new Date(scrapeCooldownUntil).toISOString()}`);
-    }
-
     let retries = retryPolicy.maxRetries;
     while (true) {
       console.log(`\x1b[31m\x1b[1m[Fetch]\x1b[0m Fetching ${url}\x1b[0m`);
-      let response;
-      try {
-        response = await fetchWithTimeout(url, options);
-      } catch (err) {
-        if (isScrape) recordScrapeFailure();
-        throw err;
-      }
+      const response = await fetchWithTimeout(url, options);
 
       if (response.status === 429 && retries > 0) {
         retries--;
@@ -125,22 +78,12 @@ async function fetch(url, options = {}) {
       }
 
       if (!response.ok) {
-        if (isScrape) recordScrapeFailure();
         throw new Error(`\x1b[31m\x1b[1mRequest failed with status: ${response.status}`);
       }
 
-      if (isScrape) scrapeFailureStreak = 0;
       return response;
     }
   });
-}
-
-function recordScrapeFailure() {
-  scrapeFailureStreak++;
-  if (scrapeFailureStreak >= SCRAPE_FAILURE_THRESHOLD) {
-    scrapeCooldownUntil = Date.now() + SCRAPE_COOLDOWN_MS;
-    console.log(`\x1b[31m\x1b[1m[Fetch]\x1b[0m DBLP venue scraping paused for ${SCRAPE_COOLDOWN_MS / 1000}s after ${scrapeFailureStreak} consecutive failures\x1b[0m`);
-  }
 }
 
 // Exposed for the admin dashboard: each limiter's .counts() (built into
@@ -150,14 +93,7 @@ export function status() {
   return {
     limiters: {
       default: default_limiter.counts(),
-      dblp: dblp_limiter.counts(),
-      dblpScrape: dblp_scrape_limiter.counts(),
       crossref: crossref_limiter.counts(),
-    },
-    scrape: {
-      failureStreak: scrapeFailureStreak,
-      cooldownUntil: scrapeCooldownUntil || null,
-      coolingDown: Date.now() < scrapeCooldownUntil,
     },
   };
 }

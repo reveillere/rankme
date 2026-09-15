@@ -599,13 +599,12 @@ async function buildProceedingsTitleIndex() {
 
 // resolveLocally(doc): given an inproceedings/article doc from the dump,
 // return this venue's full name from data the dump already has. Degraded
-// full-local mode -- dblp.org is behind Anubis anti-bot protection (see
-// throttler.js's dblp_scrape_limiter comment, tracing back to a prior ~16h
-// block from exactly this kind of per-venue scraping), so venueLookup no
-// longer falls back to a live lookup at all: whatever resolveLocally can't
-// resolve just falls back to doc.title (the entry's own title -- a paper
-// title for inproceedings, already the right field for article/journal),
-// lower quality than a real venue name but zero network calls.
+// full-local mode -- dblp.org is behind Anubis anti-bot protection for a
+// server-side fetch, so venueLookup never falls back to a live lookup at
+// all: whatever resolveLocally can't resolve just falls back to doc.title
+// (the entry's own title -- a paper title for inproceedings, already the
+// right field for article/journal), lower quality than a real venue name
+// but zero network calls.
 //
 // `ids`, when given (see applyIncrementalUpdate/extractVenues), scopes the
 // scan to just the records that run's mdate filter touched in this

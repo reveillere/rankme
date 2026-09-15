@@ -133,7 +133,7 @@ export default function AdminDashboard() {
     return <Box sx={{ p: 4, textAlign: 'center' }}>{error ? <Alert severity="error">{error}</Alert> : 'Loading…'}</Box>;
   }
 
-  const { process, metrics, throttler, ranking, mongo, redis, dblp } = stats;
+  const { process, metrics, ranking, mongo, redis, dblp } = stats;
   const activeStreams = ranking.activeStreams;
 
   const chartData = {
@@ -264,20 +264,6 @@ export default function AdminDashboard() {
           <Line2 label="Status" value={<StatusChip ok={redis.ok} />} />
           <Line2 label="Keys" value={redis.dbsize ?? '—'} />
           <Line2 label="Memory" value={redis.usedMemory ?? '—'} />
-        </StatCard>
-
-        <StatCard title="DBLP throttler">
-          {/* Dormant in practice: author/search/venue lookups are served
-              from the local dump now (see the "DBLP local dump" card) --
-              this only fires again if that dump is ever unavailable and
-              the live dblp.org fallback code paths get reconnected. */}
-          <Line2 label="Author/search queue" value={`${throttler.limiters.dblp.QUEUED} queued, ${throttler.limiters.dblp.RUNNING} running`} />
-          <Line2 label="Venue-scrape queue" value={`${throttler.limiters.dblpScrape.QUEUED} queued, ${throttler.limiters.dblpScrape.RUNNING} running`} />
-          <Line2
-            label="Scrape circuit breaker"
-            value={throttler.scrape.coolingDown ? `Cooling down (${throttler.scrape.failureStreak} failures)` : 'Closed'}
-            highlight={throttler.scrape.coolingDown}
-          />
         </StatCard>
 
         <StatCard title="DBLP local dump">
