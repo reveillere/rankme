@@ -26,6 +26,7 @@ import '../App.css';
 import { searchAuthor as searchAuthorDblp, fetchAuthor as fetchAuthorDblp, fetchStatus as fetchDblpStatus, getName as getDblpName } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getCachedSearch, setCachedSearch } from '../searchCache';
+import { startStatusPolling } from '../statusPolling';
 import { getSearchHistory, removeSearchHistoryByType } from '../searchHistory';
 import { PersonListItemText } from './PersonListItemText';
 import HistoryIcon from '@mui/icons-material/History';
@@ -61,7 +62,7 @@ const SOURCES = {
 // searchRequest: optional { source, text } set by a caller (e.g. a HAL
 // co-author link with no known idHal) to prefill and immediately run a
 // search, switching to the given source if needed.
-export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
+export default function AuthorSearch({ onOpenAuthor, searchRequest, isActive }) {
     // DBLP by default again now that the local dump (see dblp.js's
     // fetchStatus/DblpStatusBanner) is reliably imported -- HAL was the
     // fallback default while DBLP either needed a live dblp.org fetch
@@ -91,8 +92,9 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
         }
 
         const requestId = ++requestIdRef.current;
-        const cacheKey = `search:${src}:${trimmed.toLowerCase()}`;
-        const cached = getCachedSearch(cacheKey);
+        const generation = src === 'dblp' ? `${dblpStatus?.version}:${dblpStatus?.importedAt}:` : '';
+        const cacheKey = `search:${src}:${generation}${trimmed.toLowerCase()}`;
+        const cached = src !== 'dblp' || dblpStatus?.ready ? getCachedSearch(cacheKey) : undefined;
         if (Array.isArray(cached)) {
             setQueryResult(cached);
             setQueryStatus('resolved');
@@ -113,7 +115,7 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
             }
             setQueryResult(data);
             setQueryStatus('resolved');
-            setCachedSearch(cacheKey, data);
+            setCachedSearch(cacheKey, data, src === 'dblp' ? 5 * 60 * 1000 : undefined);
         } catch (err) {
             if (requestId !== requestIdRef.current) return;
             console.error('Search failed', err);
@@ -122,28 +124,23 @@ export default function AuthorSearch({ onOpenAuthor, searchRequest }) {
         }
     };
 
+    // Only a new caller request triggers a search, not status refreshes.
+    const runSearchRef = useRef(runSearch);
+    runSearchRef.current = runSearch;
     useEffect(() => {
         if (!searchRequest) return;
         setSource(searchRequest.source);
         setMode('name');
         setQuery(searchRequest.text);
-        runSearch(searchRequest.source, searchRequest.text);
+        runSearchRef.current(searchRequest.source, searchRequest.text);
     }, [searchRequest]);
 
-    // Polled (not fetch-once) so a rebuild that starts or finishes while
-    // this tab is open is reflected without the user having to reload --
-    // only while the DBLP tab is actually the one showing, and backed off
-    // to a slow interval once we know it's ready (nothing left to change).
+    // Resume immediately when returning to the DBLP search. Author tabs
+    // stay mounted, so source alone does not tell us whether it is visible.
     useEffect(() => {
-        if (source !== 'dblp') return;
-        let cancelled = false;
-        const poll = () => fetchDblpStatus().then(s => { if (!cancelled) setDblpStatus(s); }).catch(() => {});
-        poll();
-        const intervalMs = dblpStatus?.ready ? 30000 : 5000;
-        const id = setInterval(poll, intervalMs);
-        return () => { cancelled = true; clearInterval(id); };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [source, dblpStatus?.ready]);
+        if (source !== 'dblp' || !isActive) return;
+        return startStatusPolling(fetchDblpStatus, setDblpStatus);
+    }, [source, isActive]);
 
     const handleSourceChange = (event, newSource) => {
         setSource(newSource);
@@ -224,7 +221,7 @@ function DblpStatusBanner({ status }) {
     if (!status.ready) {
         return (
             <Alert severity="warning" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
-                DBLP hasn't been imported locally yet. Please use HAL for now.
+                DBLP hasn&apos;t been imported locally yet. Please use HAL for now.
             </Alert>
         );
     }
@@ -235,7 +232,7 @@ function DblpStatusBanner({ status }) {
         <Alert severity="success" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
             DBLP results come from a local snapshot of the dblp.org dump{importedDate ? ` (imported ${importedDate})` : ''}, not a live query --
             dblp.org itself is currently blocked by their anti-bot protection. Matching is by exact
-            author name, so accuracy depends on dblp's own name disambiguation.
+            author name, so accuracy depends on dblp&apos;s own name disambiguation.
         </Alert>
     );
 }

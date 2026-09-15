@@ -30,10 +30,10 @@ class ConcurrencyLimiter {
         this.buckets = new Map();
     }
 
-    schedule(priority, fn) {
+    schedule(priority, fn, group) {
         return new Promise((resolve, reject) => {
             if (!this.buckets.has(priority)) this.buckets.set(priority, []);
-            this.buckets.get(priority).push({ fn, resolve, reject });
+            this.buckets.get(priority).push({ fn, resolve, reject, group });
             this._drain();
         });
     }
@@ -83,18 +83,15 @@ class ConcurrencyLimiter {
         return { running: this.running, queued };
     }
 
-    // How many already-queued tasks would be dequeued before a *new* one
-    // at this priority: everything currently sitting in a bucket at this
-    // priority or better (lower number = higher priority, dequeued first;
-    // FIFO within a bucket). A snapshot taken at the moment a stream joins
-    // the queue, not a live countdown -- maxConcurrent slots freeing up
-    // don't change *order*, only how fast that order gets worked through,
-    // so this answers "how many ahead of you", not "how long" (see
-    // streamRankedItems' own use of this for the 'queued' SSE event).
-    position(priority) {
-        let ahead = 0;
+    // Position of this stream's first pending task, excluding its own
+    // tasks and later arrivals at the same priority. Higher-priority
+    // arrivals can move ahead of it. null means it has already dequeued.
+    position(priority, group) {
+        const index = this.buckets.get(priority)?.findIndex(task => task.group === group) ?? -1;
+        if (index < 0) return null;
+        let ahead = index;
         for (const [p, bucket] of this.buckets) {
-            if (p <= priority) ahead += bucket.length;
+            if (p < priority) ahead += bucket.length;
         }
         return ahead;
     }
@@ -162,12 +159,23 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
     sse.send('init', { publications: items, total, ...extra });
 
     const priority = priorityFor(total);
-    // Snapshot before this batch's own tasks join the queue (so they don't
-    // count themselves) -- skipped entirely at 0 (nothing ahead, 'started'
-    // is about to fire immediately anyway, no point announcing a queue
-    // that isn't really one).
-    const queuePosition = ranking_limiter.position(priority);
-    if (queuePosition > 0) sse.send('queued', { position: queuePosition });
+    const group = Symbol('ranking stream');
+    let started = false;
+    let queueTimer;
+    let lastPosition;
+    const stopQueueUpdates = () => {
+        clearInterval(queueTimer);
+        queueTimer = undefined;
+    };
+    const updateQueuePosition = () => {
+        if (started || sse.aborted) { stopQueueUpdates(); return; }
+        const position = ranking_limiter.position(priority, group);
+        if (position !== null && position !== lastPosition) {
+            sse.send('queued', { position });
+            lastPosition = position;
+        }
+    };
+    req.on('close', stopQueueUpdates);
     const streamId = activeStreams.register(label);
     try {
         let completed = 0;
@@ -179,15 +187,18 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
         // the first moment any item in this batch actually starts running
         // rather than sitting in a bucket -- see ConcurrencyLimiter's own
         // queued/running distinction above.
-        let started = false;
-        await Promise.all(rankableIndices.map((index) => ranking_limiter.schedule(priority, async () => {
+        const tasks = rankableIndices.map((index) => ranking_limiter.schedule(priority, async () => {
             // The client is already gone -- skip starting work that would
             // just be computed into a dead socket. A task already picked up
             // by the limiter before the disconnect still runs to
             // completion (no mid-flight cancellation), but sse.send below
             // is a no-op for it either way.
             if (sse.aborted) return;
-            if (!started) { started = true; sse.send('started', {}); }
+            if (!started) {
+                started = true;
+                stopQueueUpdates();
+                sse.send('started', {});
+            }
             try {
                 const extra = await computeRank(items[index], index);
                 completed++;
@@ -206,11 +217,19 @@ export async function streamRankedItems(req, res, items, isRankable, computeRank
                 sse.send('rank-error', { index, completed, total, message: error.message });
             }
             activeStreams.updateProgress(streamId, completed, total);
-        })));
+        // Only mark the first task: once it dequeues, waiting is over even
+        // if this stream still has other publications in the queue.
+        }, index === rankableIndices[0] ? group : undefined));
+        // Reuse the existing SSE connection; no extra browser requests.
+        updateQueuePosition();
+        if (lastPosition !== undefined) queueTimer = setInterval(updateQueuePosition, 1000);
+        await Promise.all(tasks);
 
         sse.send('done', {});
         sse.end();
     } finally {
+        stopQueueUpdates();
+        req.off('close', stopQueueUpdates);
         activeStreams.unregister(streamId);
     }
 }

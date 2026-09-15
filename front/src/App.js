@@ -289,7 +289,7 @@ function App() {
 
       {tabs.map(tab => (
         <div key={tab.id} style={{ display: tab.id === activeTabId ? 'block' : 'none' }}>
-          {tab.type === 'search' && <AuthorSearch onOpenAuthor={openAuthorTab} searchRequest={searchRequest} />}
+          {tab.type === 'search' && <AuthorSearch onOpenAuthor={openAuthorTab} searchRequest={searchRequest} isActive={tab.id === activeTabId} />}
           {tab.type === 'teams' && <Teams onOpenAuthor={openAuthorTab} />}
           {/* isActive (tab.id === activeTabId) is threaded down to each of
               these four's Publications/HalPublications so a backgrounded

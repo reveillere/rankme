@@ -17,9 +17,9 @@ export function getCachedSearch(key) {
     }
 }
 
-export function setCachedSearch(key, value) {
+export function setCachedSearch(key, value, ttlMs = TTL_MS) {
     try {
-        localStorage.setItem(key, JSON.stringify({ value, expiresAt: Date.now() + TTL_MS }));
+        localStorage.setItem(key, JSON.stringify({ value, expiresAt: Date.now() + ttlMs }));
     } catch {
         // storage full/unavailable — cache is best-effort, ignore
     }

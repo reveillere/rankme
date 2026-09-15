@@ -20,6 +20,11 @@ http {
         # restarting nginx silently leaves it pointing at a dead/stale IP.
         resolver 127.0.0.11 valid=10s;
 
+        # Preserve links to DBLP author pages from before the tab-based UI.
+        location ^~ /author/ {
+            rewrite ^/author/(.+)$ /dblp/$1 permanent;
+        }
+
         location / {
             set $front_upstream front;
             proxy_pass http://$front_upstream:80;
@@ -168,7 +173,6 @@ http {
 
 
 }
-
 
 
 

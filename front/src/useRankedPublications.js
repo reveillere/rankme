@@ -22,10 +22,8 @@ export function useRankedPublications(streamUrl) {
   // both). See ranking.js's identical comment on why this needed its own
   // signal rather than being inferrable from progress alone.
   const [queued, setQueued] = useState(false);
-  // A snapshot from the server's own 'queued' event ("this many were ahead
-  // of you when you joined the queue") -- not a live countdown, see
-  // ranking.js's ConcurrencyLimiter.position for why. null whenever queued
-  // is false, or if the stream never queued long enough to get one at all.
+  // Updated by the server while waiting: pending ranking tasks ahead of
+  // this stream, not people. null when running or never queued.
   const [queuePosition, setQueuePosition] = useState(null);
   // Only ever set once, from `init` -- unused by most callers (Author.js,
   // AuthorHal.js), populated by controllerHalStructure (see
@@ -73,8 +71,8 @@ export function useRankedPublications(streamUrl) {
       if (data.memberIds) setMemberIds(data.memberIds);
     });
 
-    // Only sent when there's actually something ahead (see ranking.js) --
-    // a stream that starts running immediately never gets one at all.
+    // Sent on joining the queue, then when the position changes. Zero
+    // means next in line, possibly still waiting for a running task.
     es.addEventListener('queued', (e) => {
       setQueuePosition(JSON.parse(e.data).position);
     });

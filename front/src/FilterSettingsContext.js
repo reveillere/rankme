@@ -148,7 +148,6 @@ export function FilterSettingsProvider({ children }) {
     healIfStale();
     window.addEventListener('rankme:customrankingchange', healIfStale);
     return () => window.removeEventListener('rankme:customrankingchange', healIfStale);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conferenceSource, journalSource]);
 
   return (

@@ -4,6 +4,7 @@ import sax from "sax";
 import { getClient } from './db.js';
 import * as dblpLocal from './dblpLocal.js';
 import * as admin from './admin.js';
+import { createDblpSearch } from './dblpSearchCache.js';
 
 const BASE = 'https://dblp.org';
 
@@ -158,22 +159,24 @@ async function getAuthor(authorPID, key) {
 // ****************************************************************************************************
 // ****************************************************************************************************
 
+const searchLocalAuthors = createDblpSearch({
+    getStatus: () => admin.getDblpStatus(),
+    search: query => dblpLocal.searchAuthorsByName(query),
+    tokenize: dblpLocal.tokenizeName,
+    cache,
+});
+
 export async function controllerSearch(req, res) {
     const searchQuery = req.params[0];
     try {
         // Local dump only for now -- see the note on controllerAuthor
         // above. getSearchAuthor/searchAuthor below (the live dblp.org
         // search API path) are dormant, not called, kept intact.
-        const status = await admin.getDblpStatus();
-        if (!status.ready) {
-            res.status(503).json({ error: status.importing ? 'DBLP local dump import in progress' : 'DBLP local dump not imported yet' });
-            return;
-        }
-        const author = await dblpLocal.searchAuthorsByName(searchQuery);
+        const author = await searchLocalAuthors(searchQuery);
         res.json(author);
     } catch (error) {
         console.log('Error during search computation', error);
-        res.status(400).json({ error: error.message })
+        res.status(error.status || 400).json({ error: error.message })
     }
 }
 

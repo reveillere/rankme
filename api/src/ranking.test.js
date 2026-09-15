@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { streamRankedItems } from './ranking.js';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 
 function fakeRes() {
   const events = [];
@@ -132,4 +133,72 @@ test('streamRankedItems reports a queue position when the limiter is already sat
 
   assert.ok(res2.events.some((e) => e.includes('event: started')));
   assert.ok(res2.events.some((e) => e.startsWith('event: done')));
+});
+
+function queuedPositions(res) {
+  return res.events.filter(e => e.startsWith('event: queued')).map(e => JSON.parse(e.match(/data: (.*)\n/)[1]).position);
+}
+
+function gates(count) {
+  const release = [];
+  const promises = Array.from({ length: count }, () => new Promise(resolve => release.push(resolve)));
+  return { release, compute: async (_, index) => { await promises[index]; return {}; } };
+}
+
+test('queue position decreases while waiting and excludes own tasks and later same-priority arrivals', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const gate = gates(20);
+  const blocker = streamRankedItems(fakeReq(), fakeRes(), Array(20).fill({}), () => true, gate.compute);
+  const res = fakeRes();
+  const waiter = streamRankedItems(fakeReq(), res, Array(3).fill({}), () => true, async () => ({}));
+  const later = streamRankedItems(fakeReq(), fakeRes(), Array(4).fill({}), () => true, async () => ({}));
+  try {
+    assert.deepEqual(queuedPositions(res), [12]);
+    gate.release.slice(0, 8).forEach(release => release());
+    await nextTurn();
+    t.mock.timers.tick(1000);
+    assert.deepEqual(queuedPositions(res), [12, 4]);
+    assert.ok(!res.events.some(e => e.startsWith('event: started')));
+    t.mock.timers.tick(1000);
+    assert.deepEqual(queuedPositions(res), [12, 4], 'unchanged positions are not resent');
+    gate.release.slice(8, 12).forEach(release => release());
+    await nextTurn();
+    t.mock.timers.tick(1000);
+    assert.deepEqual(queuedPositions(res), [12, 4, 0], 'next in line while all eight slots still run');
+  } finally {
+    gate.release.forEach(release => release());
+    await Promise.all([blocker, waiter, later]);
+  }
+  const positions = queuedPositions(res);
+  t.mock.timers.tick(5000);
+  assert.deepEqual(queuedPositions(res), positions);
+  assert.equal(res.events.filter(e => e.startsWith('event: started')).length, 1);
+  const startedAt = res.events.findIndex(e => e.startsWith('event: started'));
+  assert.ok(!res.events.slice(startedAt).some(e => e.startsWith('event: queued')));
+});
+
+test('queue position includes new higher-priority tasks but stops updates on disconnect', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const gate = gates(60);
+  const blocker = streamRankedItems(fakeReq(), fakeRes(), Array(60).fill({}), () => true, gate.compute);
+  const req = fakeReq();
+  const res = fakeRes();
+  let calls = 0;
+  const waiter = streamRankedItems(req, res, Array(60).fill({}), () => true, async () => { calls++; return {}; });
+  const priority = streamRankedItems(fakeReq(), fakeRes(), Array(3).fill({}), () => true, async () => ({}));
+  try {
+    assert.deepEqual(queuedPositions(res), [52]);
+    t.mock.timers.tick(1000);
+    assert.deepEqual(queuedPositions(res), [52, 55]);
+    req.emit('close');
+    gate.release.slice(0, 8).forEach(release => release());
+    await nextTurn();
+    t.mock.timers.tick(5000);
+    assert.deepEqual(queuedPositions(res), [52, 55]);
+  } finally {
+    gate.release.forEach(release => release());
+    await Promise.all([blocker, waiter, priority]);
+  }
+  assert.equal(calls, 0);
+  assert.equal(req.listenerCount('close'), 1, 'queue-update listener is removed');
 });

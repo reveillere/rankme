@@ -24,8 +24,9 @@ export async function fetchAuthor(authorPID) {
 // the DBLP tab with a clear message while a (re)import is in progress,
 // since the collections it reads are dropped and rebuilt in place (see
 // admin.js's processXML) rather than swapped in atomically.
-export async function fetchStatus() {
-    const resp = await fetch('/api/dblp/status');
+export async function fetchStatus(options) {
+    const resp = await fetch('/api/dblp/status', options);
+    if (!resp.ok) throw new Error(`DBLP status: HTTP ${resp.status}`);
     return await resp.json();
 }
 
