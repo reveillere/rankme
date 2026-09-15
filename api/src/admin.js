@@ -3,7 +3,7 @@ import crypto from 'crypto'; // used for both the DBLP dump MD5 check and the ad
 import { pipeline } from 'stream';
 import gunzip from 'gunzip-maybe';
 import { createWriteStream, statSync, createReadStream } from 'fs';
-import { writeFile, readFile, mkdir, stat } from 'fs/promises';
+import { writeFile, readFile, mkdir, stat, unlink } from 'fs/promises';
 import sax from 'sax';
 import { v4 as uuidv4 } from 'uuid';
 import { getClient } from './db.js';
@@ -25,10 +25,19 @@ const DAGSTUHL_XML_BASE = 'https://drops.dagstuhl.de/storage/artifacts/dblp/xml'
 // fetch it through a real browser. scripts/cron-dblp-import.sh runs on the
 // 2nd of each month specifically so the current month's file is reliably
 // already published by the time this runs.
-function dagstuhlDumpUrls(date = new Date()) {
+// "2026-09" -- also Dagstuhl's own DOI suffix for that snapshot
+// (10.4230/dblp.xml.2026-09-01, see getDblpStatus/storeDagstuhlSnapshot),
+// so this one id both builds the download URLs below and is what the front
+// end links back to Dagstuhl's citable record for the currently-served dump.
+function dagstuhlSnapshotId(date = new Date()) {
     const year = date.getUTCFullYear();
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const gz = `${DAGSTUHL_XML_BASE}/${year}/dblp-${year}-${month}-01.xml.gz`;
+    return `${year}-${month}`;
+}
+
+function dagstuhlDumpUrls(snapshotId = dagstuhlSnapshotId()) {
+    const year = snapshotId.slice(0, 4);
+    const gz = `${DAGSTUHL_XML_BASE}/${year}/dblp-${snapshotId}-01.xml.gz`;
     return { gz, md5: `${gz}.md5` };
 }
 
@@ -43,8 +52,8 @@ function printProgress(msg = 'Progression') {
     }
 }
 
-const downloadFile = async () => {
-    const response = await fetch(dagstuhlDumpUrls().gz);
+const downloadFile = async (snapshotId) => {
+    const response = await fetch(dagstuhlDumpUrls(snapshotId).gz);
     const totalSize = Number(response.headers.get('content-length'));
     let downloadedSize = 0;
 
@@ -68,8 +77,8 @@ const downloadFile = async () => {
 
 const MD5_PATTERN = /^[0-9a-f]{32}$/i;
 
-const getCurrentMD5 = async () => {
-    const { md5: md5Url } = dagstuhlDumpUrls();
+const getCurrentMD5 = async (snapshotId) => {
+    const { md5: md5Url } = dagstuhlDumpUrls(snapshotId);
     const md5Response = await fetch(md5Url);
     const md5Content = await md5Response.text();
     const md5Expected = md5Content.trim().split(/\s+/)[0];
@@ -108,6 +117,34 @@ const storeMD5 = async (md5Value) => {
 const getStoredMD5 = async () => {
     try {
         return (await readFile('/data/dblp/localMD5.txt', 'utf-8')).trim();
+    } catch (error) {
+        return null;
+    }
+};
+
+const DAGSTUHL_SNAPSHOT_PATH = '/data/dblp/dagstuhlSnapshot.txt';
+
+// Which Dagstuhl monthly snapshot (see dagstuhlSnapshotId) the currently-
+// served dump actually came from, so getDblpStatus can hand the front end
+// a DOI to link back to Dagstuhl's citable record for it (see
+// DblpStatusBanner, Search.js). Only meaningful for a dump that came from
+// the live Dagstuhl check -- cleared (not written) on a manually-provided
+// one (see extractVenues), since there's no snapshot id to attach to that.
+const storeDagstuhlSnapshot = async (snapshotId) => {
+    await writeFile(DAGSTUHL_SNAPSHOT_PATH, snapshotId, 'utf-8');
+};
+
+const clearDagstuhlSnapshot = async () => {
+    try {
+        await unlink(DAGSTUHL_SNAPSHOT_PATH);
+    } catch (error) {
+        // Already absent (e.g. never had a live-sourced import) -- fine.
+    }
+};
+
+const getStoredDagstuhlSnapshot = async () => {
+    try {
+        return (await readFile(DAGSTUHL_SNAPSHOT_PATH, 'utf-8')).trim();
     } catch (error) {
         return null;
     }
@@ -668,6 +705,10 @@ export async function getDblpStatus() {
         importing: dblpImportRunning,
         version,
         importedAt,
+        // null for a manually-provided dump (see extractVenues/
+        // clearDagstuhlSnapshot) -- the front end falls back to just the
+        // date in that case, since there's no Dagstuhl DOI to link to.
+        dagstuhlSnapshot: await getStoredDagstuhlSnapshot(),
     };
 }
 
@@ -676,11 +717,13 @@ export const extractVenues = async () => {
     try {
         await mkdir('/data/dblp', { recursive: true });
 
+        const snapshotId = dagstuhlSnapshotId();
+
         // Dagstuhl's freshness check (getCurrentMD5) can still fail (network
         // hiccup, this month's snapshot not published yet) -- fall back to a
         // manually-provided sidecar .md5 (see getProvidedMD5) so a dump
         // dropped in by hand still gets picked up and processed.
-        let targetMD5 = await getCurrentMD5().catch((error) => {
+        let targetMD5 = await getCurrentMD5(snapshotId).catch((error) => {
             console.log(`[dblp] Could not check Dagstuhl for a newer dump (${error.message}), falling back to a locally provided one if any.`);
             return null;
         });
@@ -704,7 +747,7 @@ export const extractVenues = async () => {
             // failure produced.
             if (viaLiveCheck) {
                 console.log('File has been updated. Downloading...');
-                await downloadFile();
+                await downloadFile(snapshotId);
             }
             await verifyMD5(targetMD5);
             console.log('MD5 verification passed!');
@@ -748,6 +791,15 @@ export const extractVenues = async () => {
             // storedMD5 === targetMD5 and skip re-processing entirely,
             // silently leaving the venue index incomplete forever.
             await storeMD5(targetMD5);
+            // See storeDagstuhlSnapshot's own comment: only a live-sourced
+            // dump has a Dagstuhl DOI to attach; a manually-provided one
+            // clears whatever snapshot id a previous live import left
+            // behind, so the front end doesn't advertise a wrong DOI for it.
+            if (viaLiveCheck) {
+                await storeDagstuhlSnapshot(snapshotId);
+            } else {
+                await clearDagstuhlSnapshot();
+            }
             if (maxMdate) await storeMdateWatermark(maxMdate);
         }
     } catch (error) {

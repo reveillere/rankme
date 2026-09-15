@@ -225,14 +225,33 @@ function DblpStatusBanner({ status }) {
             </Alert>
         );
     }
-    const importedDate = status.importedAt
-        ? new Date(status.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-        : null;
+    // dagstuhlSnapshot ("2026-09") is null for a manually-provided dump
+    // (see admin.js's extractVenues/clearDagstuhlSnapshot) -- there's no
+    // DOI or monthly-publish date to show in that case, so this falls back
+    // to describing it as a plain (non-"monthly") snapshot dated by when
+    // this app actually imported it (importedAt), same as before.
+    const snapshotDate = status.dagstuhlSnapshot
+        // timeZone: 'UTC' -- "2026-09-01" parses as UTC midnight; without
+        // pinning the format to UTC too, a viewer west of it (e.g. US
+        // timezones) would see it roll back to the last day of the
+        // previous month.
+        ? new Date(`${status.dagstuhlSnapshot}-01`).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' })
+        : (status.importedAt
+            ? new Date(status.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+            : null);
+    const doi = status.dagstuhlSnapshot ? `10.4230/dblp.xml.${status.dagstuhlSnapshot}-01` : null;
     return (
         <Alert severity="success" sx={{ width: 500, maxWidth: '100%', margin: '0 auto 20px' }}>
-            DBLP results come from a local snapshot of the dblp.org dump{importedDate ? ` (imported ${importedDate})` : ''}, not a live query --
-            dblp.org itself is currently blocked by their anti-bot protection. Matching is by exact
-            author name, so accuracy depends on dblp&apos;s own name disambiguation.
+            DBLP results come from a{status.dagstuhlSnapshot ? ' monthly' : ''} local snapshot of the dblp.org dump
+            {snapshotDate && (
+                <>
+                    {' ('}{snapshotDate}
+                    {doi && (
+                        <>, DOI <a href={`https://doi.org/${doi}`} target="_blank" rel="noopener noreferrer">{doi}</a></>
+                    )}
+                    {')'}
+                </>
+            )}.
         </Alert>
     );
 }
