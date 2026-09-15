@@ -94,6 +94,15 @@ services:
   cadvisor:
     image: ghcr.io/google/cadvisor:v0.60.5
     restart: always
+    # Without this, cAdvisor walks every cgroup it can see under /rootfs --
+    # on this VPS that includes systemd's own per-user-session slices
+    # (user@1000.service, gpg-agent sockets, ...), not just docker
+    # containers. Confirmed live: a /metrics scrape timed out past 30s
+    # before this flag, Prometheus marked the target down. --docker_only
+    # limits collection to actual containers, which is the only thing this
+    # dashboard cares about anyway.
+    command:
+      - '--docker_only=true'
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
