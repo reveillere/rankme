@@ -896,7 +896,10 @@ async function getContainerMemory() {
                 const limitBytes = limitByName.get(name) ?? null;
                 return { name, usedBytes, limitBytes, pct: limitBytes ? (usedBytes / limitBytes) * 100 : null };
             })
-            .sort((a, b) => (b.pct ?? -1) - (a.pct ?? -1));
+            // By name, not by %: a %-desc sort reshuffles rows on every
+            // poll as containers jitter past each other, which is
+            // disorienting for a table meant to be scanned at a glance.
+            .sort((a, b) => a.name.localeCompare(b.name));
     } catch {
         return null;
     }

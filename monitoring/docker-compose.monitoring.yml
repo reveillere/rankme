@@ -111,7 +111,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          # Bumped from 128M on 2026-09-15 (observed close to 100% of it in
+          # practice) using RAM freed by disabling grafana below -- not the
+          # full 128M grafana had, some of it left as host headroom rather
+          # than fully reallocated, same reasoning as mongo's own bump
+          # earlier that day.
+          memory: 192M
           cpus: "0.3"
 
   prometheus:
@@ -141,34 +146,38 @@ services:
           memory: 192M
           cpus: "0.5"
 
-  grafana:
-    image: grafana/grafana:11.2.0
-    restart: always
-    depends_on:
-      - prometheus
-    environment:
-      # Defaults to local dev; set GRAFANA_ROOT_URL=https://rankme.fr/grafana/
-      # in the host's .env for a real deployment.
-      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:8080/grafana/}
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      # CHANGE THIS: set a real GF_SECURITY_ADMIN_PASSWORD in the host's
-      # .env before running this against a real server. Left unset here on
-      # purpose (falls back to Grafana's own default admin/admin) so a
-      # missing .env entry is obvious on first login rather than silently
-      # deploying with a value nobody chose.
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    deploy:
-      resources:
-        limits:
-          # Trimmed from 256M on 2026-09-15 (actual steady-state usage
-          # ~40-45MB) to free RAM for mongo -- see docker-compose.prod.yml's
-          # own mongo memory comment.
-          memory: 128M
-          cpus: "0.5"
+  # Disabled 2026-09-15: the VPS's RAM was too tight for it alongside
+  # cadvisor (see cadvisor's own bump above, using the RAM this frees) --
+  # re-enable by uncommenting once there's more headroom (a bigger VPS, or
+  # trimming something else). grafana-data (below) is left declared so its
+  # dashboards/admin password survive in the meantime; prometheus keeps
+  # scraping/retaining everything Grafana would show either way, nothing
+  # is lost by turning this back on later.
+  # grafana:
+  #   image: grafana/grafana:11.2.0
+  #   restart: always
+  #   depends_on:
+  #     - prometheus
+  #   environment:
+  #     # Defaults to local dev; set GRAFANA_ROOT_URL=https://rankme.fr/grafana/
+  #     # in the host's .env for a real deployment.
+  #     - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:8080/grafana/}
+  #     - GF_SERVER_SERVE_FROM_SUB_PATH=true
+  #     # CHANGE THIS: set a real GF_SECURITY_ADMIN_PASSWORD in the host's
+  #     # .env before running this against a real server. Left unset here on
+  #     # purpose (falls back to Grafana's own default admin/admin) so a
+  #     # missing .env entry is obvious on first login rather than silently
+  #     # deploying with a value nobody chose.
+  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+  #   volumes:
+  #     - grafana-data:/var/lib/grafana
+  #     - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+  #     - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 128M
+  #         cpus: "0.5"
 
 volumes:
   prometheus-data:
