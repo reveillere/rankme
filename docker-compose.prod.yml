@@ -29,7 +29,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          # Parameterized like mongo's own MONGO_MEMORY_LIMIT below:
+          # scripts/deploy-dblp-dump.sh bumps this for the DBLP import (node
+          # auto-sizes its V8 heap off this cgroup limit, and the default 1G
+          # -- ~511MB of old-space in practice -- isn't enough headroom for
+          # a full-corpus streaming pass), then shrinks it back once done.
+          memory: ${API_MEMORY_LIMIT:-1G}
           cpus: "1.0"
 
   redis:
