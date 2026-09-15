@@ -16,6 +16,24 @@ bots:
       X-Rankme-Bypass: "^__RANKME_BYPASS_KEY__$"
     action: ALLOW
 
+  # Umami (self-hosted analytics, /analytics/) isn't the resource Anubis
+  # exists to protect -- its own dashboard already sits behind its own
+  # login, and the tracking beacon (/analytics/api/send) is a cheap insert,
+  # not something worth gating. Added 2026-09-15 after confirming live that
+  # the beacon was getting freshly challenged on *every* call even
+  # immediately after the same browser had just solved a challenge for the
+  # page itself (two independent "new challenge issued" log lines seconds
+  # apart, same visitor, same host) -- Anubis's pass cookie wasn't being
+  # honored for this specific fetch/sendBeacon call the way it is for a
+  # normal page navigation. Umami's client script has no handling for
+  # "got Anubis's HTML challenge page back instead of JSON" -- it just
+  # silently drops the event, so every visit was recording zero data.
+  # Exempting the whole path sidesteps that mechanism entirely rather than
+  # chasing exactly why the cookie wasn't carried over.
+  - name: allow-umami
+    path_regex: ^/analytics/
+    action: ALLOW
+
   # Anubis's own maintained defaults: allows known-good crawlers (Google,
   # Bing, DuckDuckGo, Internet Archive, ...) by signature so they never hit
   # a challenge, aggressively blocks known AI/LLM scraper bots by name, and
