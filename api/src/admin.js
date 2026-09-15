@@ -14,8 +14,23 @@ import * as throttler from './throttler.js';
 import * as ranking from './ranking.js';
 import * as activeStreams from './activeStreams.js';
 
-const DBLP_XML_URL = 'https://dblp.org/xml/dblp.xml.gz';
-const DBLP_MD5_URL = 'https://dblp.org/xml/dblp.xml.gz.md5';
+const DAGSTUHL_XML_BASE = 'https://drops.dagstuhl.de/storage/artifacts/dblp/xml';
+
+// Dagstuhl's DROPS repository republishes the full dblp XML dump monthly,
+// on the 1st, as a stable CC0-licensed mirror. Unlike dblp.org itself
+// (blocked by Anubis anti-bot protection for any non-browser client --
+// see git history for the workaround this replaced), it answers a plain
+// server-side fetch directly, so this app can once again check for and
+// download a new dump entirely on its own instead of requiring a human to
+// fetch it through a real browser. scripts/cron-dblp-import.sh runs on the
+// 2nd of each month specifically so the current month's file is reliably
+// already published by the time this runs.
+function dagstuhlDumpUrls(date = new Date()) {
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const gz = `${DAGSTUHL_XML_BASE}/${year}/dblp-${year}-${month}-01.xml.gz`;
+    return { gz, md5: `${gz}.md5` };
+}
 
 function printProgress(msg = 'Progression') {
     let lastLoggedPercentage = -1; 
@@ -29,7 +44,7 @@ function printProgress(msg = 'Progression') {
 }
 
 const downloadFile = async () => {
-    const response = await fetch(DBLP_XML_URL);
+    const response = await fetch(dagstuhlDumpUrls().gz);
     const totalSize = Number(response.headers.get('content-length'));
     let downloadedSize = 0;
 
@@ -54,27 +69,28 @@ const downloadFile = async () => {
 const MD5_PATTERN = /^[0-9a-f]{32}$/i;
 
 const getCurrentMD5 = async () => {
-    const md5Response = await fetch(DBLP_MD5_URL);
+    const { md5: md5Url } = dagstuhlDumpUrls();
+    const md5Response = await fetch(md5Url);
     const md5Content = await md5Response.text();
     const md5Expected = md5Content.trim().split(/\s+/)[0];
-    // dblp.org currently sits behind Anubis anti-bot protection, which
-    // answers plain HTTP clients (this fetch included) with a JS challenge
-    // page instead of the real .md5 file -- that response is still a 200,
-    // so without this check a challenge page's opening token would be
-    // silently treated as "the new hash", triggering a doomed re-download
-    // that overwrites a perfectly good local dump with garbage mid-way
-    // through (see extractVenues below).
+    // A non-200 (e.g. this month's file not published yet -- shouldn't
+    // happen given when the cron job runs, see dagstuhlDumpUrls) or any
+    // other unexpected body shows up here as "not a 32-char hex string",
+    // same as it would for a real anti-bot challenge page -- caller already
+    // treats that as "no live source available right now" and falls back
+    // to a manually provided sidecar file if any (see extractVenues).
     if (!MD5_PATTERN.test(md5Expected)) {
-        throw new Error('dblp.org did not return a valid MD5 (likely blocked by anti-bot protection)');
+        throw new Error(`Dagstuhl did not return a valid MD5 (checked ${md5Url})`);
     }
     return md5Expected.toLowerCase();
 };
 
-// A user can fetch dblp.xml.gz/.gz.md5 by hand through a real browser (the
-// only thing that currently gets past dblp.org's anti-bot wall -- see
-// getCurrentMD5) and drop both next to each other in the container with
-// `docker cp`. This is the same filename dblp.org itself uses, so that
-// manual flow needs no extra renaming step.
+// A dump can still be provided by hand -- dropped next to itself in the
+// container with `docker cp`, e.g. as a break-glass override if Dagstuhl is
+// ever unreachable or this month's snapshot is bad -- and this app will use
+// it exactly as if it were the live Dagstuhl fetch's result (see
+// extractVenues). Same filename Dagstuhl itself would produce is not
+// required; only the MD5 content format matters.
 const getProvidedMD5 = async () => {
     try {
         const content = await readFile('/data/dblp/dblp.xml.gz.md5', 'utf-8');
@@ -660,13 +676,12 @@ export const extractVenues = async () => {
     try {
         await mkdir('/data/dblp', { recursive: true });
 
-        // dblp.org's freshness check (getCurrentMD5) currently fails the
-        // same way everything else on the site does under its anti-bot
-        // protection -- fall back to a manually-provided sidecar .md5 (see
-        // getProvidedMD5) so a dump fetched by hand through a real browser
-        // and `docker cp`'d in next to it still gets picked up and processed.
+        // Dagstuhl's freshness check (getCurrentMD5) can still fail (network
+        // hiccup, this month's snapshot not published yet) -- fall back to a
+        // manually-provided sidecar .md5 (see getProvidedMD5) so a dump
+        // dropped in by hand still gets picked up and processed.
         let targetMD5 = await getCurrentMD5().catch((error) => {
-            console.log(`[dblp] Could not check dblp.org for a newer dump (${error.message}), falling back to a locally provided one if any.`);
+            console.log(`[dblp] Could not check Dagstuhl for a newer dump (${error.message}), falling back to a locally provided one if any.`);
             return null;
         });
         const viaLiveCheck = targetMD5 != null;
@@ -676,17 +691,17 @@ export const extractVenues = async () => {
         const storedMD5 = await getStoredMD5();
 
         if (!targetMD5) {
-            console.log('[dblp] No dump available: dblp.org is unreachable and no dblp.xml.gz.md5 sidecar was found next to /data/dblp/dblp.xml.gz.');
+            console.log('[dblp] No dump available: Dagstuhl is unreachable and no dblp.xml.gz.md5 sidecar was found next to /data/dblp/dblp.xml.gz.');
         } else if (storedMD5 === targetMD5) {
             console.log('File has not been updated. Nothing to do.');
         } else {
             console.log(`Target MD5: ${targetMD5}`);
             // Only attempt the live download when the freshness check
-            // itself came from dblp.org -- if we're here via a provided
-            // sidecar file instead, dblp.org can't be reached from here at
-            // all (that's the whole point of the sidecar path), so a
-            // download attempt would just overwrite the manually-placed
-            // .gz with an Anubis challenge page.
+            // itself came from Dagstuhl -- if we're here via a provided
+            // sidecar file instead, that's specifically because live
+            // fetching didn't work this time, so a download attempt would
+            // just overwrite the manually-placed .gz with whatever that
+            // failure produced.
             if (viaLiveCheck) {
                 console.log('File has been updated. Downloading...');
                 await downloadFile();

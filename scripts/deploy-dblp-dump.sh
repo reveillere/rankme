@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Deploys a new DBLP XML dump to a rankme server and triggers a local
-# reimport (decompress -> reindex -> rebuild the venue name index), the
-# same manual flow used throughout local development (see api/src/admin.js
-# -- extractVenues/processXML/applyIncrementalUpdate/venueLookup).
+# Deploys a MANUALLY-PROVIDED DBLP XML dump to a rankme server and triggers
+# a local reimport (decompress -> reindex -> rebuild the venue name index),
+# the same flow used throughout local development (see api/src/admin.js --
+# extractVenues/processXML/applyIncrementalUpdate/venueLookup).
 #
-# WHY THIS EXISTS: dblp.org is behind Anubis anti-bot protection, so the
-# app cannot fetch the dump itself on a server (see throttler.js's
-# dblp_scrape_limiter comment) -- a real browser has to fetch dblp.xml.gz
-# and dblp.xml.gz.md5 by hand from https://dblp.org/xml/ and hand them to
-# this script.
+# BREAK-GLASS TOOL, NOT THE ROUTINE PATH: routine updates now happen on
+# their own, monthly, via scripts/cron-dblp-import.sh -- admin.js's
+# extractVenues fetches the current month's dump directly from Dagstuhl's
+# DROPS mirror (see its dagstuhlDumpUrls), which unlike dblp.org itself
+# (blocked by Anubis anti-bot protection for a server-side fetch, see
+# throttler.js's dblp_scrape_limiter comment) answers a plain fetch
+# directly. This script is for everything that path doesn't cover: a
+# specific/older dump, testing against a dump before it's on Dagstuhl, or
+# recovery if Dagstuhl is ever unreachable -- a real browser fetches
+# dblp.xml.gz and dblp.xml.gz.md5 by hand (from dblp.org/xml/ or Dagstuhl)
+# and hands them to this script.
 #
 # WHAT IT DOES:
 #   1. Copies the .gz and .md5 files to the remote host, then docker cp's
