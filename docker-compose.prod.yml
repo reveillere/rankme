@@ -108,7 +108,13 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${MONGO_MEMORY_LIMIT:-768M}
+          # Bumped from 768M on 2026-09-15: grafana/prometheus/umami-db all
+          # had 100M+ of unused headroom in their own limits (see their own
+          # compose files) while mongo was sitting at 95-98% of this one
+          # under normal bot-scraping load -- freed the same 256M from
+          # those three and moved it here instead of raising the host's
+          # total commitment further.
+          memory: ${MONGO_MEMORY_LIMIT:-1G}
           cpus: "1.0"
 
 

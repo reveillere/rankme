@@ -103,7 +103,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          # Trimmed from 256M on 2026-09-15 (actual steady-state usage
+          # ~85-90MB, this app's own metric cardinality is low) to free RAM
+          # for mongo -- see docker-compose.prod.yml's own mongo memory
+          # comment.
+          memory: 192M
           cpus: "0.5"
 
   grafana:
@@ -129,7 +133,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          # Trimmed from 256M on 2026-09-15 (actual steady-state usage
+          # ~40-45MB) to free RAM for mongo -- see docker-compose.prod.yml's
+          # own mongo memory comment.
+          memory: 128M
           cpus: "0.5"
 
 volumes:
