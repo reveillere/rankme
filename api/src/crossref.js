@@ -23,6 +23,29 @@ export function extractDoi(ee) {
 const LONG_TTL_S = 60 * 60 * 24 * 365; // 1 year: published DOI metadata rarely changes, and Crossref genuinely having no useful venue info for a DOI is a stable fact too
 const FAILURE_TTL_S = 60 * 60 * 4; // 4 hours: a 429/timeout/network error is transient -- caching that for a year would bake in a rate-limit hit or a blip long after Crossref would have happily answered again
 
+// Crossref's own JSON fields occasionally carry raw XML escaping verbatim
+// from the publisher-submitted metadata (e.g. "Software &amp; Systems
+// Modeling" instead of "Software & Systems Modeling") -- a known quirk of
+// their data, not something this app's own pipeline introduces (dblp's own
+// venue names go through sax, which decodes entities as it parses XML; see
+// admin.js). Left undecoded, this both displays wrong to readers (fullName
+// flows straight to Publications.js as the shown venue, see authorStream.js)
+// and breaks CORE/SJR title matching, since neither ever stores a venue
+// name with literal entity text. Only the handful of named entities XML
+// itself defines plus numeric refs are handled -- everything Crossref's own
+// escaping can actually produce.
+const XML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+export function decodeXmlEntities(text) {
+    if (!text) return text;
+    return text.replace(/&(#x[0-9a-fA-F]+|#\d+|[a-zA-Z]+);/g, (full, ref) => {
+        if (ref[0] === '#') {
+            const code = ref[1] === 'x' ? parseInt(ref.slice(2), 16) : parseInt(ref.slice(1), 10);
+            return Number.isNaN(code) ? full : String.fromCodePoint(code);
+        }
+        return XML_ENTITIES[ref] ?? full;
+    });
+}
+
 // Crossref's own event/container metadata is far cleaner than HAL's
 // free-text conferenceTitle_s (typed by the depositor at submission time),
 // and it often carries an acronym HAL doesn't expose at all -- letting HAL
@@ -85,7 +108,7 @@ async function fetchVenueInfo(doi) {
         // "Middleware 2012"]); ACM/IEEE records carry a single entry. The
         // real venue title is always the last one.
         const containerTitles = work['container-title'] || [];
-        const fullName = containerTitles[containerTitles.length - 1] || work.event?.name || null;
+        const fullName = decodeXmlEntities(containerTitles[containerTitles.length - 1] || work.event?.name || null);
         const acronym = extractAcronym(work, fullName);
 
         return { info: (fullName || acronym) ? { fullName, acronym } : null, ttlS: LONG_TTL_S };
