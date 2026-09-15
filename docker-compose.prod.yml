@@ -119,6 +119,63 @@ services:
 
 
 
+  # Renders anubis/botPolicy.yaml.template with the real secret from
+  # RANKME_BYPASS_KEY into a shared volume anubis reads from -- same
+  # pattern as monitoring/docker-compose.monitoring.yml's own token-writer
+  # (there for prometheus's scrape auth), so this repo doesn't need two
+  # ways to get a host .env secret into a container that only accepts a
+  # config file. The template itself has no real secret in it and is safe
+  # to commit; only the rendered copy (in the volume, never in git) does.
+  policy-writer:
+    image: alpine:3.20
+    command: >
+      sh -c "sed \"s/__RANKME_BYPASS_KEY__/$${RANKME_BYPASS_KEY:?RANKME_BYPASS_KEY must be set in .env}/\" /template/botPolicy.yaml.template > /shared/botPolicy.yaml && echo written"
+    environment:
+      - RANKME_BYPASS_KEY=${RANKME_BYPASS_KEY:?RANKME_BYPASS_KEY must be set in .env}
+    volumes:
+      - ./anubis/botPolicy.yaml.template:/template/botPolicy.yaml.template:ro
+      - anubis-policy-shared:/shared
+
+  # Sits between the reverseproxy's TLS-terminating front door and its
+  # actual site routing (see reverse-proxy/nginx.conf.prod's own comment
+  # for the full topology and why this was added 2026-09-15). Challenges
+  # anything that looks like a plain browser but isn't a known-good crawler
+  # with a small proof-of-work puzzle before it ever reaches mongo/api.
+  anubis:
+    <<: *common-service
+    image: ghcr.io/techarohq/anubis:latest
+    depends_on:
+      policy-writer:
+        condition: service_completed_successfully
+    environment:
+      - BIND=:8923
+      - TARGET=http://reverseproxy:8081
+      - POLICY_FNAME=/data/cfg/botPolicy.yaml
+      # Both rankme.fr and www.rankme.fr are served identically (see
+      # nginx.conf.prod's single catch-all server_name) -- dynamic domain
+      # means the challenge-pass cookie works on whichever one a visitor
+      # actually used instead of being pinned to one.
+      - COOKIE_DYNAMIC_DOMAIN=true
+      # front already serves its own robots.txt (front/public/robots.txt,
+      # "Disallow: /" for everyone) -- leaving Anubis's own SERVE_ROBOTS_TXT
+      # off keeps that one in effect unmodified instead of Anubis
+      # overriding it with its own AI-scraper-specific one.
+    volumes:
+      - anubis-policy-shared:/data/cfg:ro
+    healthcheck:
+      test: ["CMD", "anubis", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # Anubis's own docs: "I suspect that 128Mi of ram may be
+          # sufficient for a large number of concurrent clients."
+          memory: 128M
+          cpus: "0.5"
+
   reverseproxy:
     <<: *common-service
     build:
@@ -127,6 +184,7 @@ services:
     depends_on:
       - api
       - front
+      - anubis
     volumes:
       - ./reverse-proxy/log:/var/log/nginx
       - type: bind
@@ -158,3 +216,4 @@ volumes:
   db-data:
   redis-data:
   api-data:
+  anubis-policy-shared:

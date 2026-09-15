@@ -1,0 +1,27 @@
+# Anubis bot policy for rankme.fr -- see reverse-proxy/nginx.conf.prod's own
+# Anubis comment for why this exists, and docker-compose.prod.yml's
+# policy-writer service for how __RANKME_BYPASS_KEY__ below gets replaced
+# with the real secret (RANKME_BYPASS_KEY in the host's .env, generate with:
+# openssl rand -hex 32) before this ever reaches the anubis container --
+# this template itself is safe to commit since it carries no real secret.
+
+bots:
+  # Our own testing/monitoring traffic: curl/scripts with this header set
+  # skip the challenge entirely and go straight to the backend. Placed
+  # first since ALLOW short-circuits every rule below it -- this should
+  # always win regardless of what the default policy would otherwise say
+  # about the request.
+  - name: rankme-internal-bypass
+    headers_regex:
+      X-Rankme-Bypass: "^__RANKME_BYPASS_KEY__$"
+    action: ALLOW
+
+  # Anubis's own maintained defaults: allows known-good crawlers (Google,
+  # Bing, DuckDuckGo, Internet Archive, ...) by signature so they never hit
+  # a challenge, aggressively blocks known AI/LLM scraper bots by name, and
+  # weight-scores everything else -- a generic "looks like a browser" UA
+  # (exactly what the scrape this was added for used: a rotating pool of
+  # plain Chrome/Windows strings) gets a proof-of-work challenge scaled to
+  # how suspicious it looks. See:
+  # https://github.com/TecharoHQ/anubis/blob/main/data/botPolicies.yaml
+  - import: (data)/meta/default-config.yaml
