@@ -114,7 +114,15 @@ async function fetchVenueInfo(doi) {
         return { info: (fullName || acronym) ? { fullName, acronym } : null, ttlS: LONG_TTL_S };
     } catch (error) {
         console.log('[crossref] Error fetching venue info for', doi, ':', error.message);
-        return { info: null, ttlS: FAILURE_TTL_S };
+        // A 404 means Crossref has never heard of this DOI -- a stable fact
+        // (e.g. Dagstuhl/OASIcs DOIs are registered with DataCite, not
+        // Crossref, and that never changes), same as a DOI Crossref *does*
+        // know but has no useful venue info for (see the `!work` case
+        // above, also LONG_TTL_S). Anything else here (429 exhausted its
+        // retries, timeout, network error, 5xx) is transient and gets the
+        // short TTL so it's actually retried soon instead of baking in a
+        // temporary blip for a year.
+        return { info: null, ttlS: error.status === 404 ? LONG_TTL_S : FAILURE_TTL_S };
     }
 }
 

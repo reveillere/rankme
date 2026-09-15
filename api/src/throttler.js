@@ -143,7 +143,14 @@ async function fetch(url, options = {}) {
 
       if (!response.ok) {
         recordOutbound(url, 'failed');
-        throw new Error(`\x1b[31m\x1b[1mRequest failed with status: ${response.status}`);
+        // .status set explicitly (not left to callers regexing the message)
+        // so callers can tell a permanent-looking outcome (404: this DOI/
+        // resource simply isn't there) from a transient one (5xx, or a 429
+        // that ran out of retries) -- see crossref.js's own use of this to
+        // pick a cache TTL.
+        const error = new Error(`\x1b[31m\x1b[1mRequest failed with status: ${response.status}`);
+        error.status = response.status;
+        throw error;
       }
 
       recordOutbound(url, 'ok');
