@@ -57,7 +57,11 @@ const CHIP_WIDTH = 92;
 // it the same way Team.js does before doing anything else, including for a
 // tab reopened from a bare /crosscheck/team/:teamId URL.
 export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive }) {
-    const team = getTeam(teamId);
+    // getTeam reads and parses localStorage. Keep this snapshot stable for the
+    // lifetime of this route: otherwise every state update creates a new
+    // members array, retriggers the fetching effect below and clears the
+    // report before it can ever be displayed.
+    const team = useMemo(() => getTeam(teamId), [teamId]);
 
     if (!team) {
         return <div style={{ textAlign: 'center', marginTop: '80px' }}>This team no longer exists.</div>;

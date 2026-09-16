@@ -57,7 +57,10 @@ const categoryKeyAccessorFor = source => (source === 'hal' ? (pub => getHalCateg
 const portalAccessorFor = source => (source === 'hal' ? (pub => pub.type === 'COMM' ? 'core' : 'sjr') : (pub => pub.type === 'inproceedings' ? 'core' : 'sjr'));
 
 export function Team({ teamId, onOpenAuthor, onSearchAuthor, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
-  const team = getTeam(teamId);
+  // getTeam parses localStorage on every call. The route owns a fixed team
+  // snapshot, so retain it until its id changes; this also keeps downstream
+  // member-fetch effects from restarting on every render.
+  const team = useMemo(() => getTeam(teamId), [teamId]);
 
   if (!team) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>This team no longer exists.</div>;
