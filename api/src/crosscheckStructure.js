@@ -3,6 +3,7 @@ import * as cache from './cache.js';
 import * as identityResolution from './identityResolution.js';
 import * as crosscheck from './crosscheck.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
+import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -49,25 +50,38 @@ const CACHE_TTL_S = 60 * 60; // 1h -- same rationale as crosscheck.js/identityRe
 // a real Mongo/HAL/Redis behind it -- same shape as identityResolution.js's
 // own createIdentityResolver. Wired to the real dependencies below.
 
-export function createStructureCrossChecker({ getIdentityResolutionReport, getCrossCheckReport, getDblpStatus, getCache, setCache }) {
-    return async function resolveStructureCrossCheck(structId, { confSource, journalSource }) {
+export function createStructureCrossChecker({ getIdentityResolutionReport, getCrossCheckReport, getDblpStatus, getPersonLinksVersion, getCache, setCache }) {
+    return async function resolveStructureCrossCheck(structId, { confSource, journalSource, identityLinks = null }) {
         const dblpStatus = await getDblpStatus();
         // Keyed the same way crosscheck.js/identityResolution.js key their own
         // reports -- the dump version and both ranking sources, since either
         // changes what "missing"/"to-review" and each publication's rank mean.
-        const key = `crosscheck:structure:${structId}:${dblpStatus.version}:${confSource}:${journalSource}`;
+        // Snapshot before computation so an in-flight report cannot poison
+        // the cache for a later identity edit.
+        const linksVersion = await getPersonLinksVersion();
+        const key = `crosscheck:structure:${structId}:${dblpStatus.version}:${confSource}:${journalSource}:${linksVersion}`;
 
-        const cached = await getCache(key);
-        if (cached !== null) return cached;
+        // Supplied links are request-specific and must never leak into the
+        // shared structure cache.
+        if (!identityLinks) {
+            const cached = await getCache(key);
+            if (cached !== null) return cached;
+        }
 
         const identityReport = await getIdentityResolutionReport(structId);
+        // A caller-provided link is an explicit decision for this request;
+        // it takes precedence over an inferred/stored link for that member.
+        const effectiveIdentityReport = identityLinks ? identityReport.map(member => {
+            const pid = identityLinks.byIdHal.get(member.idHal);
+            return pid ? { ...member, resolved: { pid, source: 'provided' }, confidence: 'confirmed' } : member;
+        }) : identityReport;
         // `resolved?.pid` is the only thing that matters here, regardless of
         // the confidence level that produced it ('confirmed' via a saved
         // personLink/orcid match, or 'probable'/'to-review' promoted to a
         // link by a maintainer via controllerRecordLink) -- once a pid is on
         // file for an idHal, crosscheck.js has everything it needs.
-        const resolvedMembers = identityReport.filter(m => m.resolved?.pid);
-        const unresolvedMembers = identityReport.filter(m => !m.resolved?.pid);
+        const resolvedMembers = effectiveIdentityReport.filter(m => m.resolved?.pid);
+        const unresolvedMembers = effectiveIdentityReport.filter(m => !m.resolved?.pid);
 
         const memberResults = await mapWithConcurrency(resolvedMembers, MEMBER_CONCURRENCY, async member => {
             const report = await getCrossCheckReport(member.resolved.pid, member.idHal, { confSource, journalSource });
@@ -121,7 +135,7 @@ export function createStructureCrossChecker({ getIdentityResolutionReport, getCr
             unresolvedMembers: unresolvedMembers.map(m => ({ idHal: m.idHal, name: m.name, confidence: m.confidence, candidates: m.candidates })),
             confirmedCount: totalConfirmedCount,
         };
-        await setCache(key, report, CACHE_TTL_S);
+        if (!identityLinks) await setCache(key, report, CACHE_TTL_S);
         return report;
     };
 }
@@ -134,19 +148,21 @@ export const getStructureCrossCheckReport = createStructureCrossChecker({
     getIdentityResolutionReport: identityResolution.getIdentityResolutionReport,
     getCrossCheckReport: crosscheck.getCrossCheckReport,
     getDblpStatus: admin.getDblpStatus,
+    getPersonLinksVersion: identityResolution.getPersonLinksVersion,
     getCache: cache.get,
     setCache: cache.set,
 });
 
 export async function controllerCrossCheckStructure(req, res) {
-    const structId = req.params.structId;
+    const structId = req.params.structId || req.body?.structId;
     const confSource = confSourceFrom(req);
     const journalSource = journalSourceFrom(req);
     try {
-        const report = await getStructureCrossCheckReport(structId, { confSource, journalSource });
+        const identityLinks = parseIdentityLinks(req.body?.identityLinks ?? req.query.identityLinks);
+        const report = await getStructureCrossCheckReport(structId, { confSource, journalSource, identityLinks });
         res.json(report);
     } catch (error) {
         console.log('Error during structure cross-check computation', error);
-        res.status(400).json({ error: error.message });
+        res.status(error instanceof IdentityLinksConflictError ? 409 : 400).json({ error: error.message });
     }
 }

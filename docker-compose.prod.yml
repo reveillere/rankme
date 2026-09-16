@@ -16,6 +16,9 @@ services:
       # From a .env file on the host, next to this compose file — never
       # committed (see .gitignore). Generate with: openssl rand -hex 32
       - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
+      # Comma-separated read-only API tokens. Generate each with
+      # `openssl rand -hex 32`; at least one must be configured.
+      - API_TOKENS=${API_TOKENS:?API_TOKENS must be set in .env}
     volumes:
       - ./api/log:/app/log
       - api-data:/data

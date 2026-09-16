@@ -21,8 +21,11 @@ import DownloadIcon from '@mui/icons-material/Download';
 export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false }) {
   const [anchorEl, setAnchorEl] = useState(null);
 
-  const handleSelect = (onExport) => {
+  const handleSelect = (onExport, format) => {
     setAnchorEl(null);
+    const url = new URL(window.location.href);
+    url.searchParams.set('export', format);
+    window.history.replaceState({}, '', url);
     onExport();
   };
 
@@ -47,9 +50,9 @@ export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disa
         </span>
       </Tooltip>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => handleSelect(onExportMarkdown)}>Markdown</MenuItem>
-        <MenuItem onClick={() => handleSelect(onExportJson)}>JSON</MenuItem>
-        <MenuItem onClick={() => handleSelect(onExportCsv)}>CSV</MenuItem>
+        <MenuItem onClick={() => handleSelect(onExportMarkdown, 'md')}>Markdown</MenuItem>
+        <MenuItem onClick={() => handleSelect(onExportJson, 'json')}>JSON</MenuItem>
+        <MenuItem onClick={() => handleSelect(onExportCsv, 'csv')}>CSV</MenuItem>
       </Menu>
     </>
   );

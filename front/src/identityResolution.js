@@ -16,6 +16,25 @@ export async function fetchIdentitySuggestionForIdHal(idHal) {
   return await resp.json();
 }
 
+// The structure-level resolver returns both confirmed links and the DBLP
+// candidates still awaiting a human decision.  IdentityLinksPanel uses this
+// for the structure's link-management dialog, so it presents the exact same
+// candidates as the structure cross-check page.
+export async function fetchStructureIdentityResolution(structId) {
+  const resp = await fetch(`/api/identity/structure/${encodeURIComponent(structId)}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body.message || body.error || `Structure identity resolution: HTTP ${resp.status}`);
+  }
+  return await resp.json();
+}
+
+export async function fetchTeamIdentityResolution({ source, members }) {
+  const resp = await fetch('/api/identity/team', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, members }) });
+  if (!resp.ok) throw new Error(`Team identity resolution: HTTP ${resp.status}`);
+  return await resp.json();
+}
+
 // Records a confirmed (idHal, pid) pair -- see api/src/identityResolution.js's
 // controllerRecordLink. Always writes source 'manual' server-side, regardless
 // of whether the confirmed idHal came from a fresh search or an accepted

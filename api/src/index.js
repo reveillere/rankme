@@ -1,7 +1,9 @@
 import express from 'express';
 import morgan from 'morgan'
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import router from './routes.js';
+import { openapiSpec } from './openapi.js';
 import fs from 'fs';
 import * as sjr from './sjrPortal.js';
 import * as core from './corePortal.js'
@@ -19,6 +21,8 @@ app.use(cors());
 app.use(morgan('dev', { stream: accessLogStream }));
 app.use(express.json());
 app.use(metrics.middleware);
+app.get('/openapi.json', (req, res) => res.json(openapiSpec));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { customSiteTitle: 'RankMe API documentation' }));
 app.use(router);
 
 // Loaded before the server starts accepting connections, not in the
@@ -49,4 +53,3 @@ start().catch((error) => {
   console.error('Fatal startup error:', error.message);
   process.exit(1);
 });
-

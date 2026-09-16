@@ -28,6 +28,7 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
@@ -119,6 +120,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   const categoryKeyAccessor = useMemo(() => categoryKeyAccessorFor(team.source), [team.source]);
   const portalAccessor = useMemo(() => portalAccessorFor(team.source), [team.source]);
   const selfIds = useMemo(() => team.members.map(m => m.id), [team]);
+  const identityMembers = useMemo(() => team.members.map(member => ({ id: member.id, name: member.label })), [team.members]);
   const dialogMembers = useMemo(() => team.members.map(m => ({ id: m.id, label: m.label, idKind: isHal ? 'idHal' : 'pid' })), [team.members, isHal]);
   // Client-side id->name lookup for IdentityLinksPanel.js's own display --
   // GET /api/identity/links never returns a name (see that panel's own
@@ -221,6 +223,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
     const exportTitle = `${isHal ? 'HAL' : 'DBLP'} records of ${team.name} (${team.members.length} members)`;
     if (initialExport === 'md') {
       (isHal ? exportHalPublicationsMarkdown : exportDblpPublicationsMarkdown)(filteredRecords, { title: exportTitle, filename: `${filenameBase}.md`, sortMode });
+    } else if (initialExport === 'json') {
+      (isHal ? exportHalPublicationsJson : exportDblpPublicationsJson)(filteredRecords, { title: exportTitle, filename: `${filenameBase}.json`, sortMode });
     } else if (initialExport === 'csv') {
       (isHal ? exportHalPublicationsCsv : exportDblpPublicationsCsv)(filteredRecords, { filename: `${filenameBase}.csv`, sortMode });
     }
@@ -238,9 +242,9 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
 
   return (
     <div className='App'>
-      <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>{isHal ? 'HAL' : 'DBLP'} records of {team.name}</h1>
-        <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2px' }}>
+      <RecordsHeader
+        title={<>{isHal ? 'HAL' : 'DBLP'} records of {team.name}</>}
+        details={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
           Team of {team.members.length} members
           <Tooltip title="View members">
             <IconButton size="small" onClick={() => setMembersDialogOpen(true)} aria-label="View members">
@@ -252,11 +256,23 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
               <LinkIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
-        </div>
-        <div style={{ fontSize: 'large', marginTop: '0.3em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        </div>
-      </div>
+        </span>}
+        showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
+        exportButton={<ExportButton
+          onExportMarkdown={() => (isHal
+            ? exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records of ${team.name} (${team.members.length} members)`, filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
+            : exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${team.name} (${team.members.length} members)`, filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
+          )}
+          onExportJson={() => (isHal
+            ? exportHalPublicationsJson(filteredRecords, { title: `HAL records of ${team.name} (${team.members.length} members)`, filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })
+            : exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${team.name} (${team.members.length} members)`, filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })
+          )}
+          onExportCsv={() => (isHal
+            ? exportHalPublicationsCsv(filteredRecords, { filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })
+            : exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })
+          )}
+        />}
+      />
 
       <MemberListDialog
         open={membersDialogOpen}
@@ -275,6 +291,8 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
         idHals={isHal ? selfIds : []}
         pids={isHal ? [] : selfIds}
         resolveName={resolveMemberName}
+        teamSource={team.source}
+        teamMembers={identityMembers}
       />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
@@ -297,20 +315,6 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
         >
           Cross-check with {isHal ? 'DBLP' : 'HAL'}
         </Button>
-        <ExportButton
-          onExportMarkdown={() => (isHal
-            ? exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records of ${team.name} (${team.members.length} members)`, filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
-            : exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${team.name} (${team.members.length} members)`, filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
-          )}
-          onExportJson={() => (isHal
-            ? exportHalPublicationsJson(filteredRecords, { title: `HAL records of ${team.name} (${team.members.length} members)`, filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })
-            : exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${team.name} (${team.members.length} members)`, filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })
-          )}
-          onExportCsv={() => (isHal
-            ? exportHalPublicationsCsv(filteredRecords, { filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })
-            : exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })
-          )}
-        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}

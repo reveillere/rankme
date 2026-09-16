@@ -71,3 +71,41 @@ Issues a Let's Encrypt certificate for `rankme.fr` (first run only — subsequen
 ## Environment
 
 `MONGO_URI` / `REDIS_URI` are set directly in both compose files — not secrets, since neither service has authentication configured (deliberately: both are internal-only in prod, never published to the host). If a real credential is ever needed (e.g. an API key to work around a DBLP/HAL rate limit), there's no `.env` convention here yet — add one rather than hardcoding it into a committed compose file.
+
+## Protected API tokens
+
+The documented API at `/api/docs/` exposes only protected record and cross-check endpoints. Set `API_TOKENS` in the production `.env` to one or more comma-separated secrets:
+
+```sh
+openssl rand -hex 32
+# .env
+API_TOKENS=alice:first-generated-token,partner:second-generated-token
+```
+
+Restart the API after changing the value:
+
+```sh
+docker compose -f docker-compose.prod.yml up -d --build api
+```
+
+The optional prefix before `:` is an administrative label to remember who received the token; it is not part of the secret and is never exposed by the API. Tokens are compared server-side and are never stored in MongoDB or included in the application bundle.
+
+### Lifecycle
+
+To issue a token, generate a new secret and append a labelled entry:
+
+```env
+API_TOKENS=laurent-reveillere:existing-secret,olivier-barais:new-secret
+```
+
+Give the recipient only `new-secret`, never the label or the complete `.env` line. To revoke access, remove that person’s complete `label:secret` entry and restart the API. To rotate a token without interruption, add a new labelled entry, give the new secret to its recipient, then remove the old entry after they have switched. Replacing the complete list revokes every previous token.
+
+Call the API with either `X-API-Token` or a bearer token:
+
+```sh
+curl -H 'X-API-Token: your-token' https://rankme.fr/api/dblp/author/11/1262
+# equivalent:
+curl -H 'Authorization: Bearer your-token' https://rankme.fr/api/dblp/author/11/1262
+```
+
+The browser interface uses its internal routes and does not require an API token. Local development reads `API_TOKENS` from `.env`, falling back to `dev-api-token` when it is absent.

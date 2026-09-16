@@ -6,6 +6,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import List from '@mui/material/List';
@@ -383,9 +384,9 @@ export function MyCustomRankingsDialog({ open, onClose }) {
           <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportAll} disabled={profiles.length === 0}>
             Export all
           </Button>
-          <Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
+          <Tooltip title="Import rankings from a CSV file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
             Import CSV
-          </Button>
+          </Button></Tooltip>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
         </Box>
         <Button onClick={onClose}>Close</Button>

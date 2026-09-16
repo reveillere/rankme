@@ -34,6 +34,8 @@ import { exportCrossCheckByMemberMarkdown, exportCrossCheckByMemberJson } from '
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
 import { ExportButton } from './ExportButton';
+import { IdentityLinksPanel } from './IdentityLinksPanel';
+import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 
 import '../App.css';
 
@@ -64,13 +66,14 @@ export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive 
     return <CrossCheckTeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} isActive={isActive} />;
 }
 
-function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
+function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     // Bumped after a confirm/reject click or a manual identity link lands,
     // to force the effect below to refetch -- same reasoning as CrossCheck.js's
     // own refreshToken.
     const [refreshToken, setRefreshToken] = useState(0);
+    const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
     // The unresolved member (report.unresolvedMembers entry) currently being
     // linked by hand via the dialog below, or null -- see handleManualLink.
     // Kept as the whole object (not just one id) because which id it already
@@ -87,12 +90,12 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
     // hasShownOnceRef (not state) is what makes this a one-shot instead of
     // reopening on every `report` change -- see the effect below.
     const [unresolvedPopupOpen, setUnresolvedPopupOpen] = useState(false);
-    const hasShownOnceRef = useRef(false);
     const importLinksFileInputRef = useRef();
     const { conferenceSource, journalSource } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
     const pids = useMemo(() => team.members.map(m => m.id), [team]);
+    const identityMembers = useMemo(() => team.members.map(member => ({ id: member.id, name: member.label })), [team.members]);
     const activeCustomProfileIds = useMemo(
         () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
         [conferenceSource, journalSource]
@@ -118,13 +121,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [team.id, pids, conferenceSource, journalSource, refreshToken]);
-
-    useEffect(() => {
-        if (!report || hasShownOnceRef.current) return;
-        hasShownOnceRef.current = true;
-        setUnresolvedPopupOpen(report.unresolvedMembers.length > 0);
-    }, [report]);
+    }, [team.id, team.source, pids, conferenceSource, journalSource, refreshToken]);
 
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
@@ -143,7 +140,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
         setLinkingMember(null);
         const { idHal, pid } = team.source === 'dblp' ? { idHal: chosenId, pid: member.pid } : { idHal: member.idHal, pid: chosenId };
         postIdentityLink({ idHal, pid })
-            .then(() => removeUnresolvedMember(member))
+            .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
     };
 
@@ -153,44 +150,16 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
     const handleConfirmCandidate = (member, candidateId) => {
         const { idHal, pid } = team.source === 'dblp' ? { idHal: candidateId, pid: member.pid } : { idHal: member.idHal, pid: candidateId };
         postIdentityLink({ idHal, pid })
-            .then(() => removeUnresolvedMember(member))
+            .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
-    };
-
-    // Optimistic local update instead of a refreshToken-triggered refetch,
-    // for perceived speed: crosscheckTeam.js deliberately has no aggregate
-    // report cache of its own (see this file's own header comment), so this
-    // isn't working around a stale-cache bug the way CrossCheckStructure.js's
-    // identical helper is -- but a full report refetch is still real work
-    // (a getCrossCheckReport call per already-resolved member) just to make
-    // one row disappear, so this strips the confirmed member out of
-    // `report.unresolvedMembers` directly instead. What this does NOT do is
-    // synthesize the member's own resolved Missing/To-review section in
-    // `report.members` -- that needs a real getCrossCheckReport call this
-    // component doesn't make on its own, so that section only appears once a
-    // later refetch or page reload picks it up. `member` is matched by
-    // whichever id this team direction already knew up front (pid for a
-    // dblp-sourced team, idHal for a hal-sourced one) -- the same id
-    // UnresolvedTeamMemberRow's own `key` uses.
-    const removeUnresolvedMember = (member) => {
-        const knownId = team.source === 'dblp' ? member.pid : member.idHal;
-        setReport(prev => prev && ({
-            ...prev,
-            unresolvedMembers: prev.unresolvedMembers.filter(m => (team.source === 'dblp' ? m.pid : m.idHal) !== knownId),
-        }));
     };
 
     // Same JSON-file mechanics as IdentityLinksPanel.js's own import (which
     // in turn mirrors Teams.js's handleImportTeamsFile) -- lets the
     // maintainer resolve several unresolved members at once from a
     // previously exported/hand-built links file, right here in the popup
-    // that already lists them, instead of clicking "Confirm"/the manual
-    // dialog once per member. Bumping refreshToken afterwards is the same
-    // refetch handleOverrideDecision above already triggers -- unlike
-    // handleManualLink/handleConfirmCandidate, an import can resolve several
-    // members from arbitrary rows in the file at once, so there's no small
-    // fixed set of ids to strip out of `unresolvedMembers` locally the way
-    // removeUnresolvedMember does for a single confirm.
+    // that already lists them.
+    // Reload the complete report after importing identity links.
     const handleImportLinksFile = (e) => {
         const file = e.target.files[0];
         e.target.value = '';
@@ -214,7 +183,10 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
 
     const targetLabel = team.source === 'dblp' ? 'HAL' : 'DBLP';
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this team against {targetLabel}. Please try again later.</div>;
-    if (report === null) return <LoadingSpinner message={`Cross-checking ${team.members.length} members against ${targetLabel}…`} />;
+    if (report === null) return <>
+        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} teamSource={team.source} teamMembers={identityMembers} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+        <LoadingSpinner message={`Cross-checking ${team.members.length} members against ${targetLabel}…`} />
+    </>;
 
     const importedAtLabel = report.dblpStatus?.importedAt
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -244,9 +216,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
 
     return (
         <div className='App' style={{ padding: '0 40px' }}>
-            <div style={{ textAlign: 'center', marginTop: '40px', marginBottom: '20px' }}>
-                <h1>DBLP → HAL cross-check for {team.name}</h1>
-            </div>
+            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${team.name}`} scope="Team" members={team.members.map(member => ({ id: member.id, label: member.label, idKind: team.source === 'hal' ? 'idHal' : 'pid' }))} unresolvedCount={report.unresolvedMembers.length} targetLabel={targetLabel} panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ teamSource: team.source, teamMembers: identityMembers }} onLinksChanged={() => setRefreshToken(t => t + 1)} />
 
             {(importedAtLabel || report.halCacheNote) && (
                 <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '0 auto 20px' }}>
@@ -281,7 +251,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
                 "View results" just closes it without discarding anything:
                 unresolved members remain listed at the bottom of the page
                 too (not only here), so nothing is lost by dismissing. */}
-            <Dialog open={unresolvedPopupOpen} onClose={() => setUnresolvedPopupOpen(false)} maxWidth="sm" fullWidth>
+            {false && <Dialog open={unresolvedPopupOpen} onClose={() => setUnresolvedPopupOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Members without a resolved {targetLabel} identity ({report.unresolvedMembers.length})</DialogTitle>
                 <DialogContent>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -302,9 +272,9 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, isActive }) {
                 <DialogActions>
                     <Button onClick={() => setUnresolvedPopupOpen(false)}>View results</Button>
                 </DialogActions>
-            </Dialog>
+            </Dialog>}
 
-            {report.unresolvedMembers.length > 0 && (
+            {false && report.unresolvedMembers.length > 0 && (
                 <Box sx={{ maxWidth: 900, margin: '0 auto 30px' }}>
                     <Typography variant="h6" sx={{ mb: 1 }}>Members without a resolved {targetLabel} identity ({report.unresolvedMembers.length})</Typography>
                     {report.unresolvedMembers.map(m => (

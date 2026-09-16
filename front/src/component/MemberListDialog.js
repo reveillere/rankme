@@ -5,9 +5,11 @@ import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import Box from '@mui/material/Box';
-import DownloadIcon from '@mui/icons-material/Download';
+import IconButton from '@mui/material/IconButton';
+import Typography from '@mui/material/Typography';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { ExportButton } from './ExportButton';
+import { downloadTextFile } from '../exportPublications';
 
 // Shared by Team.js and Structure.js's own "view members" eye icon.
 // A team member may carry a resolved `label` (set from a search result --
@@ -28,8 +30,12 @@ export function MemberListDialog({ open, onClose, title, members }) {
   // handleExportTeams -- a client-side Blob download, no server round trip
   // (the list is already in hand, built by the caller). Exports the list
   // exactly as shown: id + label when one is known.
-  const handleExport = () => {
+  const exportData = () => {
     const data = members.map(m => ({ [m.idKind]: m.id, ...(m.label && m.label !== m.id ? { label: m.label } : {}) }));
+    return data;
+  };
+  const handleExportJson = () => {
+    const data = exportData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -40,36 +46,34 @@ export function MemberListDialog({ open, onClose, title, members }) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+  const handleExportMarkdown = () => downloadTextFile('rankme-members.md', `# ${title}\n\n${members.map(m => `- ${m.label || m.id} (${m.idKind}: ${m.id})`).join('\n')}\n`, 'text/markdown;charset=utf-8;');
+  const handleExportCsv = () => {
+    const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    downloadTextFile('rankme-members.csv', ['name,id_kind,id', ...members.map(m => [m.label || '', m.idKind, m.id].map(quote).join(','))].join('\n'), 'text/csv;charset=utf-8;');
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <span>{title}</span>
+        <ExportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={members.length === 0} />
+      </DialogTitle>
       <DialogContent dividers sx={{ p: 0 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1 }}>
-          <Button size="small" variant="outlined" startIcon={<DownloadIcon />} onClick={handleExport} disabled={members.length === 0} sx={{ textTransform: 'none' }}>
-            Export
-          </Button>
-        </Box>
-        <Box sx={{ maxHeight: '60vh', overflow: 'auto' }}>
-          <List dense>
-            {members.map((m, i) => (
-              <ListItem key={`${m.id}-${i}`} divider>
-                {m.label && m.label !== m.id ? (
-                  <ListItemText
-                    primary={m.label}
-                    secondary={<span style={{ fontStyle: 'italic', color: '#8a8f94' }}>{m.idKind}: {m.id}</span>}
-                  />
-                ) : (
-                  <ListItemText primary={<span style={{ fontStyle: 'italic' }}>{m.idKind}: {m.id}</span>} />
-                )}
-              </ListItem>
-            ))}
-          </List>
-        </Box>
+        <div style={{ maxHeight: '60vh', overflow: 'auto' }}>
+          <MemberList members={members} />
+        </div>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );
+}
+
+export function MemberList({ members, onDelete }) {
+  return <List dense disablePadding>{members.map((m, i) => (
+    <ListItem key={`${m.id}-${i}`} disableGutters sx={{ px: 2, py: 1 }} secondaryAction={onDelete && <IconButton size="small" onClick={() => onDelete(m.id)} aria-label="remove member"><DeleteIcon fontSize="small" /></IconButton>}>
+      <Typography variant="body2">{m.label && m.label !== m.id && <strong>{m.label}</strong>}{m.label && m.label !== m.id && ' '}<span style={{ fontStyle: 'italic' }}>({m.idKind}: {m.id})</span></Typography>
+    </ListItem>
+  ))}</List>;
 }

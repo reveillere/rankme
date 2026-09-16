@@ -24,6 +24,7 @@ test('getStructureCrossCheckReport: a cache hit is returned as-is, without calli
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => { called = true; return []; },
         getCrossCheckReport: async () => { called = true; return null; },
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v1', importedAt: '2026-01-01' }),
         getCache: async () => cached,
         setCache: async () => { called = true; },
@@ -46,6 +47,7 @@ test('getStructureCrossCheckReport: aggregates resolved members, tags each resul
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => identityReport,
         getCrossCheckReport: async (pid, idHal) => reports[idHal],
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v1', importedAt: '2026-01-01' }),
         getCache,
         setCache,
@@ -78,6 +80,7 @@ test('getStructureCrossCheckReport: a member identityResolution could not resolv
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => identityReport,
         getCrossCheckReport: async () => { throw new Error('should not be called'); },
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v1', importedAt: '2026-01-01' }),
         getCache,
         setCache,
@@ -103,6 +106,7 @@ test('getStructureCrossCheckReport: mixes resolved and unresolved members in one
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => identityReport,
         getCrossCheckReport: async () => fakeReport({ confirmed: 1 }),
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v1', importedAt: '2026-01-01' }),
         getCache,
         setCache,
@@ -125,6 +129,7 @@ test('getStructureCrossCheckReport: a resolved pid getCrossCheckReport cannot fi
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => identityReport,
         getCrossCheckReport: async () => null,
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v1', importedAt: '2026-01-01' }),
         getCache,
         setCache,
@@ -150,6 +155,7 @@ test('getStructureCrossCheckReport: caches the computed report under a key scope
     const resolveStructureCrossCheck = createStructureCrossChecker({
         getIdentityResolutionReport: async () => identityReport,
         getCrossCheckReport: async () => fakeReport({ confirmed: 1 }),
+        getPersonLinksVersion: async () => 'links-v1',
         getDblpStatus: async () => ({ version: 'v42', importedAt: '2026-01-01' }),
         getCache: async () => null,
         setCache: async (key, value, ttl) => { setKey = key; setValue = value; setTtl = ttl; },
@@ -157,7 +163,7 @@ test('getStructureCrossCheckReport: caches the computed report under a key scope
 
     const report = await resolveStructureCrossCheck('struct1', { confSource: 'core', journalSource: 'sjr' });
 
-    assert.equal(setKey, 'crosscheck:structure:struct1:v42:core:sjr');
+    assert.equal(setKey, 'crosscheck:structure:struct1:v42:core:sjr:links-v1');
     assert.equal(setValue, report);
     assert.equal(setTtl, 60 * 60);
 });

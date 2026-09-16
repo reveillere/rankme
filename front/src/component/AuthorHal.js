@@ -14,6 +14,7 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
@@ -245,6 +246,8 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
     const filenameBase = `hal-${id}`;
     if (initialExport === 'md') {
       exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `${filenameBase}.md`, sortMode });
+    } else if (initialExport === 'json') {
+      exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `${filenameBase}.json`, sortMode });
     } else if (initialExport === 'csv') {
       exportHalPublicationsCsv(filteredRecords, { filename: `${filenameBase}.csv`, sortMode });
     }
@@ -273,9 +276,9 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 
   return (
     <div className='App'>
-      <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>HAL records{authorName ? ` of ${authorName}` : ''}</h1>
-        <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em' }}>
+      <RecordsHeader
+        title={<>HAL records{authorName ? ` of ${authorName}` : ''}</>}
+        details={<>
           idHal: {id}
           {authorInfo && (authorInfo.orcid
             ? <> · ORCID: <a href={authorInfo.orcid} target="_blank" rel="noreferrer">{authorInfo.orcid.replace('https://orcid.org/', '')}</a></>
@@ -285,11 +288,14 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
                 No ORCID linked to this HAL account
               </span>
             ))}
-        </div>
-        <div style={{ fontSize: 'large', marginTop: '0.3em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        </div>
-      </div>
+        </>}
+        showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
+        exportButton={<ExportButton
+          onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.md`, sortMode })}
+          onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.json`, sortMode })}
+          onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-${id}.csv`, sortMode })}
+        />}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
@@ -311,11 +317,6 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
         >
           Cross-check with DBLP
         </Button>
-        <ExportButton
-          onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.md`, sortMode })}
-          onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.json`, sortMode })}
-          onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-${id}.csv`, sortMode })}
-        />
       </div>
 
       <IdentityLinkDialog

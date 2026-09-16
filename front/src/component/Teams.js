@@ -8,7 +8,12 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import IconButton from '@mui/material/IconButton';
-import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
@@ -16,21 +21,34 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
+import Chip from '@mui/material/Chip';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import GroupsIcon from '@mui/icons-material/Groups';
 import AddIcon from '@mui/icons-material/Add';
 import AccountCircle from '@mui/icons-material/AccountCircle';
-import DownloadIcon from '@mui/icons-material/Download';
-import UploadIcon from '@mui/icons-material/Upload';
 
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { getTeams, createTeam, updateTeam, deleteTeam } from '../teamStore';
 import { PersonListItemText } from './PersonListItemText';
+import { MemberList } from './MemberListDialog';
+import { ExportButton } from './ExportButton';
+import { ImportButton } from './ImportButton';
+import { HelpButton } from './HelpButton';
+import { downloadTextFile } from '../exportPublications';
+import { apiTokenHeaders } from '../apiToken';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 400;
+const parseCsv = (text) => String(text).trim().split(/\r?\n/).slice(1).filter(Boolean).map(line => {
+  const cells = [];
+  line.replace(/(?:^|,)(?:"((?:[^"]|"")*)"|([^,]*))/g, (_, quoted, plain) => {
+    cells.push((quoted ?? plain).replaceAll('""', '"'));
+    return '';
+  });
+  return cells;
+});
 
 // Mirrors Search.js's per-source config: one source per team (DBLP and HAL
 // ids don't overlap, so members stay homogeneous within a team).
@@ -58,21 +76,29 @@ const SOURCES = {
 // working list before saving instead of opening a tab immediately.
 export default function Teams({ onOpenAuthor }) {
   const [teams, setTeams] = useState(() => getTeams());
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null); // null = creating a new team
+  const [creationSetup, setCreationSetup] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
   const [name, setName] = useState('');
   // DBLP by default -- see the identical note in Search.js: HAL was only
   // ever the fallback while DBLP needed a live dblp.org fetch (blocked by
   // their anti-bot protection) or the local dump hadn't been imported yet.
-  const [source, setSource] = useState('dblp');
+  const [source, setSource] = useState('');
   const [members, setMembers] = useState([]); // { id, label }
   const [mode, setMode] = useState('name');
   const [query, setQuery] = useState('');
   const [idInput, setIdInput] = useState('');
   const [bulkInput, setBulkInput] = useState('');
   const [results, setResults] = useState([]);
+  const [memberValidationError, setMemberValidationError] = useState('');
+  const [validatingMembers, setValidatingMembers] = useState(false);
   const debounceRef = useRef();
-  const bulkFileInputRef = useRef();
-  const teamsFileInputRef = useRef();
+  const membersJsonInputRef = useRef();
+  const membersCsvInputRef = useRef();
+  const membersTxtInputRef = useRef();
+  const teamsJsonInputRef = useRef();
+  const teamsCsvInputRef = useRef();
 
   // Members from one source aren't meaningful once you switch to the other
   // — only clear them on an actual user-driven switch, not when loading an
@@ -84,21 +110,25 @@ export default function Teams({ onOpenAuthor }) {
     setIdInput('');
     setBulkInput('');
     setResults([]);
+    setMemberValidationError('');
   };
 
   const resetForm = () => {
     setEditingId(null);
+    setCreationSetup(false);
     setName('');
-    setSource('dblp');
+    setSource('');
     setMembers([]);
     setQuery('');
     setIdInput('');
     setBulkInput('');
     setResults([]);
+    setMemberValidationError('');
   };
 
   const startEdit = (team) => {
     setEditingId(team.id);
+    setCreationSetup(false);
     setName(team.name);
     setSource(team.source);
     setMembers(team.members);
@@ -107,6 +137,8 @@ export default function Teams({ onOpenAuthor }) {
     setIdInput('');
     setBulkInput('');
     setResults([]);
+    setMemberValidationError('');
+    setFormOpen(true);
   };
 
   const runSearch = (text) => {
@@ -135,29 +167,46 @@ export default function Teams({ onOpenAuthor }) {
 
   const removeMember = (id) => setMembers(prev => prev.filter(m => m.id !== id));
 
+  // Manual ids have not come from the source search result, so resolve every
+  // one before it reaches the working team. This also supplies the canonical
+  // name instead of treating an arbitrary typed label as authoritative.
+  const validateAndAddMembers = async (ids) => {
+    const uniqueIds = Array.from(new Set(ids.map(id => id.trim()).filter(Boolean)));
+    if (uniqueIds.length === 0 || validatingMembers) return;
+    setValidatingMembers(true);
+    setMemberValidationError('');
+    const checked = await Promise.all(uniqueIds.map(async id => {
+      try {
+        const endpoint = source === 'dblp' ? `/api/dblp/author/${encodeURIComponent(id)}` : `/api/hal/author-info/${encodeURIComponent(id)}`;
+        const response = await fetch(endpoint, { headers: apiTokenHeaders() });
+        if (!response.ok) return null;
+        const data = await response.json();
+        const label = source === 'dblp' ? data?.dblpperson?.$?.name : data?.name;
+        return label ? { id, label } : null;
+      } catch {
+        return null;
+      }
+    }));
+    const valid = checked.filter(Boolean);
+    const invalid = uniqueIds.filter((_, index) => !checked[index]);
+    setMembers(prev => [...prev, ...valid.filter(member => !prev.some(existing => existing.id === member.id))]);
+    if (invalid.length) setMemberValidationError(`Unknown ${SOURCES[source].idLabel}${invalid.length > 1 ? 's' : ''}: ${invalid.join(', ')}`);
+    setIdInput('');
+    setBulkInput('');
+    setValidatingMembers(false);
+  };
+
   // One id per line, but also tolerate commas/semicolons since a pasted
   // list won't always be newline-separated.
   const addBulkMembers = (text) => {
     const ids = Array.from(new Set(text.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean)));
-    if (ids.length === 0) return;
-    setMembers(prev => {
-      const existing = new Set(prev.map(m => m.id));
-      const additions = ids.filter(id => !existing.has(id)).map(id => ({ id, label: id }));
-      return [...prev, ...additions];
-    });
-    setBulkInput('');
+    validateAndAddMembers(ids);
   };
 
-  const handleBulkFileChange = (e) => {
-    const file = e.target.files[0];
-    e.target.value = ''; // allow re-selecting the same file later
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => addBulkMembers(String(reader.result));
-    reader.readAsText(file);
-  };
-
-  const canSave = name.trim().length > 0 && members.length >= 2;
+  const normalizedName = name.trim().toLocaleLowerCase();
+  const teamNameExists = normalizedName && teams.some(team => team.id !== editingId && team.name.trim().toLocaleLowerCase() === normalizedName);
+  const canStartCreation = name.trim().length > 0 && !!source && !teamNameExists;
+  const canSave = canStartCreation && members.length >= 2;
 
   const handleSave = () => {
     if (!canSave) return;
@@ -168,6 +217,7 @@ export default function Teams({ onOpenAuthor }) {
     }
     setTeams(getTeams());
     resetForm();
+    setFormOpen(false);
   };
 
   const handleDelete = (id) => {
@@ -180,8 +230,9 @@ export default function Teams({ onOpenAuthor }) {
   // there is no server-side copy, so clearing site data or switching
   // machines loses them silently. Export/import is the only backup/transfer
   // path available.
-  const handleExportTeams = () => {
-    const blob = new Blob([JSON.stringify(teams, null, 2)], { type: 'application/json' });
+  const handleExportTeamsJson = () => {
+    const exportData = teams.map(team => ({ name: team.name, source: team.source, members: team.members.map(member => ({ id: member.id })) }));
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -191,14 +242,39 @@ export default function Teams({ onOpenAuthor }) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+  const handleExportTeamsMarkdown = () => downloadTextFile('rankme-teams.md', `# Teams\n\n${teams.map(team => `## ${team.name}\n\nSource: ${team.source.toUpperCase()}\n\n${team.members.map(member => `- ${member.label || member.id} (${team.source === 'hal' ? 'idHal' : 'pid'}: ${member.id})`).join('\n')}`).join('\n\n')}\n`, 'text/markdown;charset=utf-8;');
+  const handleExportTeamsCsv = () => {
+    const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    const rows = teams.flatMap(team => team.members.map(member => [team.name, team.source, member.id].map(quote).join(',')));
+    downloadTextFile('rankme-teams.csv', ['team,source,id', ...rows].join('\n'), 'text/csv;charset=utf-8;');
+  };
+  const handleExportMembersJson = () => downloadTextFile('rankme-team-members.json', JSON.stringify(members, null, 2), 'application/json;charset=utf-8;');
+  const handleExportMembersMarkdown = () => downloadTextFile('rankme-team-members.md', `# Members\n\n${members.map(member => `- ${member.label || member.id} (${source === 'hal' ? 'idHal' : 'pid'}: ${member.id})`).join('\n')}\n`, 'text/markdown;charset=utf-8;');
+  const handleExportMembersCsv = () => {
+    const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
+    downloadTextFile('rankme-team-members.csv', ['id', ...members.map(member => quote(member.id)).join('\n')].join('\n'), 'text/csv;charset=utf-8;');
+  };
+  const handleImportMembersFile = (e, format) => {
+    const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        if (format === 'txt') {
+          addBulkMembers(String(reader.result));
+          return;
+        }
+        const data = format === 'csv' ? parseCsv(reader.result).map(([id]) => ({ id })) : JSON.parse(String(reader.result));
+        const list = Array.isArray(data) ? data : [];
+        validateAndAddMembers(list.filter(m => m?.id).map(m => String(m.id)));
+      } catch { /* invalid member file */ }
+    };
+    reader.readAsText(file);
+  };
 
-  // Imported teams are always created fresh (via createTeam, which mints
-  // its own id) rather than restored with their original id -- reusing an
-  // id could silently overwrite a same-named-but-different team already in
-  // this browser, whereas an extra duplicate is harmless and easy to
-  // delete. Invalid entries (missing name/source/members) are skipped
-  // rather than aborting the whole import.
-  const handleImportTeamsFile = (e) => {
+  // Imported teams are created afresh so their local ids cannot collide.
+  // A duplicate name, however, is skipped: names are the meaningful team
+  // identity in this UI and keeping both would make the list ambiguous.
+  const handleImportTeamsFile = (e, format) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
@@ -206,37 +282,42 @@ export default function Teams({ onOpenAuthor }) {
     reader.onload = () => {
       let parsed;
       try {
-        parsed = JSON.parse(String(reader.result));
+        if (format === 'csv') {
+          const grouped = new Map();
+          parseCsv(reader.result).forEach(([team, source, id]) => {
+            if (!team || !id || (source !== 'dblp' && source !== 'hal')) return;
+            const key = `${source}\u0000${team}`;
+            const entry = grouped.get(key) || { name: team, source, members: [] };
+            entry.members.push({ id, label: id });
+            grouped.set(key, entry);
+          });
+          parsed = [...grouped.values()];
+        } else {
+          parsed = JSON.parse(String(reader.result));
+        }
       } catch {
         return;
       }
       const list = Array.isArray(parsed) ? parsed : [parsed];
+      const knownNames = new Set(getTeams().map(team => team.name.trim().toLocaleLowerCase()));
+      const duplicates = [];
       for (const t of list) {
         if (!t || typeof t.name !== 'string' || !t.name.trim()) continue;
         if (t.source !== 'dblp' && t.source !== 'hal') continue;
         if (!Array.isArray(t.members) || t.members.length === 0) continue;
-        createTeam(t.name.trim(), t.source, t.members);
+        const importedName = t.name.trim();
+        const normalizedImportedName = importedName.toLocaleLowerCase();
+        if (knownNames.has(normalizedImportedName)) {
+          duplicates.push(importedName);
+          continue;
+        }
+        createTeam(importedName, t.source, t.members.map(member => ({ id: String(member.id), label: String(member.id) })));
+        knownNames.add(normalizedImportedName);
       }
       setTeams(getTeams());
+      setImportMessage(duplicates.length ? `${duplicates.join(', ')} ${duplicates.length === 1 ? 'was' : 'were'} not imported because a team with that name already exists.` : '');
     };
     reader.readAsText(file);
-  };
-
-  // A single team's own JSON, same shape handleImportTeamsFile above already
-  // accepts (a bare {name, source, members} object, or an array containing
-  // just this one) -- so re-importing this exact file elsewhere (or back
-  // into this same browser) works without any special-casing on the import
-  // side.
-  const handleExportSingleTeam = (team) => {
-    const blob = new Blob([JSON.stringify(team, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rankme-team-${team.name.trim().toLowerCase().replace(/\s+/g, '-') || team.id}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
   const openTeam = (team) => {
@@ -245,22 +326,13 @@ export default function Teams({ onOpenAuthor }) {
 
   return (
     <div className="App">
-      <h1>Teams</h1>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}><h1>Teams</h1><HelpButton title="Teams help" sections={[{ title: 'Create a team', description: 'A team needs a unique name and exactly one source: HAL or DBLP. The source cannot change later.' }, { title: 'Add members', description: 'Names come from source search. Typed ids, bulk ids and TXT files are checked against HAL or DBLP before they are added.' }, { title: 'Import teams: JSON', description: 'Import a JSON file with each team name, source and member identifiers.', example: '[{\n  "name": "My team",\n  "source": "dblp",\n  "members": [{ "id": "11/1262" }]\n}]' }, { title: 'Import teams: CSV', description: 'Import a CSV with each team name, source and member identifiers.', example: 'team,source,id\nMy team,dblp,11/1262' }, { title: 'Import members: TXT', description: 'TXT imports one identifier per line into the team currently being edited. A DBLP team accepts only PIDs; a HAL team accepts only idHals. Each identifier is checked before it is added.', example: '11/1262\n12/3456' }, { title: 'Import members', description: 'Members also accept JSON or CSV exports. A team with an existing name is skipped during import.' }]} /><ExportButton onExportMarkdown={handleExportTeamsMarkdown} onExportJson={handleExportTeamsJson} onExportCsv={handleExportTeamsCsv} disabled={teams.length === 0} /><ImportButton title="Import teams" onImportJson={() => teamsJsonInputRef.current?.click()} onImportCsv={() => teamsCsvInputRef.current?.click()} /></Box>
       <div style={{ fontSize: 'large', marginTop: '-0.8em', marginBottom: '10px', color: 'GrayText' }}>
         Group several DBLP or HAL authors together and rank their merged, deduplicated publications
       </div>
 
-      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mb: 3 }}>
-        {teams.length > 0 && (
-          <Button size="small" variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportTeams} sx={{ textTransform: 'none' }}>
-            Export teams
-          </Button>
-        )}
-        <Button size="small" variant="outlined" startIcon={<UploadIcon />} onClick={() => teamsFileInputRef.current?.click()} sx={{ textTransform: 'none' }}>
-          Import teams
-        </Button>
-        <input ref={teamsFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportTeamsFile} />
-      </Box>
+      <input ref={teamsJsonInputRef} type="file" accept=".json,application/json" hidden onChange={e => handleImportTeamsFile(e, 'json')} />
+      <input ref={teamsCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={e => handleImportTeamsFile(e, 'csv')} />
 
       {teams.length > 0 && (
         <Box sx={{ width: 500, maxWidth: '100%', margin: '0 auto 40px auto', textAlign: 'left' }}>
@@ -272,9 +344,6 @@ export default function Teams({ onOpenAuthor }) {
                 sx={{ pr: 17 }}
                 secondaryAction={
                   <>
-                    <IconButton edge="end" aria-label="export" onClick={() => handleExportSingleTeam(team)}>
-                      <DownloadIcon fontSize="small" />
-                    </IconButton>
                     <IconButton edge="end" aria-label="edit" onClick={() => startEdit(team)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -288,7 +357,7 @@ export default function Teams({ onOpenAuthor }) {
                   <GroupsIcon sx={{ mr: 1.5, color: 'text.secondary' }} />
                   <ListItemText
                     primary={team.name}
-                    secondary={`${team.members.length} members · ${SOURCES[team.source]?.label || team.source}`}
+                    secondary={<Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}><span>{team.members.length} members</span><Chip label={SOURCES[team.source]?.label || team.source} size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} /></Box>}
                   />
                 </ListItemButton>
               </ListItem>
@@ -298,33 +367,44 @@ export default function Teams({ onOpenAuthor }) {
         </Box>
       )}
 
-      <Box sx={{ width: 500, maxWidth: '100%', margin: '0 auto', textAlign: 'left' }}>
-        <Typography variant="subtitle1" gutterBottom>{editingId ? 'Edit team' : 'New team'}</Typography>
+      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { resetForm(); setCreationSetup(true); setFormOpen(true); }} sx={{ display: 'block', mx: 'auto', mb: 2, textTransform: 'none' }}>New team</Button>
+      <Dialog open={formOpen} onClose={() => setFormOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><span>{editingId ? 'Edit team' : 'New team'}</span>{source && <Chip label={SOURCES[source]?.label} size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} />}</Box><Box sx={{ display: 'flex', gap: 0.5 }}><ExportButton onExportMarkdown={handleExportMembersMarkdown} onExportJson={handleExportMembersJson} onExportCsv={handleExportMembersCsv} disabled={members.length === 0} /><ImportButton title="Import members" onImportJson={() => membersJsonInputRef.current?.click()} onImportCsv={() => membersCsvInputRef.current?.click()} onImportTxt={() => membersTxtInputRef.current?.click()} /><input ref={membersJsonInputRef} type="file" accept=".json,application/json" hidden onChange={e => handleImportMembersFile(e, 'json')} /><input ref={membersCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={e => handleImportMembersFile(e, 'csv')} /><input ref={membersTxtInputRef} type="file" accept=".txt,text/plain" hidden onChange={e => handleImportMembersFile(e, 'txt')} /></Box></DialogTitle>
+      <DialogContent dividers>
+      <Box sx={{ textAlign: 'left' }}>
+        <Box component="section">
+          <Typography variant="subtitle2" gutterBottom>Name</Typography>
+          <TextField
+            label="Team name"
+            required
+            error={!!teamNameExists}
+            helperText={teamNameExists ? 'A team with this name already exists.' : ''}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            fullWidth
+            size="small"
+          />
+          {editingId ? (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              The source cannot be changed after the team is created.
+            </Typography>
+          ) : creationSetup && (
+            <>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>Source *</Typography>
+              <Tabs
+                value={source}
+                onChange={handleSourceChange}
+                sx={{ mt: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5 } }}
+              >
+                {Object.entries(SOURCES).map(([key, { label }]) => <Tab key={key} value={key} label={<Chip label={label} size="small" color="primary" variant="outlined" />} sx={{ minWidth: 88 }} />)}
+              </Tabs>
+              {!source && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>Choose DBLP or HAL before adding members.</Typography>}
+              <Button variant="contained" size="small" disabled={!canStartCreation} onClick={() => setCreationSetup(false)} sx={{ mt: 2 }}>Continue</Button>
+            </>
+          )}
+        </Box>
 
-        <TextField
-          label="Team name"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          fullWidth
-          size="small"
-          sx={{ mb: 2 }}
-        />
-
-        <Tabs
-          value={source}
-          onChange={handleSourceChange}
-          sx={{ mb: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5 } }}
-        >
-          {Object.entries(SOURCES).map(([key, { label }]) => (
-            <Tab key={key} value={key} label={label} disabled={!!editingId && key !== source} />
-          ))}
-        </Tabs>
-        {editingId && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -0.5, mb: 1 }}>
-            A team&apos;s source can&apos;t be changed after creation.
-          </Typography>
-        )}
-        <Typography variant="body2" color="text.secondary" gutterBottom>Add {SOURCES[source].label} members</Typography>
+        {source && !creationSetup && <><Box component="section" sx={{ mt: 3 }}><Typography variant="subtitle2" gutterBottom>Add {SOURCES[source].label} members</Typography>
 
         <ToggleButtonGroup value={mode} exclusive onChange={(e, v) => v && setMode(v)} size="small" sx={{ mb: 1 }}>
           <ToggleButton value="name">By name</ToggleButton>
@@ -382,7 +462,7 @@ export default function Teams({ onOpenAuthor }) {
           // in place of Author's "Open" (which opens a tab immediately).
           <Paper
             component="form"
-            onSubmit={e => { e.preventDefault(); if (idInput.trim()) addMember(idInput.trim(), idInput.trim()); }}
+            onSubmit={e => { e.preventDefault(); validateAndAddMembers([idInput]); }}
             sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', width: '100%' }}
           >
             <IconButton sx={{ p: '10px' }} aria-label="menu">
@@ -395,7 +475,7 @@ export default function Teams({ onOpenAuthor }) {
               value={idInput}
               onChange={e => setIdInput(e.target.value)}
             />
-            <IconButton type="submit" disabled={!idInput.trim()} aria-label="add member">
+            <IconButton type="submit" disabled={!idInput.trim() || validatingMembers} aria-label="add member">
               <AddIcon fontSize="small" />
             </IconButton>
           </Paper>
@@ -414,60 +494,29 @@ export default function Teams({ onOpenAuthor }) {
               sx={{ mb: 1 }}
             />
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button size="small" variant="outlined" onClick={() => bulkFileInputRef.current?.click()}>
-                Import file
-              </Button>
-              <input
-                ref={bulkFileInputRef}
-                type="file"
-                accept=".txt"
-                hidden
-                onChange={handleBulkFileChange}
-              />
-              <Button size="small" variant="contained" disabled={!bulkInput.trim()} onClick={() => addBulkMembers(bulkInput)}>
-                Add all
+              <Button size="small" variant="contained" disabled={!bulkInput.trim() || validatingMembers} onClick={() => addBulkMembers(bulkInput)}>
+                {validatingMembers ? 'Checking…' : 'Add all'}
               </Button>
             </Box>
           </Box>
         )}
 
-        {members.length > 0 && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 4 }}>
-            {members.map(m => {
-              // A plain id is ambiguous on its own (is "11/1262" a dblp pid
-              // or something else?) -- always label it explicitly with its
-              // kind, same convention used everywhere else a bare id is
-              // shown next to a name (Author.js/AuthorHal.js's own "pid:"/
-              // "idHal:" line, Team.js's crosscheck popup, etc.).
-              const idLabel = source === 'hal' ? 'idHal' : 'pid';
-              return (
-                <Chip
-                  key={m.id}
-                  label={
-                    m.label === m.id ? (
-                      <span style={{ fontStyle: 'italic', fontSize: '0.85em' }}>{idLabel}: {m.id}</span>
-                    ) : (
-                      <span style={{ lineHeight: 1.3 }}>
-                        {m.label}
-                        <br />
-                        <span style={{ fontStyle: 'italic', fontSize: '0.85em', color: '#8a8f94' }}>{idLabel}: {m.id}</span>
-                      </span>
-                    )
-                  }
-                  onDelete={() => removeMember(m.id)}
-                  sx={{ height: 'auto', py: 0.75, '& .MuiChip-label': { whiteSpace: 'normal', display: 'block' } }}
-                />
-              );
-            })}
-          </Box>
-        )}
+        </Box>
+
+        {memberValidationError && <Alert severity="error" sx={{ mt: 2 }} onClose={() => setMemberValidationError('')}>{memberValidationError}</Alert>}
+
+        <Box component="section" sx={{ mt: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Members ({members.length})</Typography>
+          {members.length > 0 && <MemberList members={members.map(member => ({ ...member, idKind: source === 'hal' ? 'idHal' : 'pid' }))} onDelete={removeMember} />}
+          {members.length === 0 && <Typography variant="body2" color="text.secondary">No members yet.</Typography>}
+        </Box>
 
         <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
           <Button variant="contained" disabled={!canSave} onClick={handleSave}>
             {editingId ? 'Save changes' : 'Save team'}
           </Button>
           {editingId && (
-            <Button variant="text" onClick={resetForm}>
+            <Button variant="text" onClick={() => { resetForm(); setFormOpen(false); }}>
               Cancel
             </Button>
           )}
@@ -477,7 +526,12 @@ export default function Teams({ onOpenAuthor }) {
             Add at least one more member to save a team.
           </Typography>
         )}
+        </>}
       </Box>
+      </DialogContent>
+      {!editingId && <DialogActions><Button onClick={() => setFormOpen(false)}>Close</Button></DialogActions>}
+      </Dialog>
+      <Snackbar open={!!importMessage} autoHideDuration={6000} onClose={() => setImportMessage('')}><Alert severity="error" onClose={() => setImportMessage('')}>{importMessage}</Alert></Snackbar>
     </div>
   );
 }

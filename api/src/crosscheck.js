@@ -6,6 +6,7 @@ import { extractDoi } from './crossref.js';
 import { levenshtein } from './levenshtein.js';
 import { computeDblpPublicationRank, computeHalPublicationRank, confSourceFrom, journalSourceFrom } from './authorStream.js';
 import * as crosscheckOverrides from './crosscheckOverrides.js';
+import { parseIdentityLinks, assertIdentityPairIsCompatible, IdentityLinksConflictError } from './identityLinksInput.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -416,8 +417,8 @@ export async function getCrossCheckReport(pid, halId, { confSource, journalSourc
 }
 
 export async function controllerCrossCheck(req, res) {
-    const pid = req.params[0];
-    const halId = req.query.halId;
+    const pid = req.params[0] || req.body?.pid;
+    const halId = req.query.halId || req.body?.halId;
     if (!halId) {
         res.status(400).json({ error: 'halId query parameter is required' });
         return;
@@ -425,6 +426,8 @@ export async function controllerCrossCheck(req, res) {
     const confSource = confSourceFrom(req);
     const journalSource = journalSourceFrom(req);
     try {
+        const identityLinks = parseIdentityLinks(req.body?.identityLinks ?? req.query.identityLinks);
+        assertIdentityPairIsCompatible(identityLinks, { idHal: halId, pid });
         const report = await getCrossCheckReport(pid, halId, { confSource, journalSource });
         if (report === null) {
             res.status(404).json({ error: 'Not Found', message: `No DBLP author with pid ${pid}` });
@@ -433,6 +436,6 @@ export async function controllerCrossCheck(req, res) {
         res.json(report);
     } catch (error) {
         console.log('Error during cross-check computation', error);
-        res.status(400).json({ error: error.message });
+        res.status(error instanceof IdentityLinksConflictError ? 409 : 400).json({ error: error.message });
     }
 }

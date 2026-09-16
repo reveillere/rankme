@@ -70,7 +70,7 @@ const CHIP_WIDTH = 92;
 // (e.g. a /crosscheck/... URL reloaded without its ?from=&to= query, or
 // shared before this range even existed) means "don't filter" rather than
 // crashing -- see App.js's tabFromPath for how the URL carries it.
-export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor, isActive }) {
+export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     // Bumped after a confirm/reject click lands (see handleOverrideDecision)

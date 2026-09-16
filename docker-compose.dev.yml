@@ -17,6 +17,7 @@ services:
       # Fixed for local convenience only — prod uses a real secret (see
       # docker-compose.prod.yml).
       - ADMIN_TOKEN=dev-admin-token
+      - API_TOKENS=${API_TOKENS:-dev-api-token}
     volumes:
       - ./api/src:/app/src
       - ./api/log:/app/log

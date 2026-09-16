@@ -1,30 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // Material-UI Components
 import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
-import UploadIcon from '@mui/icons-material/Upload';
 
 // DBLP/HAL
 import { fetchStructureCrossCheck, postCrossCheckOverride } from '../crosscheck';
-import { postIdentityLink, importIdentityLinks } from '../identityResolution';
 import { dblpCategories } from '../dblp';
 import { getHalCategory } from '../hal';
 import { PublicationRow } from './Publications';
 import { HalPublicationRow } from './HalPublications';
-import { IdentityLinkDialog } from './IdentityLinkDialog';
 import { customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
@@ -33,6 +25,8 @@ import { exportCrossCheckByMemberMarkdown, exportCrossCheckByMemberJson } from '
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
 import { ExportButton } from './ExportButton';
+import { IdentityLinksPanel } from './IdentityLinksPanel';
+import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 
 import '../App.css';
 
@@ -53,49 +47,22 @@ const NO_SELF_IDS = [];
 const ACTION_WIDTH = 76;
 const CHIP_WIDTH = 92;
 
-export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor, isActive }) {
+export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     // Bumped after a confirm/reject click or a manual identity link lands,
     // to force the effect below to refetch -- same reasoning as
     // CrossCheckTeam.js's own refreshToken.
     const [refreshToken, setRefreshToken] = useState(0);
-    // idHal of the unresolved member currently being linked by hand, or null
-    // -- drives the single shared IdentityLinkDialog below (direction="dblp",
-    // see handleManualLink). idHal, not pid, since for a structure member the
-    // HAL identity is already known (they're on file as a lab member) --
-    // it's the DBLP pid that's missing, the opposite of CrossCheckTeam.js's
-    // own linkingMember.
-    const [linkingIdHal, setLinkingIdHal] = useState(null);
-    // Same one-shot popup as CrossCheckTeam.js -- see its own hasShownOnceRef
-    // comment for why this must not reopen on every refetch.
-    const [unresolvedPopupOpen, setUnresolvedPopupOpen] = useState(false);
-    const hasShownOnceRef = useRef(false);
-    const importLinksFileInputRef = useRef();
+    // A cross-check starts with the same identity-resolution dialog available
+    // from the structure page. It can be revisited from the header icon.
+    const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
     const { conferenceSource, journalSource } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
     const activeCustomProfileIds = useMemo(
         () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
         [conferenceSource, journalSource]
-    );
-
-    // Name-only suggestion fed to the manual-link dialog below, so opening it
-    // for a member who already has DBLP candidates (identityResolution.js's
-    // own name/token search) makes those same candidates resurface as
-    // ordinary ranked search results instead of a separate row of
-    // quick-select buttons -- see IdentityLinkDialog's own comment for why
-    // that block was dropped. Memoized on the member's own name (a
-    // primitive), not rebuilt as a fresh object on every render, so it
-    // doesn't retrigger IdentityLinkDialog's pre-fill effect (keyed on the
-    // `suggestion` reference itself) on every unrelated re-render while the
-    // dialog stays open -- declared here, ahead of the early returns below,
-    // since a Hook must run on every render regardless of whether `report`
-    // has loaded yet.
-    const linkingMemberName = linkingIdHal && report ? report.unresolvedMembers.find(m => m.idHal === linkingIdHal)?.name : null;
-    const linkingSuggestion = useMemo(
-        () => (linkingMemberName ? { name: linkingMemberName } : undefined),
-        [linkingMemberName]
     );
 
     useEffect(() => {
@@ -108,88 +75,10 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
         return () => { cancelled = true; };
     }, [structId, conferenceSource, journalSource, refreshToken]);
 
-    useEffect(() => {
-        if (!report || hasShownOnceRef.current) return;
-        hasShownOnceRef.current = true;
-        setUnresolvedPopupOpen(report.unresolvedMembers.length > 0);
-    }, [report]);
-
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
             .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
-    };
-
-    const handleManualLink = (pid) => {
-        const idHal = linkingIdHal;
-        setLinkingIdHal(null);
-        postIdentityLink({ idHal, pid })
-            .then(() => removeUnresolvedMember(idHal))
-            .catch(err => setError(err));
-    };
-
-    // One-click confirmation for a member with exactly one candidate already
-    // found by identityResolution.js's own name/token search (see
-    // UnresolvedMemberRow below) -- no dialog, straight to the same write
-    // handleManualLink's dialog path ends up making.
-    const handleConfirmCandidate = (idHal, pid) => {
-        postIdentityLink({ idHal, pid })
-            .then(() => removeUnresolvedMember(idHal))
-            .catch(err => setError(err));
-    };
-
-    // Optimistic local update, not a refreshToken-triggered refetch: this
-    // report's own endpoint (getStructureCrossCheckReport, see
-    // api/src/crosscheckStructure.js) caches the WHOLE aggregated report for
-    // 1h. Bumping refreshToken right after a successful postIdentityLink
-    // write would just re-fetch that same stale cached report, with this
-    // member still listed as unresolved -- the write lands, but the popup
-    // and its count never reflect it until the cache naturally expires. So
-    // instead this strips the confirmed member out of `report.unresolvedMembers`
-    // directly, which is enough to make the popup/section/count update right
-    // away. What this does NOT do is synthesize the member's own resolved
-    // Missing/To-review section in `report.members` -- that needs a real
-    // getCrossCheckReport call this component doesn't make on its own, so
-    // that section only appears once a later cache expiry or full reload
-    // picks it up.
-    const removeUnresolvedMember = (idHal) => {
-        setReport(prev => prev && ({
-            ...prev,
-            unresolvedMembers: prev.unresolvedMembers.filter(m => m.idHal !== idHal),
-        }));
-    };
-
-    // Same JSON-file mechanics as IdentityLinksPanel.js's own import (which
-    // in turn mirrors Teams.js's handleImportTeamsFile) and CrossCheckTeam.js's
-    // identical handleImportLinksFile -- lets the maintainer resolve several
-    // unresolved members at once from a previously exported/hand-built
-    // links file, right here in the popup that already lists them.
-    // Bumping refreshToken afterwards is the same refetch handleOverrideDecision
-    // above already triggers -- unlike handleManualLink/handleConfirmCandidate,
-    // an import can resolve several members from arbitrary rows in the file at
-    // once, so there's no small fixed set of idHals to strip out of
-    // `unresolvedMembers` locally the way removeUnresolvedMember does for a
-    // single confirm; a refetch (still subject to the 1h aggregate cache, see
-    // removeUnresolvedMember's own comment) is what's left.
-    const handleImportLinksFile = (e) => {
-        const file = e.target.files[0];
-        e.target.value = '';
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-            let parsed;
-            try {
-                parsed = JSON.parse(String(reader.result));
-            } catch {
-                setError(new Error('Invalid JSON file'));
-                return;
-            }
-            const list = Array.isArray(parsed) ? parsed : [parsed];
-            importIdentityLinks(list)
-                .then(() => setRefreshToken(t => t + 1))
-                .catch(err => setError(err));
-        };
-        reader.readAsText(file);
     };
 
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this structure against HAL. Please try again later.</div>;
@@ -197,13 +86,14 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     // team.members.length is -- a structure's membership only exists once
     // getStructureCrossCheckReport has resolved it server-side, there is no
     // client-side list to read a count from before that first response lands.
-    if (report === null) return <LoadingSpinner message="Cross-checking structure members against HAL…" />;
+    if (report === null) return <>
+        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} structId={structId} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+        <LoadingSpinner message="Cross-checking structure members against HAL…" />
+    </>;
 
     const importedAtLabel = report.dblpStatus?.importedAt
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         : null;
-
-    const linkingMember = linkingIdHal ? report.unresolvedMembers.find(m => m.idHal === linkingIdHal) : null;
 
     const handleExportCsv = () => exportCsv(structId, report.members);
     const title = structureName || structId;
@@ -220,12 +110,14 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
         members: report.members,
         memberLabel,
     });
+    const allMembers = [
+        ...report.members.map(member => ({ id: member.idHal, idKind: 'idHal', label: member.name })),
+        ...report.unresolvedMembers.map(member => ({ id: member.idHal, idKind: 'idHal', label: member.name })),
+    ];
 
     return (
         <div className='App' style={{ padding: '0 40px' }}>
-            <div style={{ textAlign: 'center', marginTop: '40px', marginBottom: '20px' }}>
-                <h1>DBLP → HAL cross-check for {title}</h1>
-            </div>
+            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${title}`} scope="Structure" members={allMembers} unresolvedCount={report.unresolvedMembers.length} targetLabel="DBLP" panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ structId }} onLinksChanged={() => setRefreshToken(t => t + 1)} />
 
             {(importedAtLabel || report.halCacheNote) && (
                 <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '0 auto 20px' }}>
@@ -254,89 +146,10 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
                 />
             ))}
 
-            {/* Shown up front (before the per-member Missing/To-review
-                sections below) whenever the latest report still has
-                unresolved members -- see unresolvedPopupOpen's own comment.
-                "View results" just closes it without discarding anything:
-                unresolved members remain listed at the bottom of the page
-                too (not only here), so nothing is lost by dismissing. */}
-            <Dialog open={unresolvedPopupOpen} onClose={() => setUnresolvedPopupOpen(false)} maxWidth="sm" fullWidth>
-                <DialogTitle>Members without a resolved DBLP identity ({report.unresolvedMembers.length})</DialogTitle>
-                <DialogContent>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        These structure members couldn&apos;t be automatically matched to a DBLP identity, so their publications aren&apos;t included in the results below yet.
-                    </Typography>
-                    <Box sx={{ mb: 2 }}>
-                        <Tooltip title='Expected JSON format: an array of {"idHal": "...", "pid": "..."} objects (or a single such object).'>
-                            <Button size="small" variant="outlined" startIcon={<UploadIcon />} onClick={() => importLinksFileInputRef.current?.click()} sx={{ textTransform: 'none' }}>
-                                Import links
-                            </Button>
-                        </Tooltip>
-                        <input ref={importLinksFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportLinksFile} />
-                    </Box>
-                    {report.unresolvedMembers.map(m => (
-                        <UnresolvedMemberRow key={m.idHal} member={m} onLink={() => setLinkingIdHal(m.idHal)} onConfirmCandidate={handleConfirmCandidate} />
-                    ))}
-                </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setUnresolvedPopupOpen(false)}>View results</Button>
-                </DialogActions>
-            </Dialog>
-
-            {report.unresolvedMembers.length > 0 && (
-                <Box sx={{ maxWidth: 900, margin: '0 auto 30px' }}>
-                    <Typography variant="h6" sx={{ mb: 1 }}>Members without a resolved DBLP identity ({report.unresolvedMembers.length})</Typography>
-                    {report.unresolvedMembers.map(m => (
-                        <UnresolvedMemberRow key={m.idHal} member={m} onLink={() => setLinkingIdHal(m.idHal)} onConfirmCandidate={handleConfirmCandidate} />
-                    ))}
-                </Box>
-            )}
-
-            <IdentityLinkDialog
-                open={linkingIdHal !== null}
-                onClose={() => setLinkingIdHal(null)}
-                onConfirm={handleManualLink}
-                direction="dblp"
-                title="Link DBLP identity"
-                description={linkingMember && `Find ${linkingMember.name || linkingMember.idHal}'s DBLP identity (idHal: ${linkingMember.idHal}) to list their publications with no matching HAL deposit.`}
-                suggestion={linkingSuggestion}
-            />
-
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
                 {report.confirmedCount} confirmed, not shown
             </Typography>
         </div>
-    );
-}
-
-// One row of the "unresolved members" listing, shared between the one-shot
-// popup and the always-present bottom section. A member with exactly one
-// candidate already found by identityResolution.js's own name/token search
-// gets a direct one-click Confirm instead of opening the manual-link dialog
-// at all (see CrossCheckTeam.js's own UnresolvedTeamMemberRow for the same
-// pattern in the other report) -- for 0 or several candidates, "Link DBLP
-// identity" still opens the dialog, now pre-filled with this member's own
-// name (linkingSuggestion above) so the same candidates resurface as
-// ordinary ranked search results instead of a separate row of buttons.
-function UnresolvedMemberRow({ member, onLink, onConfirmCandidate }) {
-    const singleCandidate = member.candidates.length === 1 ? member.candidates[0] : null;
-    return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1 }}>
-            <Typography variant="body2" sx={{ flex: 1 }}>
-                {member.name || member.idHal} (idHal: {member.idHal})
-                {singleCandidate && <><br /> — candidate: <strong>{singleCandidate.name || singleCandidate.pid}</strong> (pid: {singleCandidate.pid})</>}
-                {!singleCandidate && member.candidates.length > 0 && <><br /> — {member.candidates.length} DBLP candidates found (unconfirmed)</>}
-            </Typography>
-            {singleCandidate ? (
-                <Button size="small" variant="contained" onClick={() => onConfirmCandidate(member.idHal, singleCandidate.pid)} sx={{ textTransform: 'none' }}>
-                    Confirm
-                </Button>
-            ) : (
-                <Button size="small" variant="outlined" onClick={onLink} sx={{ textTransform: 'none' }}>
-                    Link DBLP identity
-                </Button>
-            )}
-        </Box>
     );
 }
 

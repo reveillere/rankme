@@ -5,6 +5,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -140,9 +141,9 @@ export function MyOverridesDialog({ open, onClose }) {
           <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExport} disabled={overrides.length === 0}>
             Export CSV
           </Button>
-          <Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
+          <Tooltip title="Import overrides from a CSV file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
             Import CSV
-          </Button>
+          </Button></Tooltip>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
         </Box>
         <Box>

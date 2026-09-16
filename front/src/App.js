@@ -25,6 +25,7 @@ import { CategoriesFilterButton } from './component/CategoriesFilterButton';
 import { RankingSourceIndicator } from './component/RankingSourceIndicator';
 import { MyOverridesDialog } from './component/MyOverridesDialog';
 import { MyCustomRankingsDialog } from './component/MyCustomRankingsDialog';
+import { HelpButton } from './component/HelpButton';
 import { recordSearchHistory } from './searchHistory';
 
 // Styles and Other
@@ -60,7 +61,7 @@ function tabSearch(tab) {
     params.set('to', tab.yearRange[1]);
   }
   if (tab.sort && tab.sort !== 'date') params.set('sort', tab.sort);
-  if (tab.export === 'md' || tab.export === 'csv') params.set('export', tab.export);
+  if (tab.export === 'md' || tab.export === 'json' || tab.export === 'csv') params.set('export', tab.export);
   const qs = params.toString();
   return qs ? `?${qs}` : '';
 }
@@ -162,7 +163,7 @@ function tabFromPath(pathname, search) {
   const exportFromSearch = () => {
     const params = new URLSearchParams(search || '');
     const exp = params.get('export');
-    return exp === 'md' || exp === 'csv' ? exp : undefined;
+    return exp === 'md' || exp === 'json' || exp === 'csv' ? exp : undefined;
   };
   m = pathname.match(/^\/dblp\/(.+)$/);
   if (m) {
@@ -232,8 +233,7 @@ function App() {
     if (!activeTab) return;
     const path = tabPath(activeTab);
     if (location.pathname + location.search !== path) navigate(path);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTabId, tabs]);
+  }, [activeTabId, tabs, location.pathname, location.search, navigate]);
 
   // URL -> tabs/active tab, for browser back/forward and for opening a
   // shared link directly. Each setter bails out on an unchanged value, so
@@ -242,7 +242,6 @@ function App() {
     const fromUrl = tabFromPath(location.pathname, location.search);
     setTabs(prev => (prev.some(t => t.id === fromUrl.id) ? prev : [...prev, fromUrl]));
     setActiveTabId(fromUrl.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, location.search]);
 
   // Used when a co-author has no known id on the target source: switch to
@@ -309,6 +308,22 @@ function App() {
                 About
               </Typography>
             </Button>
+            <HelpButton
+              label="Help"
+              color="inherit"
+              title="RankMe help"
+              sections={[
+                { title: 'Explore sources', description: 'Use Author to search DBLP or HAL identities. Structures are predefined HAL teams; Teams lets you create your own HAL or DBLP groups.' },
+                { title: 'Ranking source', description: 'The source badge in the top bar shows the current conference and journal ranking sources. Click it, or use Settings, to choose CORE, SJR, CCF or a custom ranking profile.' },
+                { title: 'Category and rank filter', description: 'The funnel button opens the current-view filter. Select publication categories and the ranking letters to include; category and rank choices constrain each other.' },
+                { title: 'Match corrections', description: 'The rules button opens your manual CORE/SJR/CCF match corrections. Review, remove, import or export corrections stored in this browser.' },
+                { title: 'Custom rankings', description: 'The leaderboard button manages custom ranking profiles. Create a profile and assign ranks to venues when the standard sources do not fit your use case.' },
+                { title: 'Read records', description: 'On a Records page, filters and sorting change the records shown. Export downloads the current view as Markdown, JSON or CSV. Its URL can be shared with ?export=md, ?export=json or ?export=csv.' },
+                { title: 'Build teams', description: 'A team has one source and a unique name. Typed ids, bulk entries and TXT files are validated before they are added. Team imports use JSON or CSV; member imports also accept TXT.' },
+                { title: 'Resolve identities and cross-check', description: 'Identity links connect a HAL idHal with a DBLP PID. Confirm or select a proposal, then cross-check to find records present on one source but absent from the other.' },
+                { title: 'More help', description: 'Use the ? icon on Records, Teams, Identity links and Cross-check for format examples and instructions specific to that screen.' },
+              ]}
+            />
           </Box>
           <Box display="flex" alignItems="center">
             <RankingSourceIndicator onOpenSettings={() => setSettingsDialogOpen(true)} />

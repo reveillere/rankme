@@ -2,6 +2,7 @@ import * as identityResolution from './identityResolution.js';
 import * as crosscheck from './crosscheck.js';
 import * as dblpLocal from './dblpLocal.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
+import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -55,14 +56,14 @@ async function mapWithConcurrency(items, limit, fn) {
 // createStructureCrossChecker. Wired to the real dependencies below.
 
 export function createTeamCrossChecker({ resolveHalIdentityForPid, resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }) {
-    return async function resolveTeamCrossCheck({ source, pids }, { confSource, journalSource }) {
+    return async function resolveTeamCrossCheck({ source, pids }, { confSource, journalSource, identityLinks = null }) {
         if (source !== 'dblp' && source !== 'hal') {
             throw new Error(`Team cross-check is only supported for source 'dblp' or 'hal', got '${source}'`);
         }
 
         const resolveMember = source === 'dblp'
-            ? pid => resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCrossCheckReport, getDblpName }, { confSource, journalSource })
-            : idHal => resolveHalSourcedMember(idHal, { resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }, { confSource, journalSource });
+            ? pid => resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCrossCheckReport, getDblpName }, { confSource, journalSource, identityLinks })
+            : idHal => resolveHalSourcedMember(idHal, { resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }, { confSource, journalSource, identityLinks });
 
         const memberResults = await mapWithConcurrency(pids, MEMBER_CONCURRENCY, resolveMember);
 
@@ -117,14 +118,15 @@ export function createTeamCrossChecker({ resolveHalIdentityForPid, resolveDblpId
 // is found, runs the actual crosscheck -- returns either a ready-to-fold-in
 // member ({ pid, idHal, name, report }) or an { unresolved } record for the
 // aggregation loop above to file straight into unresolvedMembers.
-async function resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCrossCheckReport, getDblpName }, { confSource, journalSource }) {
+async function resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCrossCheckReport, getDblpName }, { confSource, journalSource, identityLinks }) {
     // The dblp author's own name, independent of whether a HAL identity was
     // ever found -- identity.name only ever comes from the HAL side (a
     // fresh ORCID match's fullName_s, or nothing at all for a
     // personLinks-based resolution), so relying on it alone left both
     // resolved and unresolved members showing their bare pid twice
     // ("11/1262 (11/1262)") instead of a real name.
-    const [identity, dblpName] = await Promise.all([resolveHalIdentityForPid(pid), getDblpName(pid)]);
+    const [storedIdentity, dblpName] = await Promise.all([resolveHalIdentityForPid(pid), getDblpName(pid)]);
+    const identity = identityLinks?.byPid.has(pid) ? { idHal: identityLinks.byPid.get(pid), name: null } : storedIdentity;
     const name = dblpName || identity.name || null;
     if (!identity.idHal) {
         return { unresolved: { pid, name, candidateIdHal: null, candidateName: null } };
@@ -151,8 +153,9 @@ async function resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCros
 // byte-for-byte across the two directions (each direction only ever truly
 // *knows* one of the two ids up front), unlike the resolved `members` array
 // above, which always carries both once a member makes it that far.
-async function resolveHalSourcedMember(idHal, { resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }, { confSource, journalSource }) {
-    const identity = await resolveDblpIdentityForIdHal(idHal);
+async function resolveHalSourcedMember(idHal, { resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }, { confSource, journalSource, identityLinks }) {
+    const storedIdentity = await resolveDblpIdentityForIdHal(idHal);
+    const identity = identityLinks?.byIdHal.has(idHal) ? { pid: identityLinks.byIdHal.get(idHal), name: null } : storedIdentity;
     const dblpName = identity.pid ? await getDblpName(identity.pid) : null;
     // No cheap idHal-only name lookup exists on the HAL side to mirror
     // getDblpName with: hal.js's getAuthorInfo(idHal) only ever returns
@@ -191,7 +194,7 @@ export const getTeamCrossCheckReport = createTeamCrossChecker({
 });
 
 export async function controllerCrossCheckTeam(req, res) {
-    const { source, pids } = req.body || {};
+    const { source, pids, identityLinks: suppliedIdentityLinks } = req.body || {};
     if (!source || !Array.isArray(pids) || pids.length === 0) {
         res.status(400).json({ error: 'Bad Request', message: 'Missing source or non-empty pids array' });
         return;
@@ -199,10 +202,11 @@ export async function controllerCrossCheckTeam(req, res) {
     const confSource = confSourceFrom(req);
     const journalSource = journalSourceFrom(req);
     try {
-        const report = await getTeamCrossCheckReport({ source, pids }, { confSource, journalSource });
+        const identityLinks = parseIdentityLinks(suppliedIdentityLinks);
+        const report = await getTeamCrossCheckReport({ source, pids }, { confSource, journalSource, identityLinks });
         res.json(report);
     } catch (error) {
         console.log('Error during team cross-check computation', error);
-        res.status(400).json({ error: error.message });
+        res.status(error instanceof IdentityLinksConflictError ? 409 : 400).json({ error: error.message });
     }
 }

@@ -19,6 +19,7 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
@@ -239,6 +240,8 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
     const filenameBase = `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}`;
     if (initialExport === 'md') {
       exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `${filenameBase}.md`, sortMode });
+    } else if (initialExport === 'json') {
+      exportHalPublicationsJson(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `${filenameBase}.json`, sortMode });
     } else if (initialExport === 'csv') {
       exportHalPublicationsCsv(filteredRecords, { filename: `${filenameBase}.csv`, sortMode });
     }
@@ -254,9 +257,9 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
 
   return (
     <div className='App'>
-      <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>HAL records{structureName ? ` of ${structureName}` : ''}</h1>
-        <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2px' }}>
+      <RecordsHeader
+        title={<>HAL records{structureName ? ` of ${structureName}` : ''}</>}
+        details={<span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
           Structure of {memberIds.length} members
           <Tooltip title="View members">
             <IconButton size="small" onClick={() => setMembersDialogOpen(true)} aria-label="View members">
@@ -268,11 +271,14 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
               <LinkIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
-        </div>
-        <div style={{ fontSize: 'large', marginTop: '0.3em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        </div>
-      </div>
+        </span>}
+        showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
+        exportButton={<ExportButton
+          onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })}
+          onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })}
+          onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })}
+        />}
+      />
 
       <MemberListDialog
         open={membersDialogOpen}
@@ -286,6 +292,7 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
       <IdentityLinksPanel
         open={linksPanelOpen}
         onClose={() => setLinksPanelOpen(false)}
+        structId={structId}
         idHals={memberIds}
         resolveName={resolveMemberName}
       />
@@ -310,11 +317,6 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
         >
           Cross-check with DBLP
         </Button>
-        <ExportButton
-          onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })}
-          onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })}
-          onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })}
-        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}

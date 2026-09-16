@@ -22,6 +22,7 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { CrossCheckDialog } from './CrossCheckDialog';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -224,6 +225,8 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
     const filenameBase = `dblp-${pid.replace(/\//g, '-')}`;
     if (initialExport === 'md') {
       exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `${filenameBase}.md`, sortMode });
+    } else if (initialExport === 'json') {
+      exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `${filenameBase}.json`, sortMode });
     } else if (initialExport === 'csv') {
       exportDblpPublicationsCsv(filteredRecords, { filename: `${filenameBase}.csv`, sortMode });
     }
@@ -300,9 +303,9 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
 
   return (
     <div className='App'>
-      <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
-        <h1>DBLP records of {trimLastDigits(author.name)}</h1>
-        <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em' }}>
+      <RecordsHeader
+        title={<>DBLP records of {trimLastDigits(author.name)}</>}
+        details={<>
           pid: {pid}
           {authorInfo && (authorInfo.orcid
             ? <> · ORCID: <a href={authorInfo.orcid} target="_blank" rel="noreferrer">{authorInfo.orcid.replace('https://orcid.org/', '')}</a></>
@@ -312,11 +315,14 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
                 No ORCID linked to this DBLP record
               </span>
             ))}
-        </div>
-        <div style={{ fontSize: 'large', marginTop: '0.3em' }}>
-          {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        </div>
-      </div>
+        </>}
+        showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
+        exportButton={<ExportButton
+          onExportMarkdown={() => exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.md`, sortMode })}
+          onExportJson={() => exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.json`, sortMode })}
+          onExportCsv={() => exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-${pid.replace(/\//g, '-')}.csv`, sortMode })}
+        />}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
@@ -338,11 +344,6 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
         >
           Cross-check with HAL
         </Button>
-        <ExportButton
-          onExportMarkdown={() => exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.md`, sortMode })}
-          onExportJson={() => exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.json`, sortMode })}
-          onExportCsv={() => exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-${pid.replace(/\//g, '-')}.csv`, sortMode })}
-        />
       </div>
 
       <CrossCheckDialog open={crossCheckDialogOpen} onClose={() => setCrossCheckDialogOpen(false)} onConfirm={handleCrossCheckConfirm} suggestion={halSuggestion} />
@@ -384,6 +385,3 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
 
   );
 }
-
-
-

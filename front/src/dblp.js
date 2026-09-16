@@ -9,6 +9,7 @@ export const dblpCategories = {
 
 
 
+
 export async function searchAuthor(query) {
     const resp = await fetch(`/api/dblp/search/${query}`);
     return await resp.json();

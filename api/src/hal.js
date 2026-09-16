@@ -90,7 +90,7 @@ export async function controllerAuthorInfo(req, res) {
 // attached to a specific idHal_s instead, only ever present when that person
 // has actually linked an ORCID to their HAL account.
 export async function getAuthorInfo(idHal) {
-    const key = `hal:author-info:${idHal}`;
+    const key = `hal:author-info:v2:${idHal}`;
 
     let info = await cache.get(key);
     if (info == null) {
@@ -101,14 +101,14 @@ export async function getAuthorInfo(idHal) {
 }
 
 async function fetchAuthorInfo(idHal) {
-    const fields = 'idHal_s,orcidId_s';
+    const fields = 'idHal_s,orcidId_s,fullName_s';
     const url = `${BASE}/ref/author/?q=idHal_s:${encodeURIComponent(idHal)}&wt=json&rows=1&fl=${fields}`;
 
     const resp = await fetch(url);
     const data = await resp.json();
     const doc = data?.response?.docs?.[0];
 
-    return { idHal, orcid: doc?.orcidId_s?.[0] || null };
+    return { idHal, name: doc?.fullName_s || null, orcid: doc?.orcidId_s?.[0] || null };
 }
 
 // Reverse lookup of getAuthorInfo above: given a bare ORCID (no
@@ -200,7 +200,7 @@ async function fetchAuthorsInfoBatch(idHals) {
 }
 
 export async function controllerAuthor(req, res) {
-    const id = req.params[0];
+    const id = req.params[0] || req.params.idHal || req.body?.idHal;
     try {
         const publications = await getAuthorPublications(id);
         res.json(publications);
@@ -393,7 +393,7 @@ async function getStructureInfo(id) {
 }
 
 export async function controllerStructurePublications(req, res) {
-    const id = req.params[0];
+    const id = req.params[0] || req.params.structId || req.body?.structId;
     try {
         const { publications } = await getStructurePublications(id);
         res.json(publications);

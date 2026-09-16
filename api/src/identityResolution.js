@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getClient } from './db.js';
 import * as cache from './cache.js';
 import * as admin from './admin.js';
@@ -292,6 +293,27 @@ const resolveStructureCore = createIdentityResolver({
     savePersonLink: saveOrcidPersonLink,
 });
 
+// The structure dialog needs the DBLP-side display name next to a confirmed
+// pid. Fetch them in one local-Mongo query for the complete report instead
+// of doing one homepage lookup per member.
+async function fetchDblpNames(pids) {
+    if (pids.length === 0) return new Map();
+    const db = await getDblpDb();
+    const docs = await db.collection('www').find(
+        { _id: { $in: pids.map(pid => `${HOMEPAGE_PREFIX}${pid}`) } },
+        { projection: { author: 1 } }
+    ).toArray();
+    return new Map(docs.map(doc => [doc._id.slice(HOMEPAGE_PREFIX.length), firstOf(doc.author)]));
+}
+
+async function resolveStructureWithDblpNames(structId) {
+    const report = await resolveStructureCore(structId);
+    const names = await fetchDblpNames(report.flatMap(member => member.resolved?.pid ? [member.resolved.pid] : []));
+    return report.map(member => member.resolved
+        ? { ...member, resolved: { ...member.resolved, name: names.get(member.resolved.pid) || null } }
+        : member);
+}
+
 // ****************************************************************************************************
 // ****************************************************************************************************
 
@@ -300,20 +322,44 @@ const CACHE_TTL_S = 60 * 60; // 1h -- short-lived on purpose, same rationale as 
                               // confirmation) are a cheap Mongo lookup each, not an expensive
                               // re-fetch, so there is little being saved beyond the matching work itself.
 
-export async function getIdentityResolutionReport(structId) {
-    const dblpStatus = await admin.getDblpStatus();
-    // Keyed on the dblp dump's own version -- a re-import can change which
-    // dblp pid a given name/token search finds, so a stale cached report
-    // must not survive it (see crosscheck.js's identical reasoning).
-    const key = `identity:structure:${structId}:${dblpStatus.version}`;
-
-    const cached = await cache.get(key);
-    if (cached !== null) return cached;
-
-    const report = await resolveStructureCore(structId);
-    await cache.set(key, report, CACHE_TTL_S);
-    return report;
+// Read Mongo directly: this fingerprint covers manual writes, imports, deletes
+// and automatic ORCID links, including changes made by another API process.
+// Global invalidation is intentional: personLinks is small, and this avoids
+// maintaining a reverse index of every structure containing a person.
+export function personLinksVersion(links) {
+    const rows = links.map(({ idHal, pid, source }) => JSON.stringify([idHal, pid, source])).sort();
+    return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
+
+export async function getPersonLinksVersion() {
+    const col = await personLinksCollection();
+    const links = await col.find({}, { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } }).toArray();
+    return personLinksVersion(links);
+}
+
+export function createIdentityReportGetter({ getDblpStatus, getPersonLinksVersion, resolveStructure, getCache, setCache }) {
+    return async function getIdentityReport(structId) {
+        const dblpStatus = await getDblpStatus();
+        const linksVersion = await getPersonLinksVersion();
+        const key = `identity:structure:v2:${structId}:${dblpStatus.version}:${linksVersion}`;
+        const cached = await getCache(key);
+        if (cached !== null) return cached;
+
+        const report = await resolveStructure(structId);
+        // Keep the version read BEFORE computation: a concurrent identity
+        // edit must never publish an old report under the new version.
+        await setCache(key, report, CACHE_TTL_S);
+        return report;
+    };
+}
+
+export const getIdentityResolutionReport = createIdentityReportGetter({
+    getDblpStatus: admin.getDblpStatus,
+    getPersonLinksVersion,
+    resolveStructure: resolveStructureWithDblpNames,
+    getCache: cache.get,
+    setCache: cache.set,
+});
 
 export async function controllerResolveStructure(req, res) {
     const structId = req.params.structId;
@@ -324,6 +370,59 @@ export async function controllerResolveStructure(req, res) {
         console.error('Error during identity-resolution computation', error);
         res.status(400).json({ error: error.message });
     }
+}
+
+// Same resolver used for a structure, but the member list is supplied by a
+// client-side team. HAL teams therefore get the identical name+ORCID logic.
+async function resolveHalTeamMembers(members) {
+    const result = new Map();
+    const pending = [];
+    for (const member of members) {
+        const existing = await fetchPersonLink(member.id);
+        if (existing) result.set(member.id, { idHal: member.id, name: member.name, resolved: { pid: existing.pid, source: existing.source }, confidence: 'confirmed', candidates: [] });
+        else pending.push(member);
+    }
+    const [orcids, exact] = await Promise.all([hal.getAuthorsInfo(pending.map(m => m.id)), fetchExactCandidates(pending.map(m => m.name).filter(Boolean))]);
+    for (const member of pending) {
+        if (!member.name) { result.set(member.id, { idHal: member.id, name: null, resolved: null, confidence: 'not-found', candidates: [] }); continue; }
+        const exactCandidates = exact.get(member.name) || [];
+        const candidates = exactCandidates.length ? exactCandidates : await fetchTokenCandidates(member.name);
+        const arbitration = arbitrate(candidates, exactCandidates.length ? 'exact' : 'tokens', new Set(orcids.get(member.id) || []));
+        if (arbitration.confidence === 'confirmed') await saveOrcidPersonLink(member.id, arbitration.resolved.pid);
+        result.set(member.id, { idHal: member.id, name: member.name, ...arbitration });
+    }
+    const report = members.map(member => result.get(member.id));
+    const names = await fetchDblpNames(report.flatMap(member => member.resolved?.pid ? [member.resolved.pid] : []));
+    return report.map(member => member.resolved
+        ? { ...member, resolved: { ...member.resolved, name: names.get(member.resolved.pid) || null } }
+        : member);
+}
+
+async function resolveDblpTeamMembers(members) {
+    const names = await fetchDblpNames(members.map(member => member.id));
+    return Promise.all(members.map(async member => {
+        const name = names.get(member.id) || member.name || null;
+        const existing = await fetchPersonLinkByPid(member.id);
+        if (existing) {
+            const halInfo = await hal.getAuthorInfo(existing.idHal);
+            return { pid: member.id, name, resolved: { idHal: existing.idHal, name: halInfo.name, source: existing.source }, confidence: 'confirmed', candidates: [] };
+        }
+        const orcid = await getAuthorOrcid(member.id);
+        const orcidMatch = orcid && await hal.findAuthorByOrcid(orcid);
+        if (orcidMatch) {
+            await saveOrcidPersonLink(orcidMatch.idHal, member.id);
+            return { pid: member.id, name, resolved: { idHal: orcidMatch.idHal, name: orcidMatch.name, source: 'orcid' }, confidence: 'confirmed', candidates: [] };
+        }
+        const candidates = name ? (await hal.searchAuthor(name)).map(candidate => ({ idHal: candidate.id, name: candidate.author })) : [];
+        return { pid: member.id, name, resolved: null, confidence: candidates.length ? 'unresolved' : 'not-found', candidates };
+    }));
+}
+
+export async function controllerResolveTeam(req, res) {
+    const { source, members } = req.body || {};
+    if (!['hal', 'dblp'].includes(source) || !Array.isArray(members)) return res.status(400).json({ error: 'Bad Request' });
+    try { res.json(source === 'hal' ? await resolveHalTeamMembers(members) : await resolveDblpTeamMembers(members)); }
+    catch (error) { console.error('Error resolving team identities', error); res.status(400).json({ error: error.message }); }
 }
 
 // Manual confirmation, on the model of matchOverrides.js's controllerRecord:

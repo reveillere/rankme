@@ -4,7 +4,7 @@ import * as admin from './admin.js';
 import { createDblpSearch } from './dblpSearchCache.js';
 
 export async function controllerAuthor(req, res) {
-    const authorPID = req.params[0];
+    const authorPID = req.params[0] || req.params.pid || req.body?.pid;
     try {
         // Local dump only -- see admin.js's dagstuhlDumpUrls/extractVenues:
         // the dump this serves from is fetched from Dagstuhl's DROPS mirror
@@ -25,6 +25,17 @@ export async function controllerAuthor(req, res) {
         const localNames = await dblpLocal.getAuthorNames(authorPID);
         if (localNames == null) {
             res.status(404).json({ error: `No local DBLP record for PID ${authorPID}` });
+            return;
+        }
+        // The browser's legacy GET only needs the display name. The
+        // documented POST API is the records endpoint, so it returns the
+        // actual DBLP publications too.
+        if (req.method === 'POST') {
+            const records = await dblpLocal.getPublicationsByNames(localNames);
+            res.json({
+                author: { pid: authorPID, name: localNames[0] || authorPID },
+                records,
+            });
             return;
         }
         res.json({ dblpperson: { $: { name: localNames[0] || authorPID } } });

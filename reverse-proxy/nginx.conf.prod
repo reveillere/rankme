@@ -172,6 +172,11 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Swagger UI needs a trailing slash for its relative CSS/JS assets.
+        location = /api/docs {
+            return 302 /api/docs/;
+        }
+
         location ^~ /api/ {
             set $api_upstream api;
             # proxy_pass can't strip the /api/ prefix itself once the
