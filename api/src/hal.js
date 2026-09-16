@@ -35,9 +35,13 @@ export async function searchAuthor(searchQuery) {
     const data = await resp.json();
     const docs = data?.response?.docs || [];
 
-    // Each HAL "form" (person record) may appear twice: once as the
-    // PREFERRED entry (with idHal_s) and once as a bare INCOMING duplicate.
-    // Keep only one entry per form_i, preferring the one with idHal_s.
+    // Two levels of merging, both needed (verified against a live case: a
+    // search for "Leo Mendiboure" returning 5 raw docs for this one person).
+    //
+    // Level 1 -- each HAL "form" (person record) may appear twice: once as
+    // the PREFERRED entry (with idHal_s) and once as a bare INCOMING
+    // duplicate of the exact same form_i. Merge those first, preferring the
+    // one with idHal_s.
     const byForm = new Map();
     for (const doc of docs) {
         if (!doc.fullName_s) continue;
@@ -46,8 +50,20 @@ export async function searchAuthor(searchQuery) {
             byForm.set(doc.form_i, doc);
         }
     }
+    // Level 2 -- two DISTINCT form_i can still share the same idHal_s once
+    // HAL has administratively merged them (the live case: "Léo Mendiboure"
+    // form 1799832 and "Leo Mendiboure" form 1788332 both resolve to idHal_s
+    // "leo-mendiboure") -- level 1 alone left both standing since they never
+    // shared a form_i to merge on. A form with no idHal_s at all (never
+    // claimed) has no shared identity to merge on beyond level 1, so it
+    // keeps its own form_i as the key here.
+    const byIdentity = new Map();
+    for (const doc of byForm.values()) {
+        const key = doc.idHal_s || `form:${doc.form_i}`;
+        if (!byIdentity.has(key)) byIdentity.set(key, doc);
+    }
 
-    return [...byForm.values()].map(doc => ({
+    return [...byIdentity.values()].map(doc => ({
         author: doc.fullName_s,
         id: doc.idHal_s || `form:${doc.form_i}`,
         affiliation: doc.emailDomain_s || [],
@@ -56,6 +72,132 @@ export async function searchAuthor(searchQuery) {
 
 // ****************************************************************************************************
 // ****************************************************************************************************
+
+export async function controllerAuthorInfo(req, res) {
+    const id = req.params[0];
+    try {
+        const info = await getAuthorInfo(id);
+        res.json(info);
+    } catch (error) {
+        console.log('Error during HAL author-info computation', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
+// idHal + ORCID for a single HAL identity -- distinct from ref/author's own
+// authORCIDIdExt_s (present on *publication* records, one array per doc with
+// no reliable alignment to the author list). ref/author's own orcidId_s is
+// attached to a specific idHal_s instead, only ever present when that person
+// has actually linked an ORCID to their HAL account.
+export async function getAuthorInfo(idHal) {
+    const key = `hal:author-info:${idHal}`;
+
+    let info = await cache.get(key);
+    if (info == null) {
+        info = await fetchAuthorInfo(idHal);
+        cache.set(key, info, 60 * 60 * 24); // 1 day, same as searchAuthor
+    }
+    return info;
+}
+
+async function fetchAuthorInfo(idHal) {
+    const fields = 'idHal_s,orcidId_s';
+    const url = `${BASE}/ref/author/?q=idHal_s:${encodeURIComponent(idHal)}&wt=json&rows=1&fl=${fields}`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const doc = data?.response?.docs?.[0];
+
+    return { idHal, orcid: doc?.orcidId_s?.[0] || null };
+}
+
+// Reverse lookup of getAuthorInfo above: given a bare ORCID (no
+// https://orcid.org/ prefix -- orcidId_s itself is stored bare, unlike
+// dblp's own url field), find the HAL identity that claims it, if any.
+// Used by identityResolution.js's /identity/suggest/:pid to propose a HAL
+// identity for a dblp author from their dblp-side ORCID alone, without
+// requiring them to already be a known lab member (unlike
+// resolveStructure, which only ever looks at one structure's membership).
+export async function findAuthorByOrcid(orcid) {
+    const key = `hal:orcid-lookup:${orcid}`;
+
+    // Same false-vs-null cache convention as getStructureInfo above: `null`
+    // is a legitimate "no HAL identity claims this ORCID" result, so a plain
+    // `== null` check here would re-fetch on every call for an author who
+    // simply has no HAL account.
+    let info = await cache.get(key);
+    if (info === null) {
+        const found = await fetchAuthorByOrcid(orcid);
+        info = found || false;
+        cache.set(key, info, 60 * 60 * 24); // 1 day, same as getAuthorInfo
+    }
+    return info || null;
+}
+
+async function fetchAuthorByOrcid(orcid) {
+    const fields = 'idHal_s,fullName_s';
+    const url = `${BASE}/ref/author/?q=orcidId_s:${encodeURIComponent(`"${orcid}"`)}&wt=json&rows=1&fl=${fields}`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const doc = data?.response?.docs?.[0];
+
+    return doc?.idHal_s ? { idHal: doc.idHal_s, name: doc.fullName_s } : null;
+}
+
+// Batched sibling of getAuthorInfo above, for identityResolution.js: a lab's
+// membership can run into the hundreds of idHal_s, and looking each one up
+// individually would serialize hundreds of Solr round-trips behind the
+// shared throttler (throttler.js's default_limiter is maxConcurrent:1).
+// Chunking 100 idHal_s per query (measured ~0.2s/batch against HAL) keeps
+// this a handful of requests instead. Cached per idHal (not per batch) so a
+// later call needing only some of the same idHals still gets cache hits.
+//
+// Returns a Map<idHal, orcid[]> -- plural, unlike getAuthorInfo's single
+// `orcid`: orcidId_s has been observed carrying more than one entry for a
+// single idHal_s (a person with duplicated/merged HAL forms), and
+// identityResolution.js needs the full set to check for any overlap with
+// dblp's own extracted ORCID, not just the first value.
+const AUTHOR_INFO_BATCH_SIZE = 100;
+
+export async function getAuthorsInfo(idHals) {
+    const result = new Map();
+    if (idHals.length === 0) return result;
+
+    const keys = idHals.map(idHal => `hal:orcid-batch:${idHal}`);
+    const cached = await cache.mget(keys);
+    const uncached = idHals.filter((idHal, i) => !cached.has(keys[i]));
+    idHals.forEach((idHal, i) => {
+        if (cached.has(keys[i])) result.set(idHal, cached.get(keys[i]));
+    });
+
+    for (let i = 0; i < uncached.length; i += AUTHOR_INFO_BATCH_SIZE) {
+        const batch = uncached.slice(i, i + AUTHOR_INFO_BATCH_SIZE);
+        const orcidsByIdHal = await fetchAuthorsInfoBatch(batch);
+        for (const idHal of batch) {
+            const orcids = orcidsByIdHal.get(idHal) || [];
+            result.set(idHal, orcids);
+            cache.set(`hal:orcid-batch:${idHal}`, orcids, 60 * 60 * 24); // 1 day, same as getAuthorInfo
+        }
+    }
+    return result;
+}
+
+async function fetchAuthorsInfoBatch(idHals) {
+    const fields = 'idHal_s,orcidId_s';
+    const idHalQuery = idHals.map(id => `"${id}"`).join(' OR ');
+    const url = `${BASE}/ref/author/?q=idHal_s:${encodeURIComponent(`(${idHalQuery})`)}&wt=json&rows=${idHals.length}&fl=${fields}`;
+
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const docs = data?.response?.docs || [];
+
+    const orcidsByIdHal = new Map();
+    for (const doc of docs) {
+        if (doc.idHal_s) orcidsByIdHal.set(doc.idHal_s, doc.orcidId_s || []);
+    }
+    return orcidsByIdHal;
+}
 
 export async function controllerAuthor(req, res) {
     const id = req.params[0];
@@ -119,7 +261,7 @@ async function fetchAuthorPublications(id) {
 const PAGE_SIZE = 10000;
 
 async function fetchPublicationsByFilter(filter, { extraFields, onDoc } = {}) {
-    const fields = `docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s${extraFields ? `,${extraFields}` : ''}`;
+    const fields = `docid,title_s,docType_s,publicationDateY_i,conferenceTitle_s,journalTitle_s,authFullName_s,authIdHalFullName_fs,uri_s,doiId_s,arxivId_s${extraFields ? `,${extraFields}` : ''}`;
     // publicationDateY_i is only a YEAR -- thousands of docs share the same
     // value for a lab-sized structure, so it alone isn't a stable sort key
     // for deep `start`-based pagination: Solr is free to order same-year
@@ -158,6 +300,10 @@ async function fetchPublicationsByFilter(filter, { extraFields, onDoc } = {}) {
         year: doc.publicationDateY_i,
         venue: doc.conferenceTitle_s || doc.journalTitle_s || null,
         doi: doc.doiId_s || null,
+        // Bare id (e.g. "0809.2679"), occasionally vN-suffixed -- confirmed
+        // live against HAL's API. Used by crosscheck.js to exact-match
+        // against a dblp CoRR/arXiv entry when there's no DOI on either side.
+        arxivId: doc.arxivId_s || null,
         authors: parseAuthors(doc),
         url: doc.uri_s,
     }));

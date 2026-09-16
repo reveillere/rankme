@@ -7,6 +7,11 @@ import * as ccf from './ccfPortal.js';
 import * as admin from './admin.js';
 import * as authorStream from './authorStream.js';
 import * as matchOverrides from './matchOverrides.js';
+import * as crosscheck from './crosscheck.js';
+import * as crosscheckOverrides from './crosscheckOverrides.js';
+import * as crosscheckStructure from './crosscheckStructure.js';
+import * as crosscheckTeam from './crosscheckTeam.js';
+import * as identityResolution from './identityResolution.js';
 
 const router = express.Router();
 
@@ -33,10 +38,12 @@ router.get('/ranking-editions', async (req, res) => {
 
 router.get('/dblp/status', admin.controllerDblpStatus);
 router.get('/dblp/author/*', dblp.controllerAuthor);
+router.get('/dblp/author-info/*', dblp.controllerAuthorInfo);
 router.get('/dblp/search/*', dblp.controllerSearch);
 router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
 
 router.get('/hal/author/*', hal.controllerAuthor);
+router.get('/hal/author-info/*', hal.controllerAuthorInfo);
 router.get('/hal/search/*', hal.controllerSearch);
 router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
 
@@ -45,12 +52,29 @@ router.get('/hal/structure-search/*', hal.controllerSearchStructure);
 router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
 
+router.get('/identity/structure/:structId', identityResolution.controllerResolveStructure);
+router.post('/identity/link', identityResolution.controllerRecordLink);
+router.get('/identity/links', identityResolution.controllerListLinks);
+router.delete('/identity/link', identityResolution.controllerDeleteLink);
+router.post('/identity/links/import', identityResolution.controllerImportLinks);
+router.get('/identity/suggest/*', identityResolution.controllerSuggestIdentity);
+router.get('/identity/suggest-dblp/:idHal', identityResolution.controllerSuggestDblpIdentity);
+
 router.get('/rank/core/candidates', core.controllerCandidates);
 router.get('/rank/sjr/candidates', sjr.controllerCandidates);
 router.get('/rank/ccf/candidates', ccf.controllerCandidates);
 
 router.post('/match-overrides', matchOverrides.controllerRecord);
 router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);
+
+router.get('/crosscheck/author/*', crosscheck.controllerCrossCheck);
+router.get('/crosscheck/structure/:structId', crosscheckStructure.controllerCrossCheckStructure);
+// POST, not GET .../*: a team's member list (dblp pids) comes from the
+// client's own localStorage (front/src/teamStore.js -- the server has no
+// notion of a team at all) and can be long, so it travels in the body
+// rather than a query string the way a single wildcard id does above.
+router.post('/crosscheck/team', crosscheckTeam.controllerCrossCheckTeam);
+router.post('/crosscheck/override', crosscheckOverrides.controllerRecord);
 
 // requireAdminToken added here: this triggers a full drop + rebuild of
 // every DBLP collection (see admin.js's processXML) -- CPU/memory/disk

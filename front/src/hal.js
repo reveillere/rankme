@@ -17,10 +17,15 @@ const halCategoriesRaw = {
   'UNDEFINED': { name: 'Other', cssClass: 'informal' },
 };
 
+// letter (alongside color) is likewise borrowed from the matching dblp
+// category -- e.g. HAL's ART/COUV/... all become 'j'/'p'/... the same way
+// dblp's own 'article'/'incollection'/... do, so a HAL publication's row
+// number (see HalPublications.js) reads the same as a dblp one of the same
+// kind instead of using a separate lettering scheme.
 export const halCategories = Object.fromEntries(
   Object.entries(halCategoriesRaw).map(([key, value]) => [
     key,
-    { ...value, color: dblpCategories[value.cssClass].color },
+    { ...value, color: dblpCategories[value.cssClass].color, letter: dblpCategories[value.cssClass].letter },
   ])
 );
 
@@ -30,6 +35,14 @@ export function getHalCategory(type) {
 
 export async function searchAuthor(query) {
   const resp = await fetch(`/api/hal/search/${query}`);
+  return await resp.json();
+}
+
+// { idHal, orcid } -- orcid is null when this HAL identity hasn't linked
+// one (see api/src/hal.js's getAuthorInfo for why this isn't derived from
+// the publication list itself).
+export async function fetchAuthorInfo(idHal) {
+  const resp = await fetch(`/api/hal/author-info/${idHal}`);
   return await resp.json();
 }
 

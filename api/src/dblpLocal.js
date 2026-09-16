@@ -90,6 +90,62 @@ export async function getAuthorNames(pid) {
     return toArray(person.author).filter(Boolean);
 }
 
+// ORCID is not a dedicated dblp field: it's one of several URLs (alongside
+// Google Scholar/ACM/IEEE/...) on a person's own www/homepages/<pid> record,
+// recognizable only by its https://orcid.org/ prefix. Observed to appear at
+// most once per record, but this doesn't crash if that ever changes -- it
+// just returns the first one found. Exported so identityResolution.js
+// shares this one implementation instead of a second, possibly-drifting copy.
+const ORCID_URL = /orcid\.org\/(\d{4}-\d{4}-\d{4}-\d{3}[\dX])/i;
+
+export function extractOrcid(url) {
+    for (const candidate of toArray(url)) {
+        if (typeof candidate !== 'string') continue;
+        const match = ORCID_URL.exec(candidate);
+        if (match) return match[1];
+    }
+    return null;
+}
+
+// pid's own ORCID, read off the same homepage record getAuthorNames reads --
+// a second query (not folded into getAuthorNames itself) since most callers
+// of getAuthorNames never need it, and this is cheap on its own (single
+// indexed _id lookup, url-only projection).
+export async function getAuthorOrcid(pid) {
+    const db = await getDb();
+    const person = await db.collection('www').findOne({ _id: `${HOMEPAGE_PREFIX}${pid}` }, { projection: { url: 1 } });
+    return person ? extractOrcid(person.url) : null;
+}
+
+// Reverse of extractOrcid above: given a bare ORCID (no https://orcid.org/
+// prefix -- the same bare form extractOrcid itself returns, and the form
+// hal.js's own orcidId_s is stored in), find the dblp homepage record whose
+// <url> carries it.
+//
+// There is no index on `url` (unlike `author`/`authorTokens`, see
+// admin.js's ensureIndexes), so this is a full scan of the ~4.2M-doc www
+// collection -- measured at ~5s in a previous session. That cost is exactly
+// why a reverse ORCID scan was ruled out as a LAB-WIDE resolution path (see
+// identityResolution.js's own module header: hundreds of members, hundreds
+// of 5s scans). This function is different: identityResolution.js's
+// resolveDblpIdentityForIdHal calls it for exactly ONE person at a time, on
+// demand (a single "Cross-check with DBLP" click) -- paying 5s once,
+// interactively, is acceptable and explicitly in scope there.
+//
+// No $elemMatch needed: Mongo already matches a regex against an array
+// field element-wise for a single-condition query like this one (only a
+// query needing more than one condition to hold on the SAME array element
+// would need $elemMatch).
+export async function findAuthorByOrcid(orcid) {
+    const db = await getDb();
+    const doc = await db.collection('www').findOne(
+        { _id: { $regex: `^${HOMEPAGE_PREFIX}` }, url: new RegExp(escapeRegex(orcid)) },
+        { projection: { author: 1 } },
+    );
+    if (!doc) return null;
+    return { pid: doc._id.slice(HOMEPAGE_PREFIX.length), name: firstOf(doc.author) };
+}
+
 // Every inproceedings/article record whose author list contains any of this
 // person's known name variants, shaped the same way dblp.js's
 // normalizePublications shapes a live-fetched author's publications so
@@ -101,21 +157,36 @@ export async function getAuthorNames(pid) {
 // relying on dblp's own upstream disambiguation (colliding names get a
 // trailing "0001"/"0002"... suffix at the source) rather than anything
 // this app adds on top.
-export async function getPublicationsByNames(names) {
+// `skipCoAuthorResolution` skips the resolveAuthorPids fan-out over the
+// ~14k-doc www collection (~0.9s) entirely -- worth it for a caller (e.g.
+// crosscheck.js) that never renders co-author links and would otherwise pay
+// for a lookup whose result it throws away. Field projection is likewise
+// narrowed to what such a caller actually reads (toPublication's dblp
+// shape); default behavior (no options) is unchanged for every other
+// caller, which still needs full docs and resolved pids.
+export async function getPublicationsByNames(names, { skipCoAuthorResolution = false } = {}) {
     if (!names || names.length === 0) return [];
     const db = await getDb();
+    const projection = skipCoAuthorResolution
+        ? { projection: { title: 1, year: 1, booktitle: 1, journal: 1, ee: 1, key: 1, author: 1 } }
+        : {};
     const [inproceedings, articles] = await Promise.all([
-        db.collection('inproceedings').find({ author: { $in: names } }).toArray(),
-        db.collection('article').find({ author: { $in: names } }).toArray(),
+        db.collection('inproceedings').find({ author: { $in: names } }, projection).toArray(),
+        db.collection('article').find({ author: { $in: names } }, projection).toArray(),
     ]);
 
-    // Every co-author appearing anywhere in this author's own publications,
-    // resolved to a pid in one batched query -- not one lookup per
-    // publication/co-author -- see resolveAuthorPids.
-    const coAuthorNames = new Set();
-    for (const doc of inproceedings) toArray(doc.author).forEach(n => coAuthorNames.add(n));
-    for (const doc of articles) toArray(doc.author).forEach(n => coAuthorNames.add(n));
-    const pidByName = await resolveAuthorPids([...coAuthorNames]);
+    let pidByName;
+    if (skipCoAuthorResolution) {
+        pidByName = new Map();
+    } else {
+        // Every co-author appearing anywhere in this author's own
+        // publications, resolved to a pid in one batched query -- not one
+        // lookup per publication/co-author -- see resolveAuthorPids.
+        const coAuthorNames = new Set();
+        for (const doc of inproceedings) toArray(doc.author).forEach(n => coAuthorNames.add(n));
+        for (const doc of articles) toArray(doc.author).forEach(n => coAuthorNames.add(n));
+        pidByName = await resolveAuthorPids([...coAuthorNames]);
+    }
 
     const publications = [
         ...inproceedings.map(doc => toPublication(doc, 'inproceedings', pidByName)),

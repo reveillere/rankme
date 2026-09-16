@@ -7,13 +7,16 @@ import Tooltip from '@mui/material/Tooltip';
 import { RankBadge } from './RankBadge';
 import { DoiChip } from './DoiChip';
 import { getOverride, getSharedOverride } from '../matchOverrides';
+import { orderPublicationsForDisplay } from '../rankOrder';
 
 // dblp's own <ee> element(s) -- usually a DOI link, but a record can carry
 // several (e.g. also an arXiv mirror) and a repeated field comes back as an
 // array rather than a lone string (see admin.js's wireRecordParser) -- so
 // this accepts either shape and returns the first entry that's actually a
-// doi.org link, ready to use directly as an href.
-function findDoiUrl(ee) {
+// doi.org link, ready to use directly as an href. Exported so CrossCheck.js
+// derives a dblp record's DOI link the exact same way this file already
+// does, instead of a second, possibly-drifting implementation.
+export function findDoiUrl(ee) {
   const urls = Array.isArray(ee) ? ee : (ee ? [ee] : []);
   return urls.find(u => /^https?:\/\/doi\.org\//i.test(u)) || null;
 }
@@ -61,7 +64,14 @@ const title = (o) => {
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <type>" className) moved to PublicationsItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor, sharedMaps, activeCustomProfileIds }) {
+//
+// Exported (like findDoiUrl above) so CrossCheck.js can render a DBLP
+// publication exactly like the plain author page does -- colored type box,
+// rank badge, clickable co-authors, Venue -- instead of the plain-text
+// ListItemText it used to have of its own. CrossCheck.js's own list is at
+// most a few dozen items, so it renders these directly in a plain map, with
+// no Virtuoso involved.
+export const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOpenAuthor, sharedMaps, activeCustomProfileIds }) {
   const year = item.dblp.year;
   const [, forceRowRefresh] = useState(0);
   const portal = item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'inproceedings' ? 'core' : 'sjr');
@@ -79,7 +89,12 @@ const PublicationRow = React.memo(function PublicationRow({ item, nr, pids, onOp
           <img alt="paper" src="https://dblp.org/img/n.png" />
         </div>
       </Tooltip>
-      <div className="nr">[{nr}]</div>
+      {/* nr is omitted (not just blank) by callers numbering a publication
+          in a scope narrower than "this whole author/team" (e.g.
+          CrossCheck.js's "To review" section, where it would sit right next
+          to a HAL candidate row that never gets one either -- see
+          HalPublicationRow's identical comment for why). */}
+      {nr && <div className="nr">[{nr}]</div>}
       <div className="rank">
       <RankBadge rank={item.rank} portal={portal} year={year} resolvedFullName={item.fullName} sharedMaps={sharedMaps} activeCustomProfileId={activeCustomProfileId} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
@@ -135,8 +150,14 @@ const PublicationsList = React.forwardRef(function PublicationsList({ style, chi
 // between flushes while Virtuoso's own internal range tracking is briefly a
 // tick behind). Virtuoso calls this wrapper independently of itemContent,
 // so it needs its own guard rather than relying on itemContent's.
+// row.kind is 'entry' for a publication row, or a group header otherwise --
+// 'year' (date-first sort modes) or 'rankTier' (rank-first mode, see
+// Publications()'s own rows useMemo) both get the same 'year' class: it's
+// purely a header style (small, bold -- see App.css's ul.publ-list>li.year),
+// not literally about years, so a rank-tier header reuses it rather than
+// needing its own CSS rule.
 const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row, children, style, ...props }, ref) {
-  const className = !row ? '' : row.kind === 'year' ? 'year' : `entry ${row.item.type}`;
+  const className = !row ? '' : row.kind === 'entry' ? `entry ${row.item.type}` : 'year';
   return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
@@ -162,7 +183,7 @@ function PublicationsFooter() {
 // the data-fetching hook that owns the actual SSE subscription lives in the
 // caller (AuthorContent et al.), not here, so it keeps accumulating
 // regardless and switching back shows current data immediately.
-export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps, activeCustomProfileIds, isActive = true }) {
+export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps, activeCustomProfileIds, isActive = true, sortMode = 'date' }) {
   // A stable reference -- `selfPids || [author.pid]` would otherwise
   // recompute to a brand new array every render (breaking PublicationRow's
   // memoization above for every single row), even though the actual pid
@@ -200,22 +221,40 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       acc[curr.type] = (acc[curr.type] || 0) + 1;
       return acc;
     }, {});
-    let previousYear = null;
-    const out = [];
-    for (const item of pubs) {
-      const displayYear = previousYear !== item.dblp.year;
-      previousYear = item.dblp.year;
-      if (displayYear) out.push({ kind: 'year', key: `year-${item.dblp.year}`, year: item.dblp.year });
-      const nr = dblpCategories[item.type].letter + typeCounts[item.type]--;
-      // dblp.key (the record's own <key> attribute), not dblp.url: url
-      // isn't reliably unique (DBLP groups some distinct records, e.g.
-      // several different RFCs, under one shared bibliography page url) --
-      // see dblpLocal.js's identical comment on why this matters for
-      // Virtuoso's row identity specifically.
-      out.push({ kind: 'entry', key: item.dblp.key, item, nr });
-    }
-    return out;
-  }, [data, isActive]);
+    // nr (e.g. "[j5]") is computed here, once, walking `pubs` in this fixed
+    // year-descending order -- regardless of sortMode below. A publication's
+    // number must stay the same no matter which sort/group view is currently
+    // showing, or the same entry would appear to change its own number
+    // every time the reader switches modes, which would be confusing rather
+    // than useful.
+    const numbered = pubs.map(item => ({
+      item,
+      nr: dblpCategories[item.type].letter + typeCounts[item.type]--,
+    }));
+    // dblp.key (the record's own <key> attribute), not dblp.url: url isn't
+    // reliably unique (DBLP groups some distinct records, e.g. several
+    // different RFCs, under one shared bibliography page url) -- see
+    // dblpLocal.js's identical comment on why this matters for Virtuoso's
+    // row identity specifically.
+    const entryRow = ({ item, nr }) => ({ kind: 'entry', key: item.dblp.key, item, nr });
+
+    // The grouping/ordering itself lives in rankOrder.js's
+    // orderPublicationsForDisplay -- shared with exportPublications.js so a
+    // downloaded CSV/Markdown file groups its rows exactly the way this page
+    // currently does, instead of a second, possibly-drifting implementation
+    // of the same algorithm. Reconstructed back into this file's own
+    // 'entry'/'year'/'rankTier' row shape below, unchanged from before this
+    // was extracted.
+    const ordered = orderPublicationsForDisplay(numbered, sortMode, {
+      yearOf: entry => entry.item.dblp.year,
+      rankOf: entry => entry.item.rank,
+    });
+    return ordered.map(row => row.kind === 'item'
+      ? entryRow(row.record)
+      : row.groupKind === 'rankTier'
+        ? { kind: 'rankTier', key: `rankTier-${row.tier}`, tier: row.tier, label: row.label }
+        : { kind: 'year', key: `year-${row.year}`, year: row.year });
+  }, [data, isActive, sortMode]);
 
   // The row list is what's expensive here (it's what re-renders on every
   // streamed SSE flush) -- a backgrounded tab still gets this far (pids/rows
@@ -260,9 +299,11 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       components={{ List: PublicationsList, Item: PublicationsItem, Footer: PublicationsFooter }}
       itemContent={(index, row) => !row
         ? null
-        : row.kind === 'year'
-          ? row.year
-          : <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />}
+        : row.kind === 'entry'
+          ? <PublicationRow item={row.item} nr={row.nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
+          : row.kind === 'rankTier'
+            ? row.label
+            : row.year}
     />
   );
 }

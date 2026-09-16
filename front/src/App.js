@@ -16,6 +16,9 @@ import { Team } from './component/Team';
 import Teams from './component/Teams';
 import { Structure } from './component/Structure';
 import StructureSearch from './component/StructureSearch';
+import { CrossCheck } from './component/CrossCheck';
+import { CrossCheckTeam } from './component/CrossCheckTeam';
+import { CrossCheckStructure } from './component/CrossCheckStructure';
 import About, { HIDE_ON_START_KEY } from './component/About';
 import { SettingsDialog } from './component/SettingsDialog';
 import { CategoriesFilterButton } from './component/CategoriesFilterButton';
@@ -39,36 +42,147 @@ const PERSISTENT_TABS = [{ id: SEARCH_TAB_ID, type: 'search' }, { id: TEAMS_TAB_
 // the raw pathname, not a <Routes>/<Route> tree) since every tab is already
 // mounted at once and toggled via display:none/block to preserve its state
 // across switches — real route matching would fight that.
+// yearRange (?from=&to=), sort (?sort=) and export (?export=) for the 4 tab
+// types that carry all three (dblp-author/hal-author/team/hal-structure) --
+// same "omit when absent/default" rule for yearRange/sort, see their own
+// comments; export has no default to omit (it's a one-shot trigger, not a
+// persistent view setting -- see initialExport's own comment on each of the
+// 4 pages), so it's simply included whenever set and never cleared
+// afterwards -- a URL carrying it (e.g. .../dblp/11/1262?sort=rank-date&
+// export=md) stays a valid, replayable "share this export" link. Built with
+// URLSearchParams (not hand-joined like crosscheck-author's) so adding
+// sort/export here didn't require rewriting every branch that already had a
+// working yearRange-only string.
+function tabSearch(tab) {
+  const params = new URLSearchParams();
+  if (Array.isArray(tab.yearRange)) {
+    params.set('from', tab.yearRange[0]);
+    params.set('to', tab.yearRange[1]);
+  }
+  if (tab.sort && tab.sort !== 'date') params.set('sort', tab.sort);
+  if (tab.export === 'md' || tab.export === 'csv') params.set('export', tab.export);
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
+}
+
 function tabPath(tab) {
-  if (tab.type === 'dblp-author') return `/dblp/${tab.pid}`;
-  if (tab.type === 'hal-author') return `/hal/${tab.halId}`;
-  if (tab.type === 'team') return `/team/${tab.teamId}`;
+  if (tab.type === 'dblp-author') return `/dblp/${tab.pid}${tabSearch(tab)}`;
+  if (tab.type === 'hal-author') return `/hal/${tab.halId}${tabSearch(tab)}`;
+  if (tab.type === 'team') return `/team/${tab.teamId}${tabSearch(tab)}`;
   if (tab.type === 'teams') return '/teams';
-  if (tab.type === 'hal-structure') return `/structure/${tab.structId}`;
+  if (tab.type === 'hal-structure') return `/structure/${tab.structId}${tabSearch(tab)}`;
   if (tab.type === 'structures') return '/structures';
+  if (tab.type === 'crosscheck-author') {
+    const base = '/crosscheck/dblp/' + tab.pid + '/hal/' + tab.halId;
+    // yearRange (the DBLP author page's own year filter, active when
+    // "Cross-check with HAL" was clicked -- see Author.js's
+    // handleCrossCheckConfirm) is carried in the URL as ?from=&to= so a
+    // shared/reloaded link reproduces the same filtered view. Omitted
+    // entirely when absent -- CrossCheck.js itself treats a missing range
+    // as "don't filter" (see tabFromPath below), which is the reasonable
+    // default for a bare /crosscheck/... link typed or shared without it.
+    return Array.isArray(tab.yearRange) ? `${base}?from=${tab.yearRange[0]}&to=${tab.yearRange[1]}` : base;
+  }
+  // A team has no server-side identity at all (front/src/teamStore.js,
+  // localStorage only) -- unlike crosscheck-author's pid/halId pair above,
+  // there is no (source, pids) pair stable enough to put in the URL itself:
+  // the member list can change client-side any time. :teamId here is only
+  // ever used to look the team back up via teamStore.js at render time (see
+  // CrossCheckTeam.js), not sent to the server as-is -- same as the plain
+  // /team/:teamId route already does for Team.js.
+  if (tab.type === 'crosscheck-team') return `/crosscheck/team/${tab.teamId}`;
+  // A HAL structure DOES have a stable server-side structId (unlike a team
+  // above) -- so :structId here plays the same role hal-structure's own
+  // :structId already does, just under /crosscheck/structure instead of
+  // /structure. No yearRange either, same reasoning as crosscheck-team.
+  if (tab.type === 'crosscheck-structure') return `/crosscheck/structure/${tab.structId}`;
   return '/';
 }
 
-function tabFromPath(pathname) {
-  let m = pathname.match(/^\/dblp\/(.+)$/);
+function tabFromPath(pathname, search) {
+  // Checked before the plain /dblp/(.+)$ branch below -- otherwise that
+  // one's own greedy (.+) would swallow this whole path (including the
+  // "/hal/<halId>" suffix) as if it were just a dblp pid.
+  let m = pathname.match(/^\/crosscheck\/dblp\/(.+)\/hal\/(.+)$/);
   if (m) {
     const pid = decodeURIComponent(m[1]);
-    return { type: 'dblp-author', id: `dblp:${pid}`, pid, label: pid };
+    const halId = decodeURIComponent(m[2]);
+    // ?from=&to=, see tabPath above -- both must parse as numbers or the
+    // range is dropped entirely (CrossCheck.js's own hasYearRange check
+    // then shows everything unfiltered, rather than crashing on a
+    // malformed or partial query string).
+    const params = new URLSearchParams(search || '');
+    const from = parseInt(params.get('from'), 10);
+    const to = parseInt(params.get('to'), 10);
+    const yearRange = Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+    return { type: 'crosscheck-author', id: `crosscheck:${pid}:${halId}`, pid, halId, label: pid, yearRange };
+  }
+  m = pathname.match(/^\/crosscheck\/team\/(.+)$/);
+  if (m) {
+    const teamId = decodeURIComponent(m[1]);
+    // No yearRange here (see tabPath above) -- CrossCheckTeam.js has no year
+    // control of its own, same choice as the structure crosscheck. label is
+    // the raw teamId, same minimalism as the plain /team/:teamId branch
+    // below -- CrossCheckTeam.js/Team.js already look the team's own name up
+    // via teamStore.js once rendered, this is only ever the tab bar's
+    // fallback label.
+    return { type: 'crosscheck-team', id: `crosscheck-team:${teamId}`, teamId, label: teamId };
+  }
+  m = pathname.match(/^\/crosscheck\/structure\/(.+)$/);
+  if (m) {
+    const structId = decodeURIComponent(m[1]);
+    // No yearRange, same as crosscheck-team above. label/structureName are
+    // the raw structId, same minimalism as the plain /structure/:id branch
+    // below -- Structure.js's button already knows the resolved name when
+    // navigating here directly (see Structure.js's handleCrossCheckStructure),
+    // this is only ever the fallback for a reloaded/shared bare URL.
+    return { type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName: undefined, label: structId };
+  }
+  // ?from=&to=, see tabPath above -- same parsing as crosscheck-author's own
+  // yearRange: both must parse as numbers or the range is dropped entirely,
+  // rather than crashing on a malformed or partial query string.
+  const yearRangeFromSearch = () => {
+    const params = new URLSearchParams(search || '');
+    const from = parseInt(params.get('from'), 10);
+    const to = parseInt(params.get('to'), 10);
+    return Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+  };
+  // ?sort=, see tabPath/tabSearch above -- undefined (not 'date') for
+  // anything other than one of the two non-default modes, so a malformed or
+  // absent value falls back to each page's own 'date' default the same way
+  // an unparseable yearRange falls back to unfiltered.
+  const sortFromSearch = () => {
+    const params = new URLSearchParams(search || '');
+    const sort = params.get('sort');
+    return sort === 'date-rank' || sort === 'rank-date' ? sort : undefined;
+  };
+  // ?export=, see tabPath/tabSearch above -- undefined for anything other
+  // than 'md'/'csv', so a malformed or absent value just means "don't
+  // auto-download", same fallback shape as sortFromSearch above.
+  const exportFromSearch = () => {
+    const params = new URLSearchParams(search || '');
+    const exp = params.get('export');
+    return exp === 'md' || exp === 'csv' ? exp : undefined;
+  };
+  m = pathname.match(/^\/dblp\/(.+)$/);
+  if (m) {
+    const pid = decodeURIComponent(m[1]);
+    return { type: 'dblp-author', id: `dblp:${pid}`, pid, label: pid, yearRange: yearRangeFromSearch(), sort: sortFromSearch(), export: exportFromSearch() };
   }
   m = pathname.match(/^\/hal\/(.+)$/);
   if (m) {
     const halId = decodeURIComponent(m[1]);
-    return { type: 'hal-author', id: `hal:${halId}`, halId, authorName: undefined, label: halId };
+    return { type: 'hal-author', id: `hal:${halId}`, halId, authorName: undefined, label: halId, yearRange: yearRangeFromSearch(), sort: sortFromSearch(), export: exportFromSearch() };
   }
   m = pathname.match(/^\/team\/(.+)$/);
   if (m) {
     const teamId = decodeURIComponent(m[1]);
-    return { type: 'team', id: `team:${teamId}`, teamId, label: teamId };
+    return { type: 'team', id: `team:${teamId}`, teamId, label: teamId, yearRange: yearRangeFromSearch(), sort: sortFromSearch(), export: exportFromSearch() };
   }
   m = pathname.match(/^\/structure\/(.+)$/);
   if (m) {
     const structId = decodeURIComponent(m[1]);
-    return { type: 'hal-structure', id: `hal-structure:${structId}`, structId, structureName: undefined, label: structId };
+    return { type: 'hal-structure', id: `hal-structure:${structId}`, structId, structureName: undefined, label: structId, yearRange: yearRangeFromSearch(), sort: sortFromSearch(), export: exportFromSearch() };
   }
   if (pathname === '/teams') {
     return { id: TEAMS_TAB_ID, type: 'teams' };
@@ -87,10 +201,10 @@ function App() {
   const [overridesDialogOpen, setOverridesDialogOpen] = useState(false);
   const [customRankingsDialogOpen, setCustomRankingsDialogOpen] = useState(false);
   const [tabs, setTabs] = useState(() => {
-    const fromUrl = tabFromPath(location.pathname);
+    const fromUrl = tabFromPath(location.pathname, location.search);
     return PERSISTENT_TABS.some(t => t.id === fromUrl.id) ? PERSISTENT_TABS : [...PERSISTENT_TABS, fromUrl];
   });
-  const [activeTabId, setActiveTabId] = useState(() => tabFromPath(location.pathname).id);
+  const [activeTabId, setActiveTabId] = useState(() => tabFromPath(location.pathname, location.search).id);
   const [searchRequest, setSearchRequest] = useState(null);
 
   const handleAboutOpen = () => setAboutDialogOpen(true);
@@ -117,7 +231,7 @@ function App() {
     const activeTab = tabs.find(t => t.id === activeTabId);
     if (!activeTab) return;
     const path = tabPath(activeTab);
-    if (location.pathname !== path) navigate(path);
+    if (location.pathname + location.search !== path) navigate(path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, tabs]);
 
@@ -125,10 +239,11 @@ function App() {
   // shared link directly. Each setter bails out on an unchanged value, so
   // this can't fight the effect above once they agree.
   useEffect(() => {
-    const fromUrl = tabFromPath(location.pathname);
+    const fromUrl = tabFromPath(location.pathname, location.search);
     setTabs(prev => (prev.some(t => t.id === fromUrl.id) ? prev : [...prev, fromUrl]));
     setActiveTabId(fromUrl.id);
-  }, [location.pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, location.search]);
 
   // Used when a co-author has no known id on the target source: switch to
   // the Search tab, prefill and immediately run a search for their name.
@@ -155,15 +270,15 @@ function App() {
   // (see the tabs.map for content further down) so switching context back
   // and forth doesn't lose anything, it's only the tab bar that's filtered.
   const activeTab = tabs.find(t => t.id === activeTabId);
-  const context = activeTab && (activeTab.type === 'teams' || activeTab.type === 'team') ? 'teams'
-    : activeTab && (activeTab.type === 'structures' || activeTab.type === 'hal-structure') ? 'structures'
+  const context = activeTab && (activeTab.type === 'teams' || activeTab.type === 'team' || activeTab.type === 'crosscheck-team') ? 'teams'
+    : activeTab && (activeTab.type === 'structures' || activeTab.type === 'hal-structure' || activeTab.type === 'crosscheck-structure') ? 'structures'
     : 'search';
   const isPersistentTab = t => t.id === SEARCH_TAB_ID || t.id === TEAMS_TAB_ID || t.id === STRUCTURES_TAB_ID;
   const visibleTabs = tabs.filter(t => (
     isPersistentTab(t) || (
-      context === 'teams' ? t.type === 'team'
-        : context === 'structures' ? t.type === 'hal-structure'
-        : t.type === 'dblp-author' || t.type === 'hal-author'
+      context === 'teams' ? (t.type === 'team' || t.type === 'crosscheck-team')
+        : context === 'structures' ? (t.type === 'hal-structure' || t.type === 'crosscheck-structure')
+        : t.type === 'dblp-author' || t.type === 'hal-author' || t.type === 'crosscheck-author'
     )
   ));
   // Author/Teams/Structure (the 3 ways to switch context, always present)
@@ -297,11 +412,14 @@ function App() {
               reconciling on every streamed SSE flush behind display:none --
               the rest of each page (chart, summary, filters) stays as cheap
               as it already was and keeps re-rendering normally. */}
-          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} onNameResolved={(name) => updateTabInfo(tab.id, { label: name })} isActive={tab.id === activeTabId} />}
-          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { authorName: name, label: name })} isActive={tab.id === activeTabId} />}
-          {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
+          {tab.type === 'dblp-author' && <Author pid={tab.pid} onOpenAuthor={openAuthorTab} onNameResolved={(name) => updateTabInfo(tab.id, { label: name })} isActive={tab.id === activeTabId} initialYearRange={tab.yearRange} onYearRangeChange={(range) => updateTabInfo(tab.id, { yearRange: range })} initialSort={tab.sort} onSortChange={(sort) => updateTabInfo(tab.id, { sort })} initialExport={tab.export} />}
+          {tab.type === 'hal-author' && <AuthorHal id={tab.halId} authorName={tab.authorName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { authorName: name, label: name })} isActive={tab.id === activeTabId} initialYearRange={tab.yearRange} onYearRangeChange={(range) => updateTabInfo(tab.id, { yearRange: range })} initialSort={tab.sort} onSortChange={(sort) => updateTabInfo(tab.id, { sort })} initialExport={tab.export} />}
+          {tab.type === 'team' && <Team teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} initialYearRange={tab.yearRange} onYearRangeChange={(range) => updateTabInfo(tab.id, { yearRange: range })} initialSort={tab.sort} onSortChange={(sort) => updateTabInfo(tab.id, { sort })} initialExport={tab.export} />}
           {tab.type === 'structures' && <StructureSearch onOpenStructure={openAuthorTab} />}
-          {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} isActive={tab.id === activeTabId} />}
+          {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} isActive={tab.id === activeTabId} initialYearRange={tab.yearRange} onYearRangeChange={(range) => updateTabInfo(tab.id, { yearRange: range })} initialSort={tab.sort} onSortChange={(sort) => updateTabInfo(tab.id, { sort })} initialExport={tab.export} />}
+          {tab.type === 'crosscheck-author' && <CrossCheck pid={tab.pid} halId={tab.halId} yearRange={tab.yearRange} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
+          {tab.type === 'crosscheck-team' && <CrossCheckTeam teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
+          {tab.type === 'crosscheck-structure' && <CrossCheckStructure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
         </div>
       ))}
     </div>

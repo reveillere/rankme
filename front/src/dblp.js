@@ -19,6 +19,14 @@ export async function fetchAuthor(authorPID) {
         return await resp.json();
 }
 
+// { pid, orcid } -- orcid is null when this dblp author's homepage record
+// carries none (see api/src/dblpLocal.js's getAuthorOrcid for why this
+// isn't a dedicated dblp field).
+export async function fetchAuthorInfo(pid) {
+  const resp = await fetch(`/api/dblp/author-info/${pid}`);
+  return await resp.json();
+}
+
 // { ready, importing, version } -- version is the imported dump's MD5,
 // null until the first successful import. Polled by Search.js to disable
 // the DBLP tab with a clear message while a (re)import is in progress,

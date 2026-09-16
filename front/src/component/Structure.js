@@ -1,14 +1,24 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Snackbar from '@mui/material/Snackbar';
 import MuiAlert from '@mui/material/Alert';
 import CircularProgress from '@mui/material/CircularProgress';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import LinkIcon from '@mui/icons-material/Link';
 
 import { useRankedPublications } from '../useRankedPublications';
 import { rankingQueryParams, customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
+import { MemberListDialog } from './MemberListDialog';
+import { IdentityLinksPanel } from './IdentityLinksPanel';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
+import { SortButton } from './SortButton';
+import { ExportButton } from './ExportButton';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
@@ -18,6 +28,8 @@ import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRank
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { getHalCategory } from '../hal';
+import { exportHalPublicationsMarkdown, exportHalPublicationsJson, exportHalPublicationsCsv } from '../exportPublications';
+import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
 import '../App.css';
 
 const yearAccessor = pub => pub.year;
@@ -40,7 +52,7 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 // when the tab was opened from a search result -- opened directly by id (or
 // reloaded from a bare /structure/:id URL) it arrives undefined, so the name
 // is looked up here instead of just falling back to showing the raw id.
-export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive }) {
+export function Structure({ structId, structureName, onOpenAuthor, onSearchAuthor, onNameResolved, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
   // Read from context, not localStorage directly -- see Author.js's
   // identical comment for why this is what makes switching sources live.
   const { conferenceSource, journalSource } = useFilterSettings();
@@ -76,6 +88,7 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
 
   return (
     <StructureContent
+      structId={structId}
       structureName={resolvedName || structId}
       onOpenAuthor={onOpenAuthor}
       onSearchAuthor={onSearchAuthor}
@@ -86,11 +99,55 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
       queuePosition={queuePosition}
       memberIds={memberIds}
       isActive={isActive}
+      initialYearRange={initialYearRange}
+      onYearRangeChange={onYearRangeChange}
+      initialSort={initialSort}
+      onSortChange={onSortChange}
+      initialExport={initialExport}
     />
   );
 }
 
-function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, memberIds, isActive }) {
+// Opens a new tab type (see App.js's tabPath/tabFromPath/render block)
+// rather than a dialog/inline view -- the report itself does its own fetch
+// (CrossCheckStructure.js), same reasoning as Team.js's own
+// handleCrossCheckTeam. Unlike Team.js, there's no source==='dblp' guard
+// needed: a HAL structure is always HAL-sourced, and there's no earlier
+// identity-picking step either -- resolution happens automatically per
+// member on the server (see api/src/crosscheckStructure.js), so the button
+// jumps straight to the report tab.
+function handleCrossCheckStructure(structId, structureName, onOpenAuthor) {
+  onOpenAuthor({ type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName, label: `Cross-check: ${structureName || structId}` });
+}
+
+function StructureContent({ structId, structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, memberIds, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
+  // memberIds is bare idHal strings (see useRankedPublications) -- unlike a
+  // Team's own members, a HAL structure never carries a resolved name of its
+  // own for this list, and resolving hundreds of names via a dedicated HAL
+  // request isn't worth the extra load. Built client-side instead, for free,
+  // from this structure's own publications: `authors` (parsed HAL data,
+  // standard `{name, idHal}` shape) is already part of the initial SSE
+  // `init` payload -- like `year` -- so this only needs recomputing when the
+  // publication count itself changes, not on every streamed rank tick (see
+  // minYear/maxYear's own comment just below for the identical reasoning).
+  // First name observed for a given idHal wins -- same technique
+  // identityResolution.js's own fetchMemberNames uses server-side, and
+  // AuthorHalContent (AuthorHal.js) uses for a single author's own name.
+  const memberNameById = useMemo(() => {
+    const map = new Map();
+    for (const pub of rankedPublications) {
+      for (const author of pub.authors) {
+        if (author.idHal && !map.has(author.idHal)) map.set(author.idHal, author.name);
+      }
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankedPublications.length]);
+  const dialogMembers = useMemo(() => memberIds.map(id => ({ id, idKind: 'idHal', label: memberNameById.get(id) })), [memberIds, memberNameById]);
+  // Same client-side lookup, handed to IdentityLinksPanel.js so it can show
+  // names too -- see that panel's own comment for why GET /api/identity/links
+  // itself never returns one.
+  const resolveMemberName = useMemo(() => (id => memberNameById.get(id)), [memberNameById]);
   // Years are already known from the initial SSE `init` payload -- only
   // `.rank` fields arrive later -- so this only needs recomputing when the
   // publication count itself changes, not on every streamed rank update
@@ -104,13 +161,27 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     return knownYears.reduce(([min, max], year) => [Math.min(min, year), Math.max(max, year)], [knownYears[0], knownYears[0]]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length]);
-  const [filterYears, setFilterYears] = useState([minYear, maxYear]);
+  // initialYearRange comes from the tab's own ?from=&to= (see App.js's
+  // tabFromPath) -- applied only here, at this component's first mount
+  // (tabs stay mounted forever, see App.js's display:none/block comment, so
+  // there's no later remount to re-apply a changed prop on).
+  const validInitialYearRange = Array.isArray(initialYearRange) && initialYearRange.length === 2
+    && Number.isFinite(initialYearRange[0]) && Number.isFinite(initialYearRange[1]) && initialYearRange[0] <= initialYearRange[1]
+    ? [Math.max(minYear, Math.min(initialYearRange[0], maxYear)), Math.max(minYear, Math.min(initialYearRange[1], maxYear))]
+    : null;
+  const [filterYears, setFilterYears] = useState(() => validInitialYearRange || [minYear, maxYear]);
+  // See Author.js's identical sortMode comment: drives HalPublications.js's
+  // own grouping/ordering below, exposed here (not buried inside
+  // HalPublications) so a future sort-aware export can read it directly.
+  const [sortMode, setSortMode] = useState(() => SORT_MODES.includes(initialSort) ? initialSort : DEFAULT_SORT_MODE);
   const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
-  const [isFilterActive, setIsFilterActive] = useState(false);
+  const [isFilterActive, setIsFilterActive] = useState(() => validInitialYearRange !== null);
   const [reviewOnly, setReviewOnly] = useState(false);
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [linksPanelOpen, setLinksPanelOpen] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
   // See Author.js's identical comment: stable unless a source actually
@@ -134,6 +205,19 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     if (done) setShowCompleted(true);
   }, [done]);
 
+  // Mirrors every filter change back up to App.js -- see Author.js's
+  // identical comment.
+  useEffect(() => {
+    onYearRangeChange?.(isFilterActive ? filterYears : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterYears, isFilterActive]);
+
+  // See Author.js's identical comment.
+  useEffect(() => {
+    onSortChange?.(sortMode === DEFAULT_SORT_MODE ? undefined : sortMode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sortMode]);
+
   useEffect(() => {
     const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor });
     const toReview = records.filter(pub => {
@@ -144,6 +228,21 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps, activeCustomProfileIds]);
+
+  // See Author.js's identical effect for why this is one-shot (hasExportedRef,
+  // not state) and declared after the filteredRecords-recomputing effect
+  // above.
+  const hasExportedRef = useRef(false);
+  useEffect(() => {
+    if (hasExportedRef.current || !initialExport) return;
+    hasExportedRef.current = true;
+    const filenameBase = `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}`;
+    if (initialExport === 'md') {
+      exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `${filenameBase}.md`, sortMode });
+    } else if (initialExport === 'csv') {
+      exportHalPublicationsCsv(filteredRecords, { filename: `${filenameBase}.csv`, sortMode });
+    }
+  }, [initialExport, filteredRecords, sortMode, structureName]);
 
   const publicationsShown = filteredRecords.length;
   const updateCompletedPercent = progress.total ? Math.floor(progress.completed / progress.total * 100) : 0;
@@ -157,10 +256,39 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
     <div className='App'>
       <div style={{ textAlign: 'center', marginTop: '40px', padding: '0 160px' }}>
         <h1>HAL records{structureName ? ` of ${structureName}` : ''}</h1>
-        <div style={{ fontSize: 'large', marginTop: '-0.8em' }}>
+        <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2px' }}>
+          Structure of {memberIds.length} members
+          <Tooltip title="View members">
+            <IconButton size="small" onClick={() => setMembersDialogOpen(true)} aria-label="View members">
+              <VisibilityIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Manage identity links">
+            <IconButton size="small" onClick={() => setLinksPanelOpen(true)} aria-label="Manage identity links">
+              <LinkIcon fontSize="inherit" />
+            </IconButton>
+          </Tooltip>
+        </div>
+        <div style={{ fontSize: 'large', marginTop: '0.3em' }}>
           {publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
         </div>
       </div>
+
+      <MemberListDialog
+        open={membersDialogOpen}
+        onClose={() => setMembersDialogOpen(false)}
+        title={`Members${structureName ? ` of ${structureName}` : ''} (${memberIds.length})`}
+        members={dialogMembers}
+      />
+
+      {/* A HAL structure's own membership is always idHals -- see
+          memberIds's own comment above. */}
+      <IdentityLinksPanel
+        open={linksPanelOpen}
+        onClose={() => setLinksPanelOpen(false)}
+        idHals={memberIds}
+        resolveName={resolveMemberName}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>
         <React.Suspense fallback={<CircularProgress size={32} />}>
@@ -169,8 +297,24 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
         <RankSummary records={filteredRecords} ranks={ranks} selected={filterRanks} sharedMaps={sharedMaps} customProfileIdAccessor={customProfileIdAccessor} yearAccessor={yearAccessor} />
       </div>
 
-      <div style={{ margin: '0 0 20px 0' }}>
+      <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+        <SortButton sortMode={sortMode} setSortMode={setSortMode} />
+        <Button
+          variant="outlined"
+          color="primary"
+          size="small"
+          startIcon={<CompareArrowsIcon />}
+          onClick={() => handleCrossCheckStructure(structId, structureName, onOpenAuthor)}
+          sx={{ borderRadius: '20px', textTransform: 'none', fontWeight: 500, boxShadow: 'none' }}
+        >
+          Cross-check with DBLP
+        </Button>
+        <ExportButton
+          onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })}
+          onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })}
+          onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })}
+        />
       </div>
 
       {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
@@ -182,7 +326,7 @@ function StructureContent({ structureName, onOpenAuthor, onSearchAuthor, publica
           (not just a co-author on one of its papers -- see
           controllerHalStructure/structureMembersOf), so their name reads
           the same underlined way a Team's own members' names do. */}
-      <HalPublications selfIds={memberIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
+      <HalPublications selfIds={memberIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} sortMode={sortMode} />
 
       <Snackbar anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} open={!done}>
         <Alert severity="info" sx={{ width: '100%' }}>

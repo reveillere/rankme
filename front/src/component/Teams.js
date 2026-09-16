@@ -21,6 +21,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import GroupsIcon from '@mui/icons-material/Groups';
 import AddIcon from '@mui/icons-material/Add';
 import AccountCircle from '@mui/icons-material/AccountCircle';
+import DownloadIcon from '@mui/icons-material/Download';
+import UploadIcon from '@mui/icons-material/Upload';
 
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
@@ -70,6 +72,7 @@ export default function Teams({ onOpenAuthor }) {
   const [results, setResults] = useState([]);
   const debounceRef = useRef();
   const bulkFileInputRef = useRef();
+  const teamsFileInputRef = useRef();
 
   // Members from one source aren't meaningful once you switch to the other
   // — only clear them on an actual user-driven switch, not when loading an
@@ -173,6 +176,69 @@ export default function Teams({ onOpenAuthor }) {
     if (editingId === id) resetForm();
   };
 
+  // Teams live only in this browser's localStorage (see teamStore.js) --
+  // there is no server-side copy, so clearing site data or switching
+  // machines loses them silently. Export/import is the only backup/transfer
+  // path available.
+  const handleExportTeams = () => {
+    const blob = new Blob([JSON.stringify(teams, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'rankme-teams.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Imported teams are always created fresh (via createTeam, which mints
+  // its own id) rather than restored with their original id -- reusing an
+  // id could silently overwrite a same-named-but-different team already in
+  // this browser, whereas an extra duplicate is harmless and easy to
+  // delete. Invalid entries (missing name/source/members) are skipped
+  // rather than aborting the whole import.
+  const handleImportTeamsFile = (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let parsed;
+      try {
+        parsed = JSON.parse(String(reader.result));
+      } catch {
+        return;
+      }
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      for (const t of list) {
+        if (!t || typeof t.name !== 'string' || !t.name.trim()) continue;
+        if (t.source !== 'dblp' && t.source !== 'hal') continue;
+        if (!Array.isArray(t.members) || t.members.length === 0) continue;
+        createTeam(t.name.trim(), t.source, t.members);
+      }
+      setTeams(getTeams());
+    };
+    reader.readAsText(file);
+  };
+
+  // A single team's own JSON, same shape handleImportTeamsFile above already
+  // accepts (a bare {name, source, members} object, or an array containing
+  // just this one) -- so re-importing this exact file elsewhere (or back
+  // into this same browser) works without any special-casing on the import
+  // side.
+  const handleExportSingleTeam = (team) => {
+    const blob = new Blob([JSON.stringify(team, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rankme-team-${team.name.trim().toLowerCase().replace(/\s+/g, '-') || team.id}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const openTeam = (team) => {
     onOpenAuthor({ type: 'team', id: `team:${team.id}`, label: team.name, teamId: team.id });
   };
@@ -180,9 +246,21 @@ export default function Teams({ onOpenAuthor }) {
   return (
     <div className="App">
       <h1>Teams</h1>
-      <div style={{ fontSize: 'large', marginTop: '-0.8em', marginBottom: '30px', color: 'GrayText' }}>
+      <div style={{ fontSize: 'large', marginTop: '-0.8em', marginBottom: '10px', color: 'GrayText' }}>
         Group several DBLP or HAL authors together and rank their merged, deduplicated publications
       </div>
+
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mb: 3 }}>
+        {teams.length > 0 && (
+          <Button size="small" variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportTeams} sx={{ textTransform: 'none' }}>
+            Export teams
+          </Button>
+        )}
+        <Button size="small" variant="outlined" startIcon={<UploadIcon />} onClick={() => teamsFileInputRef.current?.click()} sx={{ textTransform: 'none' }}>
+          Import teams
+        </Button>
+        <input ref={teamsFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportTeamsFile} />
+      </Box>
 
       {teams.length > 0 && (
         <Box sx={{ width: 500, maxWidth: '100%', margin: '0 auto 40px auto', textAlign: 'left' }}>
@@ -191,9 +269,12 @@ export default function Teams({ onOpenAuthor }) {
               <ListItem
                 key={team.id}
                 disablePadding
-                sx={{ pr: 12 }}
+                sx={{ pr: 17 }}
                 secondaryAction={
                   <>
+                    <IconButton edge="end" aria-label="export" onClick={() => handleExportSingleTeam(team)}>
+                      <DownloadIcon fontSize="small" />
+                    </IconButton>
                     <IconButton edge="end" aria-label="edit" onClick={() => startEdit(team)}>
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -351,10 +432,33 @@ export default function Teams({ onOpenAuthor }) {
         )}
 
         {members.length > 0 && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
-            {members.map(m => (
-              <Chip key={m.id} label={m.label} onDelete={() => removeMember(m.id)} />
-            ))}
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 4 }}>
+            {members.map(m => {
+              // A plain id is ambiguous on its own (is "11/1262" a dblp pid
+              // or something else?) -- always label it explicitly with its
+              // kind, same convention used everywhere else a bare id is
+              // shown next to a name (Author.js/AuthorHal.js's own "pid:"/
+              // "idHal:" line, Team.js's crosscheck popup, etc.).
+              const idLabel = source === 'hal' ? 'idHal' : 'pid';
+              return (
+                <Chip
+                  key={m.id}
+                  label={
+                    m.label === m.id ? (
+                      <span style={{ fontStyle: 'italic', fontSize: '0.85em' }}>{idLabel}: {m.id}</span>
+                    ) : (
+                      <span style={{ lineHeight: 1.3 }}>
+                        {m.label}
+                        <br />
+                        <span style={{ fontStyle: 'italic', fontSize: '0.85em', color: '#8a8f94' }}>{idLabel}: {m.id}</span>
+                      </span>
+                    )
+                  }
+                  onDelete={() => removeMember(m.id)}
+                  sx={{ height: 'auto', py: 0.75, '& .MuiChip-label': { whiteSpace: 'normal', display: 'block' } }}
+                />
+              );
+            })}
           </Box>
         )}
 

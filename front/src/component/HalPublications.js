@@ -5,6 +5,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getHalCategory } from '../hal';
 import { RankBadge } from './RankBadge';
 import { DoiChip } from './DoiChip';
+import { orderPublicationsForDisplay } from '../rankOrder';
 
 // A large structure (LaBRI: ~10,400 publications) re-flushes `data` on a
 // timer while ranks stream in (see useRankedPublications.js) -- each flush
@@ -35,7 +36,7 @@ import { DoiChip } from './DoiChip';
 // Only renders the row's *inner* content now -- the wrapping <li> (with its
 // "year"/"entry <category>" className) moved to HalItem below, since
 // Virtuoso owns the wrapping element it measures for virtualization.
-const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, selfIds, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds }) {
+export const HalPublicationRow = React.memo(function HalPublicationRow({ item, category, nr, selfIds, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds }) {
   const [, forceRowRefresh] = useState(0);
   const portal = item.rank?.source?.startsWith('CCF') ? 'ccf' : (item.type === 'COMM' ? 'core' : 'sjr');
   // See Publications.js's identical PublicationRow comment: item.type (not
@@ -50,6 +51,14 @@ const HalPublicationRow = React.memo(function HalPublicationRow({ item, category
           <img alt="paper" src="https://dblp.org/img/n.png" />
         </div>
       </Tooltip>
+      {/* nr is omitted (not just blank) by callers that number publications
+          in a scope narrower than "this whole author/team/structure" (e.g.
+          CrossCheck.js's isolated HAL candidates) -- a fresh "[j1]" computed
+          over just one or two items would be exactly the kind of
+          meaningless/misleading number Author.js's own To-review section
+          used to show before it was fixed to number over the full filtered
+          list instead (see CrossCheck.js's withRowNumbers comment). */}
+      {nr && <div className="nr">[{nr}]</div>}
       <div className="rank">
         <RankBadge rank={item.rank} portal={portal} year={item.year} sharedMaps={sharedMaps} activeCustomProfileId={activeCustomProfileId} onOverrideChange={() => forceRowRefresh(t => t + 1)} />
       </div>
@@ -113,10 +122,25 @@ const HalList = React.forwardRef(function HalList({ style, children, ...props },
 // between flushes while Virtuoso's own internal range tracking is briefly a
 // tick behind). Virtuoso calls this wrapper independently of itemContent,
 // so it needs its own guard rather than relying on itemContent's.
+// row.kind is 'entry' for a publication row, or a group header otherwise --
+// 'year' (date-first sort modes) or 'rankTier' (rank-first mode, see
+// HalPublications()'s own rows useMemo) both get the same 'year' class --
+// see Publications.js's identical PublicationsItem comment for why.
 const HalItem = React.forwardRef(function HalItem({ item: row, children, style, ...props }, ref) {
-  const className = !row ? '' : row.kind === 'year' ? 'year' : `entry ${row.category.cssClass}`;
+  const className = !row ? '' : row.kind === 'entry' ? `entry ${row.category.cssClass}` : 'year';
   return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
+
+// Trailing breathing room below the last row -- see Publications.js's
+// identical PublicationsFooter comment for why this has to be a Virtuoso
+// Footer (measured by Virtuoso itself) rather than a plain sibling div after
+// <Virtuoso>: with useWindowScroll, Virtuoso keeps revising its own estimate
+// of total content height while scrolling, so an external fixed-height
+// element isn't reliably accounted for by the time a scroll gesture reaches
+// what Virtuoso currently believes is the bottom.
+function HalPublicationsFooter() {
+  return <div style={{ height: '60px' }} />;
+}
 
 // Extracted from AuthorHal.js so Team.js can reuse the exact same rendering
 // for a HAL-sourced team, parameterized by selfIds (the whole team's HAL
@@ -133,7 +157,7 @@ const HalItem = React.forwardRef(function HalItem({ item: row, children, style, 
 // hook that owns the actual SSE subscription lives in the caller, not here,
 // so it keeps accumulating regardless and switching back shows current data
 // immediately.
-export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds, isActive = true }) {
+export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds, isActive = true, sortMode = 'date' }) {
   // Flattened so each Virtuoso index is exactly one <li> (a "year" marker
   // or an "entry") -- this is what makes the LaBRI-scale (~10,400 rows)
   // first mount cheap: only the rows actually inside (or just outside) the
@@ -152,16 +176,40 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, s
     // hook order stays identical across renders regardless of isActive.
     if (!isActive) return [];
     const sorted = [...data].sort((a, b) => (b.year || 0) - (a.year || 0));
-    let previousYear = null;
-    const out = [];
-    for (const item of sorted) {
-      const displayYear = previousYear !== item.year;
-      previousYear = item.year;
-      if (displayYear) out.push({ kind: 'year', key: `year-${item.year}`, year: item.year });
-      out.push({ kind: 'entry', key: item.docid, item, category: getHalCategory(item.type) });
-    }
-    return out;
-  }, [data, isActive]);
+    // Keyed by cssClass (not HAL's own raw type), the same bucket
+    // HalItem's className and HalPublicationRow's category color already
+    // use -- so e.g. THESE and HDR (both mapped to dblp's 'book' cssClass)
+    // share one running count and one letter, exactly like dblp's own
+    // book/informal sub-kinds do on the regular author page.
+    const typeCounts = data.reduce((acc, item) => {
+      const cssClass = getHalCategory(item.type).cssClass;
+      acc[cssClass] = (acc[cssClass] || 0) + 1;
+      return acc;
+    }, {});
+    // nr is computed here, once, walking `sorted` in this fixed
+    // year-descending order -- regardless of sortMode below. See
+    // Publications.js's identical `numbered` comment for why: a
+    // publication's number must stay the same across every sort/group view.
+    const numbered = sorted.map(item => {
+      const category = getHalCategory(item.type);
+      return { item, category, nr: category.letter + typeCounts[category.cssClass]-- };
+    });
+    const entryRow = ({ item, category, nr }) => ({ kind: 'entry', key: item.docid, item, category, nr });
+
+    // See Publications.js's identical comment: the grouping/ordering itself
+    // lives in rankOrder.js's orderPublicationsForDisplay, shared with
+    // exportPublications.js so a downloaded CSV/Markdown file groups its
+    // rows exactly the way this page currently does.
+    const ordered = orderPublicationsForDisplay(numbered, sortMode, {
+      yearOf: entry => entry.item.year,
+      rankOf: entry => entry.item.rank,
+    });
+    return ordered.map(row => row.kind === 'item'
+      ? entryRow(row.record)
+      : row.groupKind === 'rankTier'
+        ? { kind: 'rankTier', key: `rankTier-${row.tier}`, tier: row.tier, label: row.label }
+        : { kind: 'year', key: `year-${row.year}`, year: row.year });
+  }, [data, isActive, sortMode]);
 
   // See Publications.js's identical early return for why: the row list is
   // the expensive part of this page, so it's skipped entirely while this
@@ -201,22 +249,25 @@ export function HalPublications({ selfIds, data, onOpenAuthor, onSearchAuthor, s
       // index one tick behind that change. Defensive fallbacks here so that
       // one-tick mismatch never crashes the page.
       computeItemKey={(index, row) => row?.key ?? `missing-${index}`}
-      components={{ List: HalList, Item: HalItem }}
+      components={{ List: HalList, Item: HalItem, Footer: HalPublicationsFooter }}
       itemContent={(index, row) => !row
         ? null
-        : row.kind === 'year'
-          ? (row.year || '?')
-          : (
-            <HalPublicationRow
-              item={row.item}
-              category={row.category}
-              selfIds={selfIds}
-              onOpenAuthor={onOpenAuthor}
-              onSearchAuthor={onSearchAuthor}
-              sharedMaps={sharedMaps}
-              activeCustomProfileIds={activeCustomProfileIds}
-            />
-          )}
+        : row.kind === 'rankTier'
+          ? row.label
+          : row.kind === 'year'
+            ? (row.year || '?')
+            : (
+              <HalPublicationRow
+                item={row.item}
+                category={row.category}
+                nr={row.nr}
+                selfIds={selfIds}
+                onOpenAuthor={onOpenAuthor}
+                onSearchAuthor={onSearchAuthor}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+              />
+            )}
     />
   );
 }

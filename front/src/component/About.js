@@ -51,14 +51,14 @@ function About({ open, onClose }) {
           and matches each venue against a ranking source.
         </Typography>
         <Typography variant="body1" gutterBottom>
-          By default, conferences and workshops are ranked by{' '}
-          <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C),
-          journals by{' '}
-          <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4).
-          A venue with no match in either source is shown as Unranked rather than left out. Conferences and journals
-          can each be switched independently to{' '}
+          Conferences and workshops are ranked using{' '}
+          <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C)
+          or{' '}
           <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-          instead, from the ranking badge in the toolbar or the Preferences dialog.
+          (A, B, C); journals using{' '}
+          <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4) or CCF
+          (A, B, C). A venue with no match is shown as Unranked rather than left out, and custom rankings let you
+          override individual matches.
         </Typography>
         <Box
           sx={{

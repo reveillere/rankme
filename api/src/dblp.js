@@ -34,6 +34,22 @@ export async function controllerAuthor(req, res) {
     }
 }
 
+// pid + ORCID (see dblpLocal.getAuthorOrcid) for a dblp author, mirroring
+// hal.js's controllerAuthorInfo/getAuthorInfo -- kept as its own endpoint
+// rather than folded into controllerAuthor above so that one's response
+// shape (deliberately mimicking dblp.org's old live XML-derived shape,
+// see its own comment) doesn't have to change for every existing caller.
+export async function controllerAuthorInfo(req, res) {
+    const pid = req.params[0];
+    try {
+        const orcid = await dblpLocal.getAuthorOrcid(pid);
+        res.json({ pid, orcid: orcid ? `https://orcid.org/${orcid}` : null });
+    } catch (error) {
+        console.log('Error during author-info computation', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
 const searchLocalAuthors = createDblpSearch({
     getStatus: () => admin.getDblpStatus(),
     search: query => dblpLocal.searchAuthorsByName(query),

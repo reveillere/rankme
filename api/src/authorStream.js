@@ -40,12 +40,95 @@ function extractBareAcronym(text) {
 // here at all: rankingQueryParams() omits the query param entirely for a
 // custom:* value, so the server always computes an ordinary CORE/SJR match
 // for it, same as the default. Absent/anything else = today's default.
-function confSourceFrom(req) {
+export function confSourceFrom(req) {
     return req.query.confSource === 'ccf' ? 'ccf' : 'core';
 }
 
-function journalSourceFrom(req) {
+export function journalSourceFrom(req) {
     return req.query.journalSource === 'ccf' ? 'ccf' : 'sjr';
+}
+
+// Computes one dblp-sourced publication's rank (CORE/SJR, or CCF when
+// confSource/journalSource says so for its axis -- conferences and journals
+// pick independently) plus, when useful, a cleaner Crossref-sourced venue
+// full name. Factored out of controllerDblpAuthor below (which streams this
+// over every publication of a dblp author's page) so crosscheck.js's own
+// report -- which only needs a rank for the handful of "missing"/"to-review"
+// publications it actually renders, not the SSE streaming machinery -- can
+// call the exact same logic instead of a second, possibly-drifting copy.
+export async function computeDblpPublicationRank(pub, { confSource, journalSource }) {
+    // pub.dblp.url is this exact record's own dblp reference -- CCF's own
+    // list carries a dblp url per entry too, so this is a direct, non-fuzzy
+    // match (see ccfPortal.js). No Crossref fallback here: unlike CORE/SJR's
+    // free-text venue matching, there's nothing fuzzy to improve on. Which
+    // axis applies is decided per publication by its own type, not once for
+    // the whole request -- conferences and journals can independently be on
+    // CCF or not.
+    if ((pub.type === 'inproceedings' ? confSource : journalSource) === 'ccf') {
+        const rank = await ccf.getRankForDblpUrl(pub.dblp.url, pub.dblp.year);
+        // ccf.getRankForDblpUrl's own queryText is the dblp path key (e.g.
+        // "conf/srds") -- right for cache/matching (shared across every
+        // publication in that venue), but meaningless to a reader in
+        // RankDetailsPopover's "Original text" line, which for every other
+        // source shows the actual venue text. Swapped in here, per
+        // publication, purely for display/override-keying -- the cached
+        // object underneath (and its Redis key) is untouched.
+        return { rank: { ...rank, queryText: pub.venue } };
+    }
+    // Same acronym-first strategy as the HAL path below -- dblp's own
+    // <booktitle> text (e.g. "AINA 2017") often already carries the
+    // acronym directly. No network lookup: getRankByAcronymAndFullName/
+    // getRankByFullName (unlike getRank in fetchViaLiveDblp) never call
+    // getVenueFullName.
+    const acronym = crossref.extractTrailingAcronym(pub.venue) || crossref.extractLeadingAcronym(pub.venue) || extractBareAcronym(pub.venue);
+    let rank = pub.type === 'inproceedings'
+        ? (acronym
+            ? await core.getRankByAcronymAndFullName(acronym, pub.venue, pub.dblp.year)
+            : await core.getRankByFullName(pub.venue, pub.dblp.year))
+        : await sjr.getRankByFullName(pub.venue, pub.dblp.year);
+    // dblp's own <booktitle>/<journal> text is sometimes too abbreviated or
+    // informal to match well -- a journal name like "Empir. Softw. Eng."
+    // never fuzzy-matches SJR's "Empirical Software Engineering" at all, and
+    // even a conference's booktitle occasionally yields only a fuzzy or
+    // ambiguous CORE match. When the local attempt isn't already an exact
+    // match and dblp's own DOI (<ee>) is available, ask Crossref for the
+    // real title/acronym and retry -- same fallback the HAL path already
+    // uses (see rankHalPublications). Only adopted when it's clearly better
+    // -- an authoritative exact match, or anything at all when the local
+    // attempt had no single usable answer ('none', or 'ambiguous': e.g.
+    // dblp's own booktitle was just the bare acronym "SAC", shared by two
+    // unrelated CORE entries -- ACM's own Symposium on Applied Computing and
+    // Selected Areas in Cryptography -- with nothing to break the tie;
+    // Crossref's fuller title clearly favors one even at fuzzy confidence,
+    // which is still strictly more useful than refusing to pick between two
+    // options that don't even agree on a rank) -- not swapped in just
+    // because it's a different guess than a *specific* one we already had
+    // (rank.matchType === 'fuzzy' keeps the original rather than trading one
+    // uncertain single guess for another).
+    // Crossref's fullName is also just a better venue name to show a reader
+    // than dblp's own abbreviated <journal> text (or, for a conference,
+    // whatever's in <booktitle>) -- returned to Publications.js regardless
+    // of whether it ended up changing the rank below.
+    let fullName;
+    if (rank.matchType !== 'exact') {
+        const doi = crossref.extractDoi(pub.dblp.ee);
+        if (doi) {
+            const info = await crossref.getVenueInfo(doi);
+            let doiRank = null;
+            if (pub.type === 'inproceedings' && (info?.acronym || info?.fullName)) {
+                doiRank = info.acronym
+                    ? await core.getRankByAcronymAndFullName(info.acronym, info.fullName || pub.venue, pub.dblp.year)
+                    : await core.getRankByFullName(info.fullName, pub.dblp.year);
+            } else if (pub.type === 'article' && info?.fullName) {
+                doiRank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
+            }
+            if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none' || rank.matchType === 'ambiguous')) {
+                rank = doiRank;
+            }
+            fullName = info?.fullName;
+        }
+    }
+    return { rank, fullName };
 }
 
 export async function controllerDblpAuthor(req, res) {
@@ -71,90 +154,7 @@ export async function controllerDblpAuthor(req, res) {
         await streamRankedItems(
             req, res, publications,
             pub => pub.type === 'inproceedings' || pub.type === 'article',
-            async (pub) => {
-                // pub.dblp.url is this exact record's own dblp reference --
-                // CCF's own list carries a dblp url per entry too, so this
-                // is a direct, non-fuzzy match (see ccfPortal.js). No
-                // Crossref fallback here: unlike CORE/SJR's free-text venue
-                // matching, there's nothing fuzzy to improve on. Which axis
-                // applies is decided per publication by its own type, not
-                // once for the whole request -- conferences and journals
-                // can independently be on CCF or not.
-                if ((pub.type === 'inproceedings' ? confSource : journalSource) === 'ccf') {
-                    const rank = await ccf.getRankForDblpUrl(pub.dblp.url, pub.dblp.year);
-                    // ccf.getRankForDblpUrl's own queryText is the dblp path
-                    // key (e.g. "conf/srds") -- right for cache/matching
-                    // (shared across every publication in that venue), but
-                    // meaningless to a reader in RankDetailsPopover's
-                    // "Original text" line, which for every other source
-                    // shows the actual venue text. Swapped in here, per
-                    // publication, purely for display/override-keying --
-                    // the cached object underneath (and its Redis key) is
-                    // untouched.
-                    return { rank: { ...rank, queryText: pub.venue } };
-                }
-                // Same acronym-first strategy as the HAL path below --
-                // dblp's own <booktitle> text (e.g. "AINA 2017") often
-                // already carries the acronym directly. No network
-                // lookup: getRankByAcronymAndFullName/getRankByFullName
-                // (unlike getRank in fetchViaLiveDblp) never call
-                // getVenueFullName.
-                const acronym = crossref.extractTrailingAcronym(pub.venue) || crossref.extractLeadingAcronym(pub.venue) || extractBareAcronym(pub.venue);
-                let rank = pub.type === 'inproceedings'
-                    ? (acronym
-                        ? await core.getRankByAcronymAndFullName(acronym, pub.venue, pub.dblp.year)
-                        : await core.getRankByFullName(pub.venue, pub.dblp.year))
-                    : await sjr.getRankByFullName(pub.venue, pub.dblp.year);
-                // dblp's own <booktitle>/<journal> text is sometimes too
-                // abbreviated or informal to match well -- a journal name
-                // like "Empir. Softw. Eng." never fuzzy-matches SJR's
-                // "Empirical Software Engineering" at all, and even a
-                // conference's booktitle occasionally yields only a fuzzy
-                // or ambiguous CORE match. When the local attempt isn't
-                // already an exact match and dblp's own DOI (<ee>) is
-                // available, ask Crossref for the real title/acronym and
-                // retry -- same fallback the HAL path already uses (see
-                // rankHalPublications). Only adopted when it's clearly
-                // better -- an authoritative exact match, or anything at
-                // all when the local attempt had no single usable answer
-                // ('none', or 'ambiguous': e.g. dblp's own booktitle was
-                // just the bare acronym "SAC", shared by two unrelated
-                // CORE entries -- ACM's own Symposium on Applied Computing
-                // and Selected Areas in Cryptography -- with nothing to
-                // break the tie; Crossref's fuller title clearly favors
-                // one even at fuzzy confidence, which is still strictly
-                // more useful than refusing to pick between two options
-                // that don't even agree on a rank) -- not swapped in just
-                // because it's a different guess than a *specific* one we
-                // already had (rank.matchType === 'fuzzy' keeps the
-                // original rather than trading one uncertain single guess
-                // for another).
-                // Crossref's fullName is also just a better venue name to
-                // show a reader than dblp's own abbreviated <journal>
-                // text (or, for a conference, whatever's in <booktitle>)
-                // -- returned to Publications.js regardless of whether it
-                // ended up changing the rank below.
-                let fullName;
-                if (rank.matchType !== 'exact') {
-                    const doi = crossref.extractDoi(pub.dblp.ee);
-                    if (doi) {
-                        const info = await crossref.getVenueInfo(doi);
-                        let doiRank = null;
-                        if (pub.type === 'inproceedings' && (info?.acronym || info?.fullName)) {
-                            doiRank = info.acronym
-                                ? await core.getRankByAcronymAndFullName(info.acronym, info.fullName || pub.venue, pub.dblp.year)
-                                : await core.getRankByFullName(info.fullName, pub.dblp.year);
-                        } else if (pub.type === 'article' && info?.fullName) {
-                            doiRank = await sjr.getRankByFullName(info.fullName, pub.dblp.year);
-                        }
-                        if (doiRank && (doiRank.matchType === 'exact' || rank.matchType === 'none' || rank.matchType === 'ambiguous')) {
-                            rank = doiRank;
-                        }
-                        fullName = info?.fullName;
-                    }
-                }
-                return { rank, fullName };
-            },
+            (pub) => computeDblpPublicationRank(pub, { confSource, journalSource }),
             `dblp:${pid}`
         );
     } catch (error) {
@@ -224,6 +224,44 @@ function halRankKeyFor(pub, venue, acronym) {
     return pub.type === 'COMM'
         ? (acronym ? core.rankKeyAcronym(acronym, venue, pub.year) : core.rankKey(venue, pub.year))
         : sjr.rankKey(venue, pub.year);
+}
+
+// Computes one HAL-sourced publication's rank (CORE/SJR, or CCF when
+// confSource/journalSource says so for its axis), exactly the same
+// acronym-first/Crossref-fallback logic as the per-item pass inside
+// rankHalPublications below, minus its Phase 0/1 batch MGET prefetch --
+// factored out (on the model of computeDblpPublicationRank above) for
+// crosscheck.js, which only ever needs a rank for the handful of HAL
+// candidates appearing in one author's "to-review" matches, not the
+// thousands-of-items streaming case rankHalPublications' prefetch exists
+// for. A direct, unprefetched call is the right size for that: see
+// computeDblpPublicationRank's own comment for why the dblp side never
+// needed a prefetch variant either.
+export async function computeHalPublicationRank(pub, { confSource, journalSource }) {
+    const source = pub.type === 'COMM' ? confSource : journalSource;
+    let { venue, acronym, doiLookupApplies } = resolveHalVenueAcronym(pub);
+    if (doiLookupApplies) {
+        const info = await crossref.getVenueInfo(pub.doi);
+        if (info?.acronym) {
+            venue = info.fullName || venue;
+            acronym = info.acronym;
+        }
+    }
+
+    // HAL publications carry no dblp url to match CCF's own reference
+    // against (see computeDblpPublicationRank above) -- fall back to CCF's
+    // fuzzy acronym/fullname match, same inputs CORE's own acronym-first
+    // match below would have used.
+    if (source === 'ccf') {
+        return { rank: await ccf.getRankForHalVenue(acronym, venue, pub.year) };
+    }
+
+    const rank = pub.type === 'COMM'
+        ? (acronym
+            ? await core.getRankByAcronymAndFullName(acronym, venue, pub.year)
+            : await core.getRankByFullName(venue, pub.year))
+        : await sjr.getRankByFullName(venue, pub.year);
+    return { rank };
 }
 
 // Shared by both HAL entry points below: an author's and a structure's
