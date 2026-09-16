@@ -33,8 +33,10 @@ export async function searchAuthor(searchQuery) {
 
     const resp = await fetch(url);
     const data = await resp.json();
-    const docs = data?.response?.docs || [];
+    return normalizeAuthorSearchDocs(data?.response?.docs || []);
+}
 
+function normalizeAuthorSearchDocs(docs) {
     // Two levels of merging, both needed (verified against a live case: a
     // search for "Leo Mendiboure" returning 5 raw docs for this one person).
     //
@@ -68,6 +70,59 @@ export async function searchAuthor(searchQuery) {
         id: doc.idHal_s || `form:${doc.form_i}`,
         affiliation: doc.emailDomain_s || [],
     }));
+}
+
+const AUTHOR_SEARCH_BATCH_SIZE = 50;
+
+function solrQuoted(value) {
+    return `"${String(value).replace(/[\\"]/g, '\\$&')}"`;
+}
+
+// Resolves the straightforward, exact-name cases in one ref/author query.
+// Names absent from that result retain searchAuthor's broader, cached
+// fallback so the panel's candidate behaviour does not become less helpful.
+export async function searchAuthorsByNames(names) {
+    const uniqueNames = [...new Set(names.filter(Boolean))];
+    const result = new Map();
+    if (uniqueNames.length === 0) return result;
+
+    const keys = uniqueNames.map(name => `hal:search:${name}`);
+    const cached = await cache.mget(keys);
+    const uncached = uniqueNames.filter((name, index) => {
+        const key = keys[index];
+        if (!cached.has(key)) return true;
+        result.set(name, cached.get(key));
+        return false;
+    });
+
+    const fallbackNames = [];
+    for (let start = 0; start < uncached.length; start += AUTHOR_SEARCH_BATCH_SIZE) {
+        const batch = uncached.slice(start, start + AUTHOR_SEARCH_BATCH_SIZE);
+        const fields = 'fullName_s,idHal_s,form_i,emailDomain_s';
+        const query = `fullName_s:(${batch.map(solrQuoted).join(' OR ')})`;
+        const url = `${BASE}/ref/author/?q=${encodeURIComponent(query)}&wt=json&rows=${batch.length * 5}&fl=${fields}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const candidatesByName = new Map(batch.map(name => [name, []]));
+        for (const candidate of normalizeAuthorSearchDocs(data?.response?.docs || [])) {
+            if (candidatesByName.has(candidate.author)) candidatesByName.get(candidate.author).push(candidate);
+        }
+        for (const name of batch) {
+            const candidates = candidatesByName.get(name) || [];
+            if (candidates.length > 0) {
+                result.set(name, candidates);
+                cache.set(`hal:search:${name}`, candidates, 60 * 60 * 24);
+            } else {
+                fallbackNames.push(name);
+            }
+        }
+    }
+
+    await Promise.all(fallbackNames.map(async name => {
+        const candidates = await getSearchAuthor(name);
+        result.set(name, candidates);
+    }));
+    return result;
 }
 
 // ****************************************************************************************************
@@ -111,6 +166,43 @@ async function fetchAuthorInfo(idHal) {
     return { idHal, name: doc?.fullName_s || null, orcid: doc?.orcidId_s?.[0] || null };
 }
 
+// Batch variant for team identity panels, which need HAL display names for
+// many already-confirmed links. It uses its own cache shape so getAuthorInfo
+// keeps its established single-author contract.
+export async function getAuthorInfos(idHals) {
+    const uniqueIds = [...new Set(idHals.filter(Boolean))];
+    const result = new Map();
+    if (uniqueIds.length === 0) return result;
+
+    const keys = uniqueIds.map(idHal => `hal:author-infos:v1:${idHal}`);
+    const cached = await cache.mget(keys);
+    const uncached = uniqueIds.filter((idHal, index) => {
+        const key = keys[index];
+        if (!cached.has(key)) return true;
+        result.set(idHal, cached.get(key));
+        return false;
+    });
+
+    for (let start = 0; start < uncached.length; start += AUTHOR_INFO_BATCH_SIZE) {
+        const batch = uncached.slice(start, start + AUTHOR_INFO_BATCH_SIZE);
+        const query = `idHal_s:(${batch.map(solrQuoted).join(' OR ')})`;
+        const url = `${BASE}/ref/author/?q=${encodeURIComponent(query)}&wt=json&rows=${batch.length}&fl=idHal_s,orcidId_s,fullName_s`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const found = new Map((data?.response?.docs || []).filter(doc => doc.idHal_s).map(doc => [doc.idHal_s, {
+            idHal: doc.idHal_s,
+            name: doc.fullName_s || null,
+            orcids: doc.orcidId_s || [],
+        }]));
+        for (const idHal of batch) {
+            const info = found.get(idHal) || { idHal, name: null, orcids: [] };
+            result.set(idHal, info);
+            cache.set(`hal:author-infos:v1:${idHal}`, info, 60 * 60 * 24);
+        }
+    }
+    return result;
+}
+
 // Reverse lookup of getAuthorInfo above: given a bare ORCID (no
 // https://orcid.org/ prefix -- orcidId_s itself is stored bare, unlike
 // dblp's own url field), find the HAL identity that claims it, if any.
@@ -134,6 +226,47 @@ export async function findAuthorByOrcid(orcid) {
     return info || null;
 }
 
+const ORCID_LOOKUP_BATCH_SIZE = 100;
+
+// Batch counterpart of findAuthorByOrcid. HAL accepts an OR query over its
+// author reference, so a whole DBLP team can resolve ORCIDs in a few requests
+// rather than sending one request per member.
+export async function findAuthorsByOrcid(orcids) {
+    const uniqueOrcids = [...new Set(orcids.filter(Boolean))];
+    const result = new Map();
+    if (uniqueOrcids.length === 0) return result;
+
+    const keys = uniqueOrcids.map(orcid => `hal:orcid-lookup:${orcid}`);
+    const cached = await cache.mget(keys);
+    const uncached = uniqueOrcids.filter((orcid, index) => {
+        const key = keys[index];
+        if (!cached.has(key)) return true;
+        result.set(orcid, cached.get(key) || null);
+        return false;
+    });
+
+    for (let start = 0; start < uncached.length; start += ORCID_LOOKUP_BATCH_SIZE) {
+        const batch = uncached.slice(start, start + ORCID_LOOKUP_BATCH_SIZE);
+        const query = `orcidId_s:(${batch.map(solrQuoted).join(' OR ')})`;
+        const url = `${BASE}/ref/author/?q=${encodeURIComponent(query)}&wt=json&rows=${batch.length}&fl=idHal_s,fullName_s,orcidId_s`;
+        const response = await fetch(url);
+        const data = await response.json();
+        const found = new Map();
+        for (const doc of data?.response?.docs || []) {
+            if (!doc.idHal_s) continue;
+            for (const orcid of doc.orcidId_s || []) {
+                if (!found.has(orcid)) found.set(orcid, { idHal: doc.idHal_s, name: doc.fullName_s || null });
+            }
+        }
+        for (const orcid of batch) {
+            const match = found.get(orcid) || null;
+            result.set(orcid, match);
+            cache.set(`hal:orcid-lookup:${orcid}`, match || false, 60 * 60 * 24);
+        }
+    }
+    return result;
+}
+
 async function fetchAuthorByOrcid(orcid) {
     const fields = 'idHal_s,fullName_s';
     const url = `${BASE}/ref/author/?q=orcidId_s:${encodeURIComponent(`"${orcid}"`)}&wt=json&rows=1&fl=${fields}`;
@@ -147,8 +280,8 @@ async function fetchAuthorByOrcid(orcid) {
 
 // Batched sibling of getAuthorInfo above, for identityResolution.js: a lab's
 // membership can run into the hundreds of idHal_s, and looking each one up
-// individually would serialize hundreds of Solr round-trips behind the HAL
-// throttler. Chunking keeps this to a handful of requests instead.
+// individually would serialize hundreds of Solr round-trips behind the
+// shared throttler (throttler.js's default_limiter is maxConcurrent:1).
 // Chunking 100 idHal_s per query (measured ~0.2s/batch against HAL) keeps
 // this a handful of requests instead. Cached per idHal (not per batch) so a
 // later call needing only some of the same idHals still gets cache hits.

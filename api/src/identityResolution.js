@@ -279,6 +279,16 @@ export async function fetchPersonLinkByPid(pid) {
     return doc ? { idHal: doc.idHal, source: doc.source } : null;
 }
 
+async function fetchPersonLinksByPids(pids) {
+    if (pids.length === 0) return new Map();
+    const col = await personLinksCollection();
+    const docs = await col.find(
+        { pid: { $in: pids } },
+        { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } },
+    ).toArray();
+    return new Map(docs.map(doc => [doc.pid, { idHal: doc.idHal, source: doc.source }]));
+}
+
 async function saveOrcidPersonLink(idHal, pid) {
     const col = await personLinksCollection();
     await col.updateOne({ idHal }, { $set: { idHal, pid, source: 'orcid', createdAt: new Date() } }, { upsert: true });
@@ -400,20 +410,29 @@ async function resolveHalTeamMembers(members) {
 
 async function resolveDblpTeamMembers(members) {
     const names = await fetchDblpNames(members.map(member => member.id));
+    const existingByPid = await fetchPersonLinksByPids(members.map(member => member.id));
+    const existingInfos = await hal.getAuthorInfos([...existingByPid.values()].map(link => link.idHal));
+    const pending = members.filter(member => !existingByPid.has(member.id));
+    const orcidByPid = new Map(await Promise.all(pending.map(async member => [member.id, await getAuthorOrcid(member.id)])));
+    const halByOrcid = await hal.findAuthorsByOrcid([...orcidByPid.values()]);
+    const namesToSearch = pending
+        .filter(member => !halByOrcid.get(orcidByPid.get(member.id)))
+        .map(member => names.get(member.id) || member.name || null);
+    const candidatesByName = await hal.searchAuthorsByNames(namesToSearch);
+
     return Promise.all(members.map(async member => {
         const name = names.get(member.id) || member.name || null;
-        const existing = await fetchPersonLinkByPid(member.id);
+        const existing = existingByPid.get(member.id);
         if (existing) {
-            const halInfo = await hal.getAuthorInfo(existing.idHal);
-            return { pid: member.id, name, resolved: { idHal: existing.idHal, name: halInfo.name, source: existing.source }, confidence: 'confirmed', candidates: [] };
+            const halInfo = existingInfos.get(existing.idHal);
+            return { pid: member.id, name, resolved: { idHal: existing.idHal, name: halInfo?.name || null, source: existing.source }, confidence: 'confirmed', candidates: [] };
         }
-        const orcid = await getAuthorOrcid(member.id);
-        const orcidMatch = orcid && await hal.findAuthorByOrcid(orcid);
+        const orcidMatch = halByOrcid.get(orcidByPid.get(member.id));
         if (orcidMatch) {
             await saveOrcidPersonLink(orcidMatch.idHal, member.id);
             return { pid: member.id, name, resolved: { idHal: orcidMatch.idHal, name: orcidMatch.name, source: 'orcid' }, confidence: 'confirmed', candidates: [] };
         }
-        const candidates = name ? (await hal.searchAuthor(name)).map(candidate => ({ idHal: candidate.id, name: candidate.author })) : [];
+        const candidates = name ? (candidatesByName.get(name) || []).map(candidate => ({ idHal: candidate.id, name: candidate.author })) : [];
         return { pid: member.id, name, resolved: null, confidence: candidates.length ? 'unresolved' : 'not-found', candidates };
     }));
 }

@@ -26,14 +26,6 @@ const default_limiter = new Bottleneck({
   minTime: 300
 });
 
-// A DBLP-sourced team can require one HAL lookup per member. Keep the HAL
-// request rate conservative while allowing a slow response not to serialize
-// the whole Identity links panel behind it.
-const hal_limiter = new Bottleneck({
-  maxConcurrent: 3,
-  minTime: 300
-});
-
 // minTime: 200 alone already caps sustained throughput at 1000/200 = 5
 // req/s -- confirmed live against Crossref's own response headers
 // (x-rate-limit-limit: 5, x-rate-limit-interval: 1s) on 2026-09-15, not
@@ -125,9 +117,7 @@ async function fetch(url, options = {}) {
   let priority = { priority: 5 };
   let limiter = default_limiter;
   let retryPolicy = RETRY_POLICY.default;
-  if (url.startsWith('https://api.archives-ouvertes.fr/')) {
-    limiter = hal_limiter;
-  } else if (url.startsWith('https://api.crossref.org/')) {
+  if (url.startsWith('https://api.crossref.org/')) {
     limiter = crossref_limiter;
     retryPolicy = RETRY_POLICY.crossref;
   }
@@ -191,7 +181,6 @@ export function status() {
   return {
     limiters: {
       default: default_limiter.counts(),
-      hal: hal_limiter.counts(),
       crossref: crossref_limiter.counts(),
     },
     outbound,
