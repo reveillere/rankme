@@ -37,7 +37,6 @@ import { ExportButton } from './ExportButton';
 import { ImportButton } from './ImportButton';
 import { HelpButton } from './HelpButton';
 import { downloadTextFile } from '../exportPublications';
-import { apiTokenHeaders } from '../apiToken';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 400;
@@ -178,7 +177,7 @@ export default function Teams({ onOpenAuthor }) {
     const checked = await Promise.all(uniqueIds.map(async id => {
       try {
         const endpoint = source === 'dblp' ? `/api/dblp/author/${encodeURIComponent(id)}` : `/api/hal/author-info/${encodeURIComponent(id)}`;
-        const response = await fetch(endpoint, { headers: apiTokenHeaders() });
+        const response = await fetch(endpoint);
         if (!response.ok) return null;
         const data = await response.json();
         const label = source === 'dblp' ? data?.dblpperson?.$?.name : data?.name;

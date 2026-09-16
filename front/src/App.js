@@ -208,6 +208,12 @@ function App() {
   const [activeTabId, setActiveTabId] = useState(() => tabFromPath(location.pathname, location.search).id);
   const [searchRequest, setSearchRequest] = useState(null);
 
+  // API tokens belong to external clients, never to the browser interface.
+  // Clear the legacy preference once for visitors who used an earlier build.
+  useEffect(() => {
+    localStorage.removeItem('rankme:api-token');
+  }, []);
+
   const handleAboutOpen = () => setAboutDialogOpen(true);
   const handleAboutClose = () => setAboutDialogOpen(false);
 

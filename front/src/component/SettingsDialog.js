@@ -21,7 +21,6 @@ import EditIcon from '@mui/icons-material/Edit';
 import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
 import { listProfiles, axesForReference, createProfile } from '../customRankings';
 import { useFilterSettings } from '../FilterSettingsContext';
-import { getApiToken, setApiToken } from '../apiToken';
 
 const REFERENCE_LABEL = { core: 'CORE', sjr: 'SJR', ccf: 'CCF' };
 
@@ -133,11 +132,6 @@ function CustomAxisSection({ source, onSourceChange, profiles, creationReference
 }
 
 export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
-  const [apiToken, setApiTokenState] = useState(getApiToken);
-  const handleApiTokenChange = (value) => {
-    setApiTokenState(value);
-    setApiToken(value);
-  };
   // Not part of FilterSettingsContext: that context is for chart/list
   // filtering (re-applied reactively as you change it), while this is a
   // one-off "trust the crowd or not" preference, read fresh by each
@@ -306,21 +300,6 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
           When a match gets corrected the same way by several different people, everyone sees that correction
           by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
         </Typography>
-        <Divider sx={{ mt: 2, mb: 2.5 }} />
-
-        <Typography variant="subtitle1" gutterBottom>API token</Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Required for protected record lookups used when adding team members and for cross-checks. It stays only in this browser.
-        </Typography>
-        <TextField
-          size="small"
-          fullWidth
-          type="password"
-          autoComplete="off"
-          label="API token"
-          value={apiToken}
-          onChange={e => handleApiTokenChange(e.target.value)}
-        />
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

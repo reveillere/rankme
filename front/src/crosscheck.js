@@ -1,6 +1,5 @@
 import { rankingQueryParams } from './rankingSource';
 import { getClientId } from './matchOverrides';
-import { apiTokenHeaders } from './apiToken';
 
 // Author-scope, DBLP -> HAL crosscheck (see api/src/crosscheck.js): which of
 // this DBLP author's publications have no corresponding HAL deposit. Ranking
@@ -13,7 +12,7 @@ export async function fetchCrossCheck(pid, halId, { conferenceSource, journalSou
   // endpoint's own halId param is already in the query string, so a
   // non-empty result gets appended with '&' instead of a second '?'.
   const rankingParams = rankingQueryParams({ conferenceSource, journalSource }).replace(/^\?/, '&');
-  const resp = await fetch(`/api/crosscheck/author/${pid}?halId=${encodeURIComponent(halId)}${rankingParams}`, { headers: apiTokenHeaders() });
+  const resp = await fetch(`/api/crosscheck/author/${pid}?halId=${encodeURIComponent(halId)}${rankingParams}`);
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.message || body.error || `Cross-check: HTTP ${resp.status}`);
@@ -30,7 +29,7 @@ export async function fetchTeamCrossCheck({ source, pids }, { conferenceSource, 
   const rankingParams = rankingQueryParams({ conferenceSource, journalSource });
   const resp = await fetch(`/api/internal/crosscheck/team${rankingParams}`, {
     method: 'POST',
-    headers: apiTokenHeaders({ 'Content-Type': 'application/json' }),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ source, pids }),
   });
   if (!resp.ok) {
@@ -47,7 +46,7 @@ export async function fetchTeamCrossCheck({ source, pids }, { conferenceSource, 
 // single-pid request, just keyed by structId instead of (pid, halId).
 export async function fetchStructureCrossCheck(structId, { conferenceSource, journalSource } = {}) {
   const rankingParams = rankingQueryParams({ conferenceSource, journalSource });
-  const resp = await fetch(`/api/crosscheck/structure/${structId}${rankingParams}`, { headers: apiTokenHeaders() });
+  const resp = await fetch(`/api/crosscheck/structure/${structId}${rankingParams}`);
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.message || body.error || `Structure cross-check: HTTP ${resp.status}`);
