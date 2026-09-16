@@ -83,7 +83,7 @@ function AuthorShow({ author, pid, onOpenAuthor, isActive }) {
     return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to load this author from DBLP. Please try again later.</div>;
 
   if (rankedPublications === null)
-    return <LoadingSpinner message="Computing ranks…" progress={progress} />;
+    return <LoadingSpinner message="Loading publications from DBLP…" progress={progress} />;
 
   return <AuthorContent author={author} publications={rankedPublications} progress={progress} done={done} queued={queued} queuePosition={queuePosition} onOpenAuthor={onOpenAuthor} isActive={isActive} />;
 }
@@ -191,8 +191,6 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
       <div style={{ height: '50px' }}></div>
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
-
-      <div style={{ height: '60px' }}></div>
 
       <Snackbar
         anchorOrigin={{

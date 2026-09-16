@@ -140,6 +140,19 @@ const PublicationsItem = React.forwardRef(function PublicationsItem({ item: row,
   return <li className={className} ref={ref} style={style} {...props}>{children}</li>;
 });
 
+// Trailing breathing room below the last row -- a plain sibling div after
+// <Virtuoso> (as this used to be, in Author.js) isn't reliable: with
+// useWindowScroll, Virtuoso keeps revising its own estimate of total
+// content height as rows get measured while you scroll, so a fixed-height
+// element living outside that measurement can end up not yet accounted for
+// exactly when a scroll gesture reaches what Virtuoso currently believes is
+// the bottom -- the last row lands flush against the window edge instead.
+// A Footer component is measured by Virtuoso itself, so it's always
+// included in the same height calculation as every other row.
+function PublicationsFooter() {
+  return <div style={{ height: '60px' }} />;
+}
+
 // sharedMaps: see PublicationRow's own comment above -- comes from one
 // useSharedOverridesMaps() call at the container (Author.js/Team.js) and is
 // threaded down to every row. isActive is false for a tab currently sitting
@@ -244,7 +257,7 @@ export function Publications({ author, data, onOpenAuthor, selfPids, sharedMaps,
       // crashes the whole page; the next render immediately after has the
       // correct, up-to-date rows.
       computeItemKey={(index, row) => row?.key ?? `missing-${index}`}
-      components={{ List: PublicationsList, Item: PublicationsItem }}
+      components={{ List: PublicationsList, Item: PublicationsItem, Footer: PublicationsFooter }}
       itemContent={(index, row) => !row
         ? null
         : row.kind === 'year'
