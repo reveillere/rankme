@@ -192,6 +192,8 @@ function AuthorContent({ author, publications: rankedPublications, progress, don
       <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       <Publications author={author} data={filteredRecords} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} />
 
+      <div style={{ height: '60px' }}></div>
+
       <Snackbar
         anchorOrigin={{
           vertical: 'bottom',
