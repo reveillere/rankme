@@ -147,8 +147,8 @@ async function fetchAuthorByOrcid(orcid) {
 
 // Batched sibling of getAuthorInfo above, for identityResolution.js: a lab's
 // membership can run into the hundreds of idHal_s, and looking each one up
-// individually would serialize hundreds of Solr round-trips behind the
-// shared throttler (throttler.js's default_limiter is maxConcurrent:1).
+// individually would serialize hundreds of Solr round-trips behind the HAL
+// throttler. Chunking keeps this to a handful of requests instead.
 // Chunking 100 idHal_s per query (measured ~0.2s/batch against HAL) keeps
 // this a handful of requests instead. Cached per idHal (not per batch) so a
 // later call needing only some of the same idHals still gets cache hits.
