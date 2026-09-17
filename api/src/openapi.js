@@ -78,7 +78,14 @@ const protectedOperation = operation => ({ ...operation, security: [{ apiToken: 
 const rankExample = { value: 'A', effectiveValue: 'A', source: 'core', matchType: 'exact', queryText: 'International Conference on Example Systems', matchedTitle: 'International Conference on Example Systems', matchedId: 'conf-example' };
 const dblpAuthorExample = { author: { pid: '11/1262', name: 'Laurent Réveillère' }, records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Reveillere22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }] };
 const halRecordExample = [{ docid: 'hal-01234567', title: 'A plausible HAL publication', year: 2022, type: 'ART', authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère'], rank: rankExample }];
-const crossCheckExample = { dblpStatus: { version: 'example-dump', importedAt: '2026-09-17T00:00:00.000Z' }, halCacheNote: 'HAL data may be up to 24h stale', results: [{ status: 'missing', publication: { type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }, matches: [] }] };
+// Cross-check endpoints attach a rank the same way (computeDblpPublicationRank/
+// computeHalPublicationRank) but never run it through recordPresentation.js's
+// applyCorrections -- see openapi.js's own "Cross-check options" paragraph
+// (useCommunityCorrections/matchOverrides/customRankings are accepted for
+// contract parity there but not yet applied). No effectiveValue here, or
+// this example would show a field the real response never has.
+const { effectiveValue: _unusedInCrossCheckExample, ...crossCheckRankExample } = rankExample;
+const crossCheckExample = { dblpStatus: { version: 'example-dump', importedAt: '2026-09-17T00:00:00.000Z' }, halCacheNote: 'HAL data may be up to 24h stale', results: [{ status: 'missing', publication: { type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: crossCheckRankExample }, matches: [] }] };
 const teamCrossCheckExample = { ...crossCheckExample, members: [{ pid: '11/1262', idHal: 'laurent-reveillere', name: 'Laurent Réveillère', confirmedCount: 3, results: crossCheckExample.results }], unresolvedMembers: [], confirmedCount: 3 };
 
 // This specification intentionally contains only the externally usable

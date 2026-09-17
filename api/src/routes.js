@@ -49,17 +49,22 @@ router.get('/dblp/status', admin.controllerDblpStatus);
 // Browser-internal compatibility routes. They are deliberately omitted from
 // OpenAPI; the documented API uses the protected POST endpoints below.
 router.get('/dblp/author/*', dblp.controllerAuthor);
-router.post('/dblp/author/*', requireApiToken, dblp.controllerAuthor);
+// costlyRouteLimit here too, not just on the crosscheck/team-family routes
+// below: since recordPresentation.js started ranking/correcting every
+// record on this path (see respondWithRecords), the POST branch is no
+// longer the cheap "just the display name" lookup the GET compat route
+// above still is.
+router.post('/dblp/author/*', requireApiToken, costlyRouteLimit, dblp.controllerAuthor);
 router.get('/dblp/author-info/*', dblp.controllerAuthorInfo);
 router.get('/dblp/search/*', dblp.controllerSearch);
 router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
 
-router.post('/hal/author/:idHal', requireApiToken, hal.controllerAuthor);
+router.post('/hal/author/:idHal', requireApiToken, costlyRouteLimit, hal.controllerAuthor);
 router.get('/hal/author-info/*', hal.controllerAuthorInfo);
 router.get('/hal/search/*', hal.controllerSearch);
 router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
 
-router.post('/hal/structure/:structId', requireApiToken, hal.controllerStructurePublications);
+router.post('/hal/structure/:structId', requireApiToken, costlyRouteLimit, hal.controllerStructurePublications);
 router.get('/hal/structure-search/*', hal.controllerSearchStructure);
 router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);

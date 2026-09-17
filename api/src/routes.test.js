@@ -77,3 +77,24 @@ test('no route in routes.js applies requireApiToken to a path/method openapi.js 
         );
     }
 });
+
+// Guards against exactly the gap a later review found: dblp/author,
+// hal/author and hal/structure's POST routes started doing real per-record
+// rank/correction work (recordPresentation.js) without ever gaining the
+// costlyRouteLimit rate limiter the other expensive routes already had --
+// nothing here would have caught that until now, since it's neither an
+// auth nor an openapi-path concern. Every documented, apiToken-protected
+// POST route is expensive by construction (it's the one doing the real
+// work, vs. its unauthenticated GET/internal twin), so all of them should
+// carry a rate limiter -- rateLimit.js's own middleware is a named function
+// expression (rateLimitMiddleware), picked up here the same way
+// requireApiToken's name already is above.
+test('every requireApiToken-protected route also has a rate limiter in its middleware chain', () => {
+    for (const route of expressRoutes()) {
+        if (!route.middlewareNames.includes('requireApiToken')) continue;
+        assert.ok(
+            route.middlewareNames.includes('rateLimitMiddleware'),
+            `${route.method} ${route.path} requires an API token but has no rate limiter -- an expensive route left unthrottled`
+        );
+    }
+});
