@@ -4,19 +4,9 @@ import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
-import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 
 // DBLP/HAL
 import { fetchStructureCrossCheck, postCrossCheckOverride } from '../crosscheck';
-import { dblpCategories } from '../dblp';
-import { getHalCategory } from '../hal';
-import { PublicationRow } from './Publications';
-import { HalPublicationRow } from './HalPublications';
 import { customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
@@ -27,6 +17,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 import { ExportButton } from './ExportButton';
 import { IdentityLinksPanel } from './IdentityLinksPanel';
 import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
+import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
 
@@ -38,14 +29,6 @@ import '../App.css';
 // attaches a real `name` to every member, resolved or not) -- so this takes
 // structId directly as a prop instead of reading a client-side store, and
 // its network call is a plain GET keyed by structId, no member list to send.
-//
-// The row/section rendering below (CrossCheckSection/withRowNumbers,
-// ACTION_WIDTH/CHIP_WIDTH, the DBLP-grey/HAL-below layout) is a close copy
-// of CrossCheckTeam.js's own -- deliberately duplicated rather than shared,
-// same choice CrossCheckTeam.js itself already made against CrossCheck.js.
-const NO_SELF_IDS = [];
-const ACTION_WIDTH = 76;
-const CHIP_WIDTH = 92;
 
 export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor }) {
     const [report, setReport] = useState(null);
@@ -153,20 +136,9 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     );
 }
 
-// One resolved member's own Missing/To-review sections -- see
-// CrossCheckTeam.js's identical withRowNumbers for the numbering rule this
-// mirrors, here scoped to just this member's own results.
-function withRowNumbers(results) {
-    const typeCounts = results.reduce((acc, r) => {
-        acc[r.publication.type] = (acc[r.publication.type] || 0) + 1;
-        return acc;
-    }, {});
-    return results.map(result => ({
-        result,
-        nr: dblpCategories[result.publication.type].letter + typeCounts[result.publication.type]--,
-    }));
-}
-
+// One resolved member's own Missing/To-review sections, scoped to just this
+// member's own results -- see CrossCheckSection.js's withRowNumbers for the
+// numbering rule.
 function StructureMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, sharedMaps, activeCustomProfileIds }) {
     const pids = useMemo(() => [member.pid], [member.pid]);
     const numbered = withRowNumbers(member.results);
@@ -193,91 +165,6 @@ function StructureMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide
             />
         </Box>
     );
-}
-
-// Close copy of CrossCheckTeam.js's own CrossCheckSection -- see
-// CrossCheck.js for why the DBLP-row-greyed-out-above/HAL-candidates-below
-// layout, the confirm/reject icon pair, and the ACTION_WIDTH/CHIP_WIDTH
-// spacer widths look the way they do.
-function CrossCheckSection({ title, description, rows, showCandidates, pids, onOpenAuthor, onSearchAuthor, onDecide, sharedMaps, activeCustomProfileIds }) {
-    return (
-        <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ mb: description ? 0.5 : 1 }}>{title} ({rows.length})</Typography>
-            {description && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{description}</Typography>
-            )}
-            {rows.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">None</Typography>
-            ) : showCandidates ? (
-                rows.map(({ result }, i) => (
-                    <Box key={result.publication.dblp.key}>
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, opacity: 0.55 }}>
-                            <Box sx={{ width: ACTION_WIDTH, flexShrink: 0 }} />
-                            <Chip label={`DBLP ${result.publication.dblp.year}`} size="small" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
-                            <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
-                                <li className={`entry ${result.publication.type}`}>
-                                    <PublicationRow item={result.publication} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
-                                </li>
-                            </ul>
-                        </Box>
-                        {result.matches.map(m => {
-                            const category = getHalCategory(m.halPub.type);
-                            return (
-                                <Box key={m.halPub.docid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
-                                    <Box sx={{ width: ACTION_WIDTH, flexShrink: 0, display: 'flex', mt: '2px' }}>
-                                        <Tooltip title="Confirm same paper">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'same')}
-                                            >
-                                                <CheckCircleOutlineIcon fontSize="small" color="success" />
-                                            </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Not the same paper">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'different')}
-                                            >
-                                                <HighlightOffIcon fontSize="small" color="error" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    </Box>
-                                    <Chip label={`HAL ${m.halPub.year || '—'}`} size="small" color="info" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
-                                    <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
-                                        <li className={`entry ${category.cssClass}`}>
-                                            <HalPublicationRow
-                                                item={m.halPub}
-                                                category={category}
-                                                selfIds={NO_SELF_IDS}
-                                                onOpenAuthor={onOpenAuthor}
-                                                onSearchAuthor={onSearchAuthor}
-                                                sharedMaps={sharedMaps}
-                                                activeCustomProfileIds={activeCustomProfileIds}
-                                            />
-                                        </li>
-                                    </ul>
-                                </Box>
-                            );
-                        })}
-                        {i < rows.length - 1 && <Divider sx={{ my: 2 }} />}
-                    </Box>
-                ))
-            ) : (
-                <ul className="publ-list">
-                    {rows.map(({ result, nr }) => (
-                        <li className={`entry ${result.publication.type}`} key={result.publication.dblp.key}>
-                            <PublicationRow item={result.publication} nr={nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </Box>
-    );
-}
-
-function csvEscape(value) {
-    const s = value == null ? '' : String(value);
-    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 // Client-side only, no backend round trip -- same as CrossCheckTeam.js's own

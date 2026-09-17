@@ -90,6 +90,20 @@ export async function getAuthorNames(pid) {
     return toArray(person.author).filter(Boolean);
 }
 
+// Batched sibling of getAuthorNames above -- one $in query over every pid
+// instead of a per-pid round-trip. A pid absent from the dump is simply
+// absent from the returned Map (unlike getAuthorNames, which returns null
+// for it) since every caller here only ever needs the names that do exist.
+export async function getAuthorNamesByPids(pids) {
+    if (pids.length === 0) return new Map();
+    const db = await getDb();
+    const docs = await db.collection('www').find(
+        { _id: { $in: pids.map(pid => `${HOMEPAGE_PREFIX}${pid}`) } },
+        { projection: { author: 1 } },
+    ).toArray();
+    return new Map(docs.map(doc => [doc._id.slice(HOMEPAGE_PREFIX.length), toArray(doc.author).filter(Boolean)]));
+}
+
 // ORCID is not a dedicated dblp field: it's one of several URLs (alongside
 // Google Scholar/ACM/IEEE/...) on a person's own www/homepages/<pid> record,
 // recognizable only by its https://orcid.org/ prefix. Observed to appear at

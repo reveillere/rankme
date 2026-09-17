@@ -39,6 +39,18 @@ const crossref_limiter = new Bottleneck({
   minTime: 200
 });
 
+// HAL used to share default_limiter with DBLP-dump/CORE/SJR -- on a lab
+// structure/team with many members (hal.js's batched author/publication
+// calls), that meant HAL calls queued behind whatever unrelated call from
+// another source happened to be in flight, and vice versa. Same
+// conservative numbers as default_limiter for now (no measured HAL rate
+// ceiling on file the way crossref_limiter's is, see its own comment above)
+// -- this only isolates HAL's queue from the others, it doesn't loosen it.
+const hal_limiter = new Bottleneck({
+  maxConcurrent: 1,
+  minTime: 300
+});
+
 // Every outbound call this process makes goes through this one function
 // (admin.js's DBLP dump download, crossref.js, corePortal.js, ccfPortal.js,
 // hal.js, sjrPortal.js), so it's the one place that can answer "what is
@@ -120,6 +132,8 @@ async function fetch(url, options = {}) {
   if (url.startsWith('https://api.crossref.org/')) {
     limiter = crossref_limiter;
     retryPolicy = RETRY_POLICY.crossref;
+  } else if (url.startsWith('https://api.archives-ouvertes.fr/')) {
+    limiter = hal_limiter;
   }
 
   // Retries stay inside this single scheduled task: recursing back through
@@ -182,6 +196,7 @@ export function status() {
     limiters: {
       default: default_limiter.counts(),
       crossref: crossref_limiter.counts(),
+      hal: hal_limiter.counts(),
     },
     outbound,
   };

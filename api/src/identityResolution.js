@@ -48,11 +48,16 @@ async function getDblpDb() {
 // dblpSearchCache.js's createDblpSearch. Wired to the real dependencies
 // below (fetchMemberNames, fetchExactCandidates, ...).
 
-export function createIdentityResolver({ getMemberNames, getHalOrcids, findExactCandidates, findTokenCandidates, getPersonLink, savePersonLink }) {
+export function createIdentityResolver({ getMemberNames, getHalOrcids, findExactCandidates, findTokenCandidates, getPersonLinks, savePersonLink }) {
     return async function resolveStructure(structId) {
         const members = await getMemberNames(structId);
         const resultByIdHal = new Map();
         const toResolve = [];
+
+        // One batched lookup for every member's existing link, instead of a
+        // per-member round-trip -- same "step 0/1 batched, step 2 per-member
+        // by necessity" shape as the toResolve loop below.
+        const existingByIdHal = await getPersonLinks(members.filter(m => m.name).map(m => m.idHal));
 
         for (const member of members) {
             if (!member.name) {
@@ -71,7 +76,7 @@ export function createIdentityResolver({ getMemberNames, getHalOrcids, findExact
             // human's manual correction (the one hard rule here), and a
             // previously orcid-confirmed link is exactly the kind of result
             // this whole pipeline exists to avoid paying for twice.
-            const existing = await getPersonLink(member.idHal);
+            const existing = existingByIdHal.get(member.idHal);
             if (existing) {
                 resultByIdHal.set(member.idHal, { idHal: member.idHal, name: member.name, resolved: { pid: existing.pid, source: existing.source }, confidence: 'confirmed', candidates: [] });
                 continue;
@@ -279,6 +284,16 @@ export async function fetchPersonLinkByPid(pid) {
     return doc ? { idHal: doc.idHal, source: doc.source } : null;
 }
 
+async function fetchPersonLinksByIdHals(idHals) {
+    if (idHals.length === 0) return new Map();
+    const col = await personLinksCollection();
+    const docs = await col.find(
+        { idHal: { $in: idHals } },
+        { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } },
+    ).toArray();
+    return new Map(docs.map(doc => [doc.idHal, { pid: doc.pid, source: doc.source }]));
+}
+
 async function fetchPersonLinksByPids(pids) {
     if (pids.length === 0) return new Map();
     const col = await personLinksCollection();
@@ -299,7 +314,7 @@ const resolveStructureCore = createIdentityResolver({
     getHalOrcids: hal.getAuthorsInfo,
     findExactCandidates: fetchExactCandidates,
     findTokenCandidates: fetchTokenCandidates,
-    getPersonLink: fetchPersonLink,
+    getPersonLinks: fetchPersonLinksByIdHals,
     savePersonLink: saveOrcidPersonLink,
 });
 
@@ -387,8 +402,9 @@ export async function controllerResolveStructure(req, res) {
 async function resolveHalTeamMembers(members) {
     const result = new Map();
     const pending = [];
+    const existingByIdHal = await fetchPersonLinksByIdHals(members.map(member => member.id));
     for (const member of members) {
-        const existing = await fetchPersonLink(member.id);
+        const existing = existingByIdHal.get(member.id);
         if (existing) result.set(member.id, { idHal: member.id, name: member.name, resolved: { pid: existing.pid, source: existing.source }, confidence: 'confirmed', candidates: [] });
         else pending.push(member);
     }
@@ -450,7 +466,7 @@ export async function controllerResolveTeam(req, res) {
 // last computed automatically.
 export async function controllerRecordLink(req, res) {
     const { idHal, pid } = req.body || {};
-    if (!idHal || !pid) {
+    if (typeof idHal !== 'string' || !idHal.trim() || typeof pid !== 'string' || !pid.trim()) {
         res.status(400).json({ error: 'Bad Request', message: 'Missing idHal or pid' });
         return;
     }
@@ -542,7 +558,7 @@ export async function controllerListLinks(req, res) {
 
 export async function controllerDeleteLink(req, res) {
     const { idHal } = req.body || {};
-    if (!idHal) {
+    if (typeof idHal !== 'string' || !idHal.trim()) {
         res.status(400).json({ error: 'Bad Request', message: 'Missing idHal' });
         return;
     }

@@ -1,9 +1,14 @@
-const jsonResponse = (description = 'Successful response', example) => ({
+const jsonResponse = (description = 'Successful response', example, extra = {}) => ({
   200: { description, content: { 'application/json': { schema: { type: 'object', additionalProperties: true }, ...(example ? { example } : {}) } } },
   400: { description: 'Invalid request' },
   401: { description: 'Missing or invalid API token' },
   500: { description: 'Server error' },
+  ...extra,
 });
+
+const NOT_FOUND = { 404: { description: 'No record for the given identifier' } };
+const CONFLICT = { 409: { description: 'The supplied identityLinks are malformed, or map one idHal or PID to more than one counterpart' } };
+const DUMP_NOT_READY = { 503: { description: 'The local DBLP dump has not been imported yet, or a reimport is in progress' } };
 
 const path = (name, description, example) => ({
   name, in: 'path', required: true, schema: { type: 'string', example }, description,
@@ -18,12 +23,12 @@ const recordPresentationParameters = [
   { name: 'from', in: 'query', schema: { type: 'integer', minimum: 1800 }, description: 'First publication year to include.' },
   { name: 'to', in: 'query', schema: { type: 'integer', minimum: 1800 }, description: 'Last publication year to include.' },
   { name: 'categories', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string', enum: ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'informal'] } }, description: 'Comma-separated selected publication categories.' },
-  { name: 'ranks', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string' } }, description: 'Comma-separated selected rank values.' },
+  { name: 'ranks', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string' } }, description: 'Comma-separated selected rank values, for example A*,A,Q1. A record with no computed rank is never excluded by this filter.' },
   { name: 'sort', in: 'query', schema: { type: 'string', enum: ['date', 'date-rank', 'rank-date'], default: 'date' }, description: 'Result ordering.' },
-  { name: 'export', in: 'query', schema: { type: 'string', enum: ['md', 'csv', 'json'] }, description: 'Requested export format.' },
-  { name: 'useCommunityCorrections', in: 'query', schema: { type: 'boolean', default: true }, description: 'Whether community-confirmed venue corrections are included.' },
-  { name: 'matchOverrides', in: 'query', schema: { type: 'string', format: 'json' }, description: 'JSON-encoded personal match-corrections file content.' },
-  { name: 'customRankings', in: 'query', schema: { type: 'string', format: 'json' }, description: 'JSON-encoded custom-ranking file content.' },
+  { name: 'export', in: 'query', schema: { type: 'string', enum: ['md', 'csv', 'json'] }, description: 'When set, the response is the rendered export (Content-Type text/markdown, text/csv or application/json) instead of the normal JSON envelope -- a lightweight snapshot (rank/authors/title/venue/type/doi per record), not a pixel-perfect mirror of the JSON response.' },
+  { name: 'useCommunityCorrections', in: 'query', schema: { type: 'boolean', default: true }, description: 'Reserved for applying community-confirmed venue corrections. Not applied yet.' },
+  { name: 'matchOverrides', in: 'query', schema: { type: 'string', format: 'json' }, description: 'Reserved for a future per-request import of personal venue-match corrections. Not applied yet.' },
+  { name: 'customRankings', in: 'query', schema: { type: 'string', format: 'json' }, description: 'Reserved for portable custom-ranking profiles. Not applied yet.' },
 ];
 
 const identityLinks = {
@@ -67,9 +72,9 @@ const crossCheckOptions = {
 
 const protectedOperation = operation => ({ ...operation, security: [{ apiToken: [] }] });
 
-const dblpAuthorExample = { author: { pid: '11/1262', name: 'Laurent Réveillère' }, records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Reveillere22', title: 'A plausible DBLP publication', year: '2022' } }] };
-const halRecordExample = [{ docid: 'hal-01234567', title: 'A plausible HAL publication', year: 2022, type: 'ART', authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère'] }];
 const rankExample = { value: 'A', source: 'core', matchType: 'exact', queryText: 'International Conference on Example Systems', matchedTitle: 'International Conference on Example Systems', matchedId: 'conf-example' };
+const dblpAuthorExample = { author: { pid: '11/1262', name: 'Laurent Réveillère' }, records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Reveillere22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }] };
+const halRecordExample = [{ docid: 'hal-01234567', title: 'A plausible HAL publication', year: 2022, type: 'ART', authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère'], rank: rankExample }];
 const crossCheckExample = { dblpStatus: { version: 'example-dump', importedAt: '2026-09-17T00:00:00.000Z' }, halCacheNote: 'HAL data may be up to 24h stale', results: [{ status: 'missing', publication: { type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }, matches: [] }] };
 const teamCrossCheckExample = { ...crossCheckExample, members: [{ pid: '11/1262', idHal: 'laurent-reveillere', name: 'Laurent Réveillère', confirmedCount: 3, results: crossCheckExample.results }], unresolvedMembers: [], confirmedCount: 3 };
 
@@ -80,8 +85,10 @@ export const openapiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'RankMe API',
-    version: '0.7.0',
-    description: `Protected read-only API for author and HAL structure records, plus cross-checks.
+    version: '0.8.0',
+    description: `**Beta:** this API is under active development. Endpoints, parameters and response shapes may still change without notice -- avoid depending on it for production use yet.
+
+Protected read-only API for author and HAL structure records, plus cross-checks.
 
 ## Authentication
 
@@ -100,11 +107,15 @@ The following parameters belong to RankMe *web page URLs*. They are applied by t
 
 Examples: \`/dblp/11/1262?from=2015&to=2024&sort=date-rank\` and \`/structure/12345?export=csv\`.
 
+## Record options
+
+The four record endpoints below (\`/dblp/author/{pid}\`, \`/hal/author/{idHal}\`, \`/hal/structure/{structId}\`, \`/records/team\`) rank every returned record (CORE/SJR, or CCF when \`confSource\`/\`journalSource\` says so) and apply \`from\`, \`to\`, \`categories\`, \`ranks\` and \`sort\` server-side. Setting \`export\` replaces the normal JSON response with a rendered Markdown/CSV/JSON snapshot instead (see each endpoint's \`export\` parameter). \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` are documented for contract completeness but not applied yet.
+
 ## Cross-check options
 
 Cross-check POST requests accept \`identityLinks\`, the JSON content of an exported Identity links file. The links apply only to that request and override inferred identities. A malformed file, or a file that maps one idHal or PID to multiple counterparts, returns \`409 Conflict\` and no partial result.
 
-\`from\`, \`to\`, \`categories\`, \`ranks\`, \`sort\`, \`export\`, \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` define the portable contract for browser-local display choices on both record and cross-check operations. Their server-side application is the next implementation step; they are documented now so the API shape is complete without claiming that a value has already changed a response.
+\`from\`, \`to\`, \`categories\`, \`ranks\`, \`sort\`, \`export\`, \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` are also accepted here, for contract parity with the record endpoints above, but are not yet applied server-side on cross-check operations -- unlike on the record endpoints, where they now are.
 
 ## Teams
 
@@ -119,7 +130,8 @@ Teams are stored locally in the web application, so there is no team-record GET 
     '/dblp/author/{pid}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get DBLP records for an author',
-        parameters: [path('pid', 'DBLP person identifier (PID).', '11/1262'), ...recordPresentationParameters], responses: jsonResponse('DBLP author records', dblpAuthorExample),
+        parameters: [path('pid', 'DBLP person identifier (PID).', '11/1262'), ...recordPresentationParameters],
+        responses: jsonResponse('DBLP author records', dblpAuthorExample, { ...NOT_FOUND, ...DUMP_NOT_READY }),
       }),
     },
     '/hal/author/{idHal}': {
@@ -142,21 +154,21 @@ Teams are stored locally in the web application, so there is no team-record GET 
           source: { type: 'string', enum: ['dblp', 'hal'], example: 'dblp' },
           pids: { type: 'array', description: 'DBLP PIDs for source=dblp; HAL idHals for source=hal.', items: { type: 'string' }, example: ['11/1262', '12/3456'] },
           ...crossCheckOptions,
-        } } } } }, responses: jsonResponse('Merged team records', { source: 'dblp', records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' } }] }),
+        } } } } }, responses: jsonResponse('Merged team records', { source: 'dblp', records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }] }),
       }),
     },
     '/crosscheck/author': {
       post: protectedOperation({
         tags: ['Cross-check'], summary: 'Cross-check one DBLP author against one HAL author',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['pid', 'halId'], properties: { pid: { type: 'string', example: '11/1262' }, halId: { type: 'string', example: 'laurent-reveillere' }, ...crossCheckOptions } } } } },
-        parameters: rankingParameters, responses: jsonResponse('Comparison result', crossCheckExample),
+        parameters: rankingParameters, responses: jsonResponse('Comparison result', crossCheckExample, { ...NOT_FOUND, ...CONFLICT }),
       }),
     },
     '/crosscheck/structure': {
       post: protectedOperation({
         tags: ['Cross-check'], summary: 'Cross-check a HAL structure against DBLP identities',
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['structId'], properties: { structId: { type: 'string', example: '12345' }, ...crossCheckOptions } } } } },
-        parameters: rankingParameters, responses: jsonResponse('Structure comparison result', teamCrossCheckExample),
+        parameters: rankingParameters, responses: jsonResponse('Structure comparison result', teamCrossCheckExample, CONFLICT),
       }),
     },
     '/crosscheck/team': {
@@ -172,7 +184,7 @@ Teams are stored locally in the web application, so there is no team-record GET 
               ...crossCheckOptions,
             },
           } } },
-        }, responses: jsonResponse('Team comparison result', teamCrossCheckExample),
+        }, responses: jsonResponse('Team comparison result', teamCrossCheckExample, CONFLICT),
       }),
     },
   },

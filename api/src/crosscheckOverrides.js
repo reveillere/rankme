@@ -47,7 +47,7 @@ export async function getOverridesByDblpKey(dblpKeys) {
 
 export async function controllerRecord(req, res) {
     const { dblpKey, halDocid, decision } = req.body || {};
-    if (!dblpKey || !halDocid) {
+    if (typeof dblpKey !== 'string' || !dblpKey.trim() || typeof halDocid !== 'string' || !halDocid.trim()) {
         res.status(400).json({ error: 'Bad Request', message: 'Missing dblpKey or halDocid' });
         return;
     }

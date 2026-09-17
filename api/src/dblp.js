@@ -2,6 +2,7 @@ import * as cache from './cache.js';
 import * as dblpLocal from './dblpLocal.js';
 import * as admin from './admin.js';
 import { createDblpSearch } from './dblpSearchCache.js';
+import { respondWithRecords } from './recordPresentation.js';
 
 export async function controllerAuthor(req, res) {
     const authorPID = req.params[0] || req.params.pid || req.body?.pid;
@@ -29,13 +30,14 @@ export async function controllerAuthor(req, res) {
         }
         // The browser's legacy GET only needs the display name. The
         // documented POST API is the records endpoint, so it returns the
-        // actual DBLP publications too.
+        // actual DBLP publications too, ranked and filtered/sorted per
+        // recordPresentation.js -- the GET path above is untouched by any
+        // of that, it's the frontend's own SSE stream (authorStream.js) that
+        // ranks/filters what the browser actually displays.
         if (req.method === 'POST') {
             const records = await dblpLocal.getPublicationsByNames(localNames);
-            res.json({
-                author: { pid: authorPID, name: localNames[0] || authorPID },
-                records,
-            });
+            const author = { pid: authorPID, name: localNames[0] || authorPID };
+            await respondWithRecords(req, res, records, 'dblp', `DBLP records for ${authorPID}`, finalRecords => ({ author, records: finalRecords }));
             return;
         }
         res.json({ dblpperson: { $: { name: localNames[0] || authorPID } } });

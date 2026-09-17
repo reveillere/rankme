@@ -834,14 +834,19 @@ if (!process.env.ADMIN_TOKEN) {
 }
 
 export function requireAdminToken(req, res, next) {
-    // X-Admin-Token/?token= are what the front end (AdminDashboard.js) and
-    // deploy-dblp-dump.sh send. `Authorization: Bearer ...` is added on
-    // top for Prometheus's scrape config (monitoring/prometheus.yml's
-    // bearer_token_file) -- Prometheus's HTTP client always sends the
-    // token that way, with no option to use a custom header name instead.
+    // X-Admin-Token is what the front end (AdminDashboard.js) and
+    // deploy-dblp-dump.sh/cron-dblp-import.sh send. `Authorization: Bearer
+    // ...` is added on top for Prometheus's scrape config
+    // (monitoring/prometheus.yml's bearer_token_file) -- Prometheus's HTTP
+    // client always sends the token that way, with no option to use a
+    // custom header name instead. Deliberately no ?token= query-string
+    // fallback: no caller uses it, and a query param ends up in access
+    // logs, browser history and Referer headers.
     const bearerMatch = req.headers['authorization']?.match(/^Bearer (.+)$/);
-    const token = req.headers['x-admin-token'] || req.query.token || bearerMatch?.[1];
-    if (token !== ADMIN_TOKEN) {
+    const token = req.headers['x-admin-token'] || bearerMatch?.[1];
+    const expected = Buffer.from(ADMIN_TOKEN);
+    const candidate = Buffer.from(token || '');
+    if (candidate.length !== expected.length || !crypto.timingSafeEqual(candidate, expected)) {
         return res.status(401).json({ error: 'Unauthorized' });
     }
     next();

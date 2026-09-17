@@ -17,7 +17,17 @@ const accessLogStream = fs.createWriteStream('./log/access.log', { flags: 'a' })
 const app = express();
 const port = 80;
 
-app.use(cors());
+// Browser CORS only, not a security boundary for the token-authenticated
+// public API (server-to-server callers never send an Origin header at
+// all, so this can't restrict them) -- it just stops arbitrary third-party
+// web pages from making cross-origin calls, including to /admin/*. The
+// front end itself is same-origin (served by the same reverse proxy, see
+// reverse-proxy/nginx.conf.prod), so it never needs this to be open.
+const corsOrigin = process.env.CORS_ORIGIN;
+if (!corsOrigin) {
+  console.log('[CORS] No CORS_ORIGIN set — allowing all origins');
+}
+app.use(cors(corsOrigin ? { origin: corsOrigin.split(',').map(o => o.trim()) } : undefined));
 app.use(morgan('dev', { stream: accessLogStream }));
 app.use(express.json());
 app.use(metrics.middleware);

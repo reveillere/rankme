@@ -4,6 +4,7 @@ import * as identityResolution from './identityResolution.js';
 import * as crosscheck from './crosscheck.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
 import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
+import { mapWithConcurrency } from './concurrency.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -25,19 +26,6 @@ import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksI
 // SSE/priority machinery to reuse here (this stays a one-shot JSON response,
 // same as getCrossCheckReport itself), so a small local pool is enough.
 const MEMBER_CONCURRENCY = 4;
-
-async function mapWithConcurrency(items, limit, fn) {
-    const results = new Array(items.length);
-    let nextIndex = 0;
-    async function worker() {
-        while (nextIndex < items.length) {
-            const i = nextIndex++;
-            results[i] = await fn(items[i], i);
-        }
-    }
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-    return results;
-}
 
 const CACHE_TTL_S = 60 * 60; // 1h -- same rationale as crosscheck.js/identityResolution.js's own
                               // report caches. Each member's own sub-report is already cached

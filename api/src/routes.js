@@ -6,6 +6,7 @@ import * as sjr from './sjrPortal.js';
 import * as ccf from './ccfPortal.js';
 import * as admin from './admin.js';
 import { requireApiToken } from './apiToken.js';
+import { rateLimit } from './rateLimit.js';
 import * as authorStream from './authorStream.js';
 import * as matchOverrides from './matchOverrides.js';
 import * as crosscheck from './crosscheck.js';
@@ -16,6 +17,12 @@ import * as identityResolution from './identityResolution.js';
 import { controllerTeamRecords } from './teamRecords.js';
 
 const router = express.Router();
+
+// Applied only to the expensive cross-check/team-resolution routes below --
+// generous enough (30 req/min per IP) not to bother normal browser use, just
+// to stop a runaway script or scraper from hammering the costliest
+// computations in the app. See rateLimit.js.
+const costlyRouteLimit = rateLimit({ windowMs: 60_000, max: 30 });
 
 // Liveness probe for Docker healthchecks: confirms the Express process is
 // up and responsive. Deliberately doesn't touch DBLP/HAL/mongo/redis, so it
@@ -56,10 +63,10 @@ router.post('/hal/structure/:structId', requireApiToken, hal.controllerStructure
 router.get('/hal/structure-search/*', hal.controllerSearchStructure);
 router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
-router.post('/records/team', requireApiToken, controllerTeamRecords);
+router.post('/records/team', requireApiToken, costlyRouteLimit, controllerTeamRecords);
 
-router.get('/identity/structure/:structId', identityResolution.controllerResolveStructure);
-router.post('/identity/team', identityResolution.controllerResolveTeam);
+router.get('/identity/structure/:structId', costlyRouteLimit, identityResolution.controllerResolveStructure);
+router.post('/identity/team', costlyRouteLimit, identityResolution.controllerResolveTeam);
 router.post('/identity/link', identityResolution.controllerRecordLink);
 router.get('/identity/links', identityResolution.controllerListLinks);
 router.delete('/identity/link', identityResolution.controllerDeleteLink);
@@ -74,16 +81,16 @@ router.get('/rank/ccf/candidates', ccf.controllerCandidates);
 router.post('/match-overrides', matchOverrides.controllerRecord);
 router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);
 
-router.get('/crosscheck/author/*', crosscheck.controllerCrossCheck);
-router.post('/crosscheck/author', requireApiToken, crosscheck.controllerCrossCheck);
-router.get('/crosscheck/structure/:structId', crosscheckStructure.controllerCrossCheckStructure);
-router.post('/crosscheck/structure', requireApiToken, crosscheckStructure.controllerCrossCheckStructure);
+router.get('/crosscheck/author/*', costlyRouteLimit, crosscheck.controllerCrossCheck);
+router.post('/crosscheck/author', requireApiToken, costlyRouteLimit, crosscheck.controllerCrossCheck);
+router.get('/crosscheck/structure/:structId', costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
+router.post('/crosscheck/structure', requireApiToken, costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
 // POST, not GET .../*: a team's member list (dblp pids) comes from the
 // client's own localStorage (front/src/teamStore.js -- the server has no
 // notion of a team at all) and can be long, so it travels in the body
 // rather than a query string the way a single wildcard id does above.
-router.post('/crosscheck/team', requireApiToken, crosscheckTeam.controllerCrossCheckTeam);
-router.post('/internal/crosscheck/team', crosscheckTeam.controllerCrossCheckTeam);
+router.post('/crosscheck/team', requireApiToken, costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
+router.post('/internal/crosscheck/team', costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
 router.post('/crosscheck/override', crosscheckOverrides.controllerRecord);
 
 // requireAdminToken added here: this triggers a full drop + rebuild of

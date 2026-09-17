@@ -1,8 +1,7 @@
 import { PDFParse } from 'pdf-parse';
 import { mkdir, writeFile, readFile } from 'fs/promises';
 import { normalizeTitle, levenshtein, isWorkshopMismatch } from './levenshtein.js';
-import * as cache from './cache.js';
-import { dedupeInFlight } from './inFlight.js';
+import { createCachedRankLookup } from './rankLookupCache.js';
 
 import fetch from './throttler.js';
 
@@ -287,6 +286,12 @@ export async function load() {
 // Publications.js/HalPublications.js) relies on.
 const NO_MATCH = { value: 'Unranked', matchType: 'none', source: 'CCF', queryText: null };
 
+// Same rationale as corePortal.js/sjrPortal.js's own RANK_CACHE_TTL_S: a
+// computed rank for a given (edition, key) never changes, so this is really
+// "cache forever" with a generous-but-finite TTL rather than a literal
+// unbounded key.
+const RANK_CACHE_TTL_S = 60 * 60 * 24 * 365;
+
 // The rank in the *current* edition for the same venue -- a genuine
 // then-vs-now comparison once a publication's own edition (resolved by
 // year) differs from the latest one, exactly what CORE/SJR's own
@@ -312,20 +317,22 @@ export async function getRankForDblpUrl(dblpUrl, pubYear) {
     const edition = resolveEdition(pubYear);
     if (!edition) return { ...NO_MATCH, queryText: key };
     const cacheKey = rankKey(edition.year, key);
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) return cached;
-
-    return dedupeInFlight(inFlightByKey, cacheKey, async () => {
+    return getCachedRank(cacheKey, () => {
         const entry = edition.byDblpKey.get(key);
         const result = entry
             ? { value: entry.rank, matchType: 'exact', source: `CCF${edition.year}`, matchedTitle: entry.text, queryText: key }
             : { ...NO_MATCH, queryText: key, source: `CCF${edition.year}` };
-        const withCurrent = attachCurrentValue(result, (latest) => latest.byDblpKey.get(key));
-        await cache.set(cacheKey, withCurrent);
-        return withCurrent;
+        return attachCurrentValue(result, (latest) => latest.byDblpKey.get(key));
     });
 }
-const inFlightByKey = new Map();
+
+// One shared getCachedRank instance for both getRankForDblpUrl and
+// getRankForHalVenue below (not one each): they were already sharing a
+// single inFlight map before this was factored into rankLookupCache.js, and
+// their cache keys can never collide (rankKey's own query segment is either
+// a dblp key or a venue acronym+title, never both), so there is no reason to
+// split it in two now.
+const getCachedRank = createCachedRankLookup(RANK_CACHE_TTL_S);
 
 // Free-text search over one edition's CCF list, for RankDetailsPopover's
 // "change match" picker -- same shape/contract as core.controllerCandidates/
@@ -374,10 +381,7 @@ export async function getRankForHalVenue(acronym, fullName, pubYear) {
     const edition = resolveEdition(pubYear);
     if (!edition) return { ...NO_MATCH, queryText };
     const cacheKey = rankKey(edition.year, queryText);
-    const cached = await cache.get(cacheKey);
-    if (cached !== null) return cached;
-
-    return dedupeInFlight(inFlightByKey, cacheKey, async () => {
+    return getCachedRank(cacheKey, () => {
         const normalizedQuery = normalizeTitle(queryText);
         const best = bestFuzzyMatch(edition, normalizedQuery);
         // See isWorkshopMismatch's own comment (levenshtein.js) -- a
@@ -389,9 +393,7 @@ export async function getRankForHalVenue(acronym, fullName, pubYear) {
         const result = best && !isWorkshopMismatch(queryText, best.entry.text)
             ? { value: best.entry.rank, matchType: 'fuzzy', source: `CCF${edition.year}`, matchedTitle: best.entry.text, distance: best.distance, queryText }
             : { ...NO_MATCH, queryText, source: `CCF${edition.year}` };
-        const withCurrent = attachCurrentValue(result, (latest) => bestFuzzyMatch(latest, normalizedQuery)?.entry);
-        await cache.set(cacheKey, withCurrent);
-        return withCurrent;
+        return attachCurrentValue(result, (latest) => bestFuzzyMatch(latest, normalizedQuery)?.entry);
     });
 }
 

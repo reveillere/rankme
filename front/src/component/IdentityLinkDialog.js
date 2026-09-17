@@ -21,6 +21,7 @@ import Box from '@mui/material/Box';
 
 import { searchAuthor as searchAuthorHal } from '../hal';
 import { searchAuthor as searchAuthorDblp } from '../dblp';
+import { getCachedSearch, setCachedSearch } from '../searchCache';
 import { PersonListItemText } from './PersonListItemText';
 
 const MIN_QUERY_LENGTH = 2;
@@ -85,6 +86,19 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
             return;
         }
         const requestId = ++requestIdRef.current;
+        // Same key shape as Search.js's own cache for this source -- a name
+        // already searched from the main search box (or a previous time this
+        // dialog opened) is served from localStorage instead of hitting HAL/
+        // DBLP again. No dblp-reimport generation prefix here (unlike
+        // Search.js): this dialog has no dblpStatus of its own, so a short
+        // TTL bounds staleness instead.
+        const cacheKey = `search:${direction}:${trimmed.toLowerCase()}`;
+        const cached = getCachedSearch(cacheKey);
+        if (Array.isArray(cached)) {
+            setResults(cached);
+            setStatus('resolved');
+            return;
+        }
         setStatus('pending');
         dir.search(trimmed).then(data => {
             if (requestId !== requestIdRef.current) return; // a newer search superseded this one
@@ -95,6 +109,7 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
             }
             setResults(data);
             setStatus('resolved');
+            setCachedSearch(cacheKey, data, direction === 'dblp' ? 5 * 60 * 1000 : undefined);
         }).catch(() => {
             if (requestId !== requestIdRef.current) return;
             setResults([]);

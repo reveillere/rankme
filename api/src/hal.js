@@ -1,5 +1,6 @@
 import * as cache from './cache.js';
 import { dedupeInFlight } from './inFlight.js';
+import { respondWithRecords } from './recordPresentation.js';
 
 import fetch from './throttler.js';
 
@@ -16,15 +17,22 @@ export async function controllerSearch(req, res) {
     }
 }
 
+// Deduped like getAuthorPublications below: two concurrent callers for the
+// same not-yet-cached query (e.g. two browser tabs searching the same name)
+// would otherwise both miss the cache and independently redo the HAL call.
+const inFlightSearchAuthor = new Map();
+
 async function getSearchAuthor(searchQuery) {
     const key = `hal:search:${searchQuery}`;
 
-    let results = await cache.get(key);
-    if (results == null) {
-        results = await searchAuthor(searchQuery);
-        cache.set(key, results, 60 * 60 * 24); // 1 day
-    }
-    return results;
+    const cached = await cache.get(key);
+    if (cached != null) return cached;
+
+    return dedupeInFlight(inFlightSearchAuthor, key, async () => {
+        const results = await searchAuthor(searchQuery);
+        await cache.set(key, results, 60 * 60 * 24); // 1 day
+        return results;
+    });
 }
 
 export async function searchAuthor(searchQuery) {
@@ -36,7 +44,7 @@ export async function searchAuthor(searchQuery) {
     return normalizeAuthorSearchDocs(data?.response?.docs || []);
 }
 
-function normalizeAuthorSearchDocs(docs) {
+export function normalizeAuthorSearchDocs(docs) {
     // Two levels of merging, both needed (verified against a live case: a
     // search for "Leo Mendiboure" returning 5 raw docs for this one person).
     //
@@ -144,15 +152,19 @@ export async function controllerAuthorInfo(req, res) {
 // no reliable alignment to the author list). ref/author's own orcidId_s is
 // attached to a specific idHal_s instead, only ever present when that person
 // has actually linked an ORCID to their HAL account.
+const inFlightAuthorInfo = new Map();
+
 export async function getAuthorInfo(idHal) {
     const key = `hal:author-info:v2:${idHal}`;
 
-    let info = await cache.get(key);
-    if (info == null) {
-        info = await fetchAuthorInfo(idHal);
-        cache.set(key, info, 60 * 60 * 24); // 1 day, same as searchAuthor
-    }
-    return info;
+    const cached = await cache.get(key);
+    if (cached != null) return cached;
+
+    return dedupeInFlight(inFlightAuthorInfo, key, async () => {
+        const info = await fetchAuthorInfo(idHal);
+        await cache.set(key, info, 60 * 60 * 24); // 1 day, same as searchAuthor
+        return info;
+    });
 }
 
 async function fetchAuthorInfo(idHal) {
@@ -336,7 +348,7 @@ export async function controllerAuthor(req, res) {
     const id = req.params[0] || req.params.idHal || req.body?.idHal;
     try {
         const publications = await getAuthorPublications(id);
-        res.json(publications);
+        await respondWithRecords(req, res, publications, 'hal', `HAL records for ${id}`);
     } catch (error) {
         console.log('Error during HAL author computation', error);
         res.status(400).json({ error: error.message });
@@ -367,7 +379,7 @@ export async function getAuthorPublications(id) {
 
 // authIdHalFullName_fs entries look like "<idHal_s>_FacetSep_<Full Name>",
 // or "_FacetSep_<Full Name>" when the author has no claimed HAL account.
-function parseAuthors(doc) {
+export function parseAuthors(doc) {
     const facets = doc.authIdHalFullName_fs;
     if (Array.isArray(facets) && facets.length > 0) {
         const sep = '_FacetSep_';
@@ -509,19 +521,24 @@ export async function controllerStructureInfo(req, res) {
     }
 }
 
+const inFlightStructureInfo = new Map();
+
 async function getStructureInfo(id) {
     const key = `hal:structure-info:${id}`;
 
-    let info = await cache.get(key);
-    if (info === null) {
+    const cached = await cache.get(key);
+    if (cached !== null) return cached || null;
+
+    const info = await dedupeInFlight(inFlightStructureInfo, key, async () => {
         const fields = 'docid,label_s,acronym_s';
         const url = `${BASE}/ref/structure/?q=docid:${encodeURIComponent(id)}&wt=json&rows=1&fl=${fields}`;
         const resp = await fetch(url);
         const data = await resp.json();
         const doc = data?.response?.docs?.[0];
-        info = doc ? { name: doc.label_s, id: doc.docid, acronym: doc.acronym_s || null } : false;
-        cache.set(key, info, 60 * 60 * 24); // 1 day
-    }
+        const result = doc ? { name: doc.label_s, id: doc.docid, acronym: doc.acronym_s || null } : false;
+        await cache.set(key, result, 60 * 60 * 24); // 1 day
+        return result;
+    });
     return info || null;
 }
 
@@ -529,7 +546,7 @@ export async function controllerStructurePublications(req, res) {
     const id = req.params[0] || req.params.structId || req.body?.structId;
     try {
         const { publications } = await getStructurePublications(id);
-        res.json(publications);
+        await respondWithRecords(req, res, publications, 'hal', `HAL records for structure ${id}`);
     } catch (error) {
         console.log('Error during HAL structure computation', error);
         res.status(400).json({ error: error.message });
@@ -581,7 +598,7 @@ export async function getStructurePublications(id) {
 // way) -- the join key between the two facets is authIdFormPerson, not
 // idHal, since not every author has claimed a HAL account (parseAuthors's
 // own idHal-may-be-empty handling applies here identically).
-function structureMembersOf(doc, structId) {
+export function structureMembersOf(doc, structId) {
     const target = String(structId);
     const affiliatedFormPersons = new Set();
     for (const entry of doc.authIdHasStructure_fs || []) {

@@ -16,6 +16,13 @@ async function collection() {
         // Backs the distinct-clientId corroboration check below.
         col.createIndex({ source: 1, venueText: 1, 'newMatch.id': 1 })
             .catch((error) => console.error('[matchOverrides] Error creating audit index', error));
+        // This collection is an unbounded audit log (one document per
+        // correction ever submitted, by anyone) -- a TTL index keeps it from
+        // growing forever. Two years comfortably outlives any single ranking
+        // edition's relevance for the "which venues keep getting
+        // mismatched" analysis this exists for.
+        col.createIndex({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 365 * 2 })
+            .catch((error) => console.error('[matchOverrides] Error creating TTL index', error));
     }
     return col;
 }

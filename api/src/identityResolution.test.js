@@ -16,7 +16,7 @@ function fixture({ members, exactByName = new Map(), tokenCandidatesByName = new
             return result;
         },
         findTokenCandidates: async (name) => tokenCandidatesByName.get(name) || [],
-        getPersonLink: async (idHal) => existingLinks.get(idHal) || null,
+        getPersonLinks: async (idHals) => new Map(idHals.filter(id => existingLinks.has(id)).map(id => [id, existingLinks.get(id)])),
         savePersonLink: async (idHal, pid) => {
             savedLinks.push({ idHal, pid });
             existingLinks.set(idHal, { pid, source: 'orcid' });

@@ -3,6 +3,7 @@ import * as crosscheck from './crosscheck.js';
 import * as dblpLocal from './dblpLocal.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
 import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
+import { mapWithConcurrency } from './concurrency.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -28,25 +29,12 @@ import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksI
 // getCrossCheckReport call is already cached individually -- an aggregate
 // cache here would only ever save the assembly loop itself, not real work.
 
-// Mirrors crosscheckStructure.js's own MEMBER_CONCURRENCY/mapWithConcurrency
-// (a handful in parallel, not Promise.all with no cap, to stay polite to
-// the shared HAL rate limiter) -- not imported from there since neither is
-// exported, and a team is a different, unrelated caller of the same "fan
-// out with a small local pool" idea.
+// Mirrors crosscheckStructure.js's own MEMBER_CONCURRENCY (a handful in
+// parallel, not Promise.all with no cap, to stay polite to the shared HAL
+// rate limiter) -- a team is a different, unrelated caller of the same "fan
+// out with a small local pool" idea, sharing only mapWithConcurrency itself
+// (see concurrency.js).
 const MEMBER_CONCURRENCY = 4;
-
-async function mapWithConcurrency(items, limit, fn) {
-    const results = new Array(items.length);
-    let nextIndex = 0;
-    async function worker() {
-        while (nextIndex < items.length) {
-            const i = nextIndex++;
-            results[i] = await fn(items[i], i);
-        }
-    }
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-    return results;
-}
 
 // ****************************************************************************************************
 // ****************************************************************************************************

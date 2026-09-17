@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import HTMLParser from 'node-html-parser';
 import { normalizeTitle, levenshtein, isWorkshopMismatch } from './levenshtein.js';
 import * as cache from './cache.js'
-import { dedupeInFlight } from './inFlight.js';
+import { createCachedRankLookup } from './rankLookupCache.js';
 import { writeFile, readFile, mkdir } from 'fs/promises';
 
 export const BASE = 'http://portal.core.edu.au/conf-ranks';
@@ -460,9 +460,9 @@ async function computeRank(acronym, venueFullName, year) {
 
 // Concurrent calls for the same (year, fullName) -- e.g. two HAL structure
 // tabs opened at once, or two publications with the same venue text -- are
-// deduped via inFlightByFullName (see dedupeInFlight) rather than each
-// running computeRank2's full source scan independently.
-const inFlightByFullName = new Map();
+// deduped by getCachedRankByFullName (see rankLookupCache.js) rather than
+// each running computeRank2's full source scan independently.
+const getCachedRankByFullName = createCachedRankLookup(RANK_CACHE_TTL_S);
 
 // Exported so authorStream.js's batch prefetch can compute the exact same
 // keys for a bulk MGET without duplicating (and risking drifting from)
@@ -471,53 +471,29 @@ export function rankKey(fullName, year) {
   return `rank:${year}:core2:${fullName}`;
 }
 
-// prefetched: see sjrPortal.js's identical parameter for the full
+// prefetched: see rankLookupCache.js's createCachedRankLookup for the full
 // rationale -- same contract here.
 export async function getRankByFullName(fullName, year, prefetched) {
   const key = rankKey(fullName, year);
-
-  const rank = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
-  if (rank !== null && rank !== undefined) return rank;
-
-  return dedupeInFlight(inFlightByFullName, key, async () => {
-    const result = await computeRank2(fullName, year);
-    // Awaited (unlike cache.set's usual fire-and-forget elsewhere): the
-    // in-flight map entry above is removed the instant this wrapper's
-    // promise settles (see dedupeInFlight), so a caller arriving between
-    // "computed" and "actually written to Redis" would otherwise sail past
-    // both the map (already cleared) and cache.get (not yet written) and
-    // recompute anyway -- observed happening under real concurrent load
-    // while verifying this fix.
-    await cache.set(key, result, RANK_CACHE_TTL_S);
-    return result;
-  });
+  return getCachedRankByFullName(key, () => computeRank2(fullName, year), prefetched);
 }
 
 // Same acronym-first strategy as the DBLP path's getRank, but for callers
 // (HAL, via Crossref) that already have an acronym and full name in hand
 // instead of a dblp ref to resolve one from. Deduped the same way as
-// getRankByFullName above (own map: a different cache key space, so no risk
-// of colliding with it).
-const inFlightByAcronym = new Map();
+// getRankByFullName above (own getCachedRank instance: a different cache key
+// space, so no risk of colliding with it).
+const getCachedRankByAcronym = createCachedRankLookup(RANK_CACHE_TTL_S);
 
 export function rankKeyAcronym(acronym, fullName, year) {
   return `rank:${year}:core2acro:${acronym}:${fullName}`;
 }
 
-// prefetched: see sjrPortal.js's identical parameter for the full
+// prefetched: see rankLookupCache.js's createCachedRankLookup for the full
 // rationale -- same contract here.
 export async function getRankByAcronymAndFullName(acronym, fullName, year, prefetched) {
   const key = rankKeyAcronym(acronym, fullName, year);
-
-  const rank = prefetched?.has(key) ? prefetched.get(key) : await cache.get(key);
-  if (rank !== null && rank !== undefined) return rank;
-
-  return dedupeInFlight(inFlightByAcronym, key, async () => {
-    const result = await computeRank(acronym.toUpperCase(), fullName, year);
-    // Awaited -- see the identical comment on getRankByFullName above.
-    await cache.set(key, result, RANK_CACHE_TTL_S);
-    return result;
-  });
+  return getCachedRankByAcronym(key, () => computeRank(acronym.toUpperCase(), fullName, year), prefetched);
 }
 
 
