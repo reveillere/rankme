@@ -1,5 +1,32 @@
-node_modules
+# Used by the api image's build (docker-compose.*.yml's api service now
+# builds from this repo root, not api/, so it can COPY front/src -- see
+# api/Dockerfile.prod/.dev and api/src/recordPresentation.js's own import of
+# front/src/matchOverrides.js and customRankings.js). Only api/ and
+# front/src/ are ever referenced by a COPY instruction; everything below is
+# either huge, irrelevant to that build, or sensitive, and would otherwise
+# get tarred into the build context sent to the Docker daemon on every
+# build. front's own image still builds with context: front/ (its own
+# front/.dockerignore applies there, unaffected by this file).
 .git
+.github
+.idea
 .dockerignore
-Dockerfile
+.DS_Store
+.env
+.env.example
+node_modules
+**/node_modules
+front/dist
+mongodb
+redis-dump.rdb
+redis.conf
+db-dump
+scimagojr-data
+analytics
+anubis
+monitoring
+reverse-proxy
+scripts
+ops
+HANDOFF_CROSSCHECK.md
 README.md

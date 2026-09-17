@@ -1,11 +1,16 @@
+# Built with context: . (repo root, see docker-compose.dev.yml's api
+# service) instead of api/ alone -- see Dockerfile.prod's own comment.
+# api/src and front/src are both bind-mounted at runtime here (dev's usual
+# live-reload setup), not COPYed, so this stays a thin "just install
+# dependencies" image the same way it always was.
+
 FROM node:26
 
-WORKDIR /app
+WORKDIR /app/api
 
-COPY ./package*.json ./
+COPY api/package*.json ./
 RUN npm install
 
 EXPOSE 80
 
 CMD npm run dev
-

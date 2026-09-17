@@ -5,8 +5,12 @@ services:
   api:
     <<: *common-service
     build:
-      context: api/
-      dockerfile: ./Dockerfile.prod
+      # Repo root, not api/ -- api/src/recordPresentation.js imports
+      # front/src/matchOverrides.js and customRankings.js directly (see
+      # api/Dockerfile.prod's own comment), so the build needs both
+      # directories in context.
+      context: .
+      dockerfile: api/Dockerfile.prod
     depends_on:
       - mongo
       - redis
@@ -24,7 +28,7 @@ services:
       # it's same-origin behind the reverse proxy.
       - CORS_ORIGIN=${CORS_ORIGIN:-https://rankme.fr}
     volumes:
-      - ./api/log:/app/log
+      - ./api/log:/app/api/log
       - api-data:/data
       - ./scimagojr-data:/data/scimagojr
     healthcheck:

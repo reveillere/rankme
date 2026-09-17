@@ -6,8 +6,9 @@ services:
   api:
     <<: *common-service
     build:
-      context: api/
-      dockerfile: ./Dockerfile.dev
+      # Repo root, not api/ -- see api/Dockerfile.dev's own comment.
+      context: .
+      dockerfile: api/Dockerfile.dev
     depends_on:
       - mongo
       - redis
@@ -19,8 +20,14 @@ services:
       - ADMIN_TOKEN=dev-admin-token
       - API_TOKENS=${API_TOKENS:-dev-api-token}
     volumes:
-      - ./api/src:/app/src
-      - ./api/log:/app/log
+      - ./api/src:/app/api/src
+      - ./api/log:/app/api/log
+      # Read-only: api/src/recordPresentation.js imports
+      # front/src/matchOverrides.js/customRankings.js directly (see
+      # api/Dockerfile.prod's comment) -- mounted live like api/src itself
+      # so a front change is picked up without an image rebuild, but this
+      # container has no business writing into the front's own source tree.
+      - ./front/src:/app/front/src:ro
       - api-data:/data
       - ./scimagojr-data:/data/scimagojr
     healthcheck:

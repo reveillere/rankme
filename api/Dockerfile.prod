@@ -1,13 +1,20 @@
+# Built with context: . (repo root, see docker-compose.prod.yml's api
+# service) instead of api/ alone -- api/src/recordPresentation.js imports
+# front/src/matchOverrides.js and customRankings.js directly by relative
+# path (../../front/src/...) rather than a second, possibly-drifting server
+# copy, so this image needs both directories laid out the same way the repo
+# itself has them: /app/api next to /app/front/src.
+
 FROM node:26
 
-WORKDIR /app
+WORKDIR /app/api
 
-COPY ./package*.json ./
+COPY api/package*.json ./
 RUN npm install
 
-COPY . .
+COPY api/. .
+COPY front/src /app/front/src
 
 EXPOSE 80
 
 CMD npm run start
-
