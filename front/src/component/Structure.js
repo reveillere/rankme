@@ -25,7 +25,7 @@ import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { filterPublications } from '../filterPublications';
 import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
-import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
+import { getDisplayValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { getHalCategory } from '../hal';
@@ -191,13 +191,15 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
     () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
     [conferenceSource, journalSource]
   );
-  // See Author.js's identical effectiveValueAccessor comment.
+  // See Author.js's identical effectiveValueAccessor comment/fix: delegates
+  // to getDisplayValue so this can never drift from what RankBadge.js
+  // actually shows.
   const effectiveValueAccessor = pub => {
     if (!pub.rank) return undefined;
     const portal = portalAccessor(pub);
     const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
-    if (!customProfileId) return pub.rank.value;
-    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+    const override = getOverride(portal, pub.rank);
+    return getDisplayValue(pub.rank, { portal, sharedMap: sharedMaps[portal], customProfileId, override, year: yearAccessor(pub) });
   };
   // See Author.js's identical customProfileIdAccessor comment.
   const customProfileIdAccessor = pub => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub));

@@ -1,7 +1,7 @@
-import * as CorePortal from './corePortal';
-import * as SjrPortal from './sjrPortal';
-import * as CcfPortal from './ccfPortal';
-import { getEffectiveValue, csvEscape, parseCSV } from './matchOverrides';
+import * as CorePortal from './corePortal.js';
+import * as SjrPortal from './sjrPortal.js';
+import * as CcfPortal from './ccfPortal.js';
+import { getEffectiveValue, resolveEffectiveValue, csvEscape, parseCSV } from './matchOverrides.js';
 
 const STORAGE_KEY = 'rankme:customRankings';
 
@@ -97,9 +97,18 @@ export function listProfiles() {
   return Object.values(read()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function getProfile(profileId) {
+// Pure core of getProfile below, `profiles` (the {[id]: profile} shape
+// read()/write() persist) passed in explicitly -- same reasoning as
+// matchOverrides.js's own resolveOverride: lets api/src/recordPresentation.js
+// run the exact same resolution against a caller-supplied customRankings
+// JSON payload, nothing stored server-side.
+export function resolveProfile(profiles, profileId) {
   if (!profileId) return null;
-  return read()[profileId] || null;
+  return profiles[profileId] || null;
+}
+
+export function getProfile(profileId) {
+  return resolveProfile(read(), profileId);
 }
 
 // Which axis (or axes) a profile's own reference makes it eligible for --
@@ -174,8 +183,8 @@ export function deleteProfile(profileId) {
 // the reference ranking's answer for anything not explicitly touched --
 // no separate fetch needed. Still 'Unranked' as the final fallback for the
 // rare case `rank` itself is missing entirely.
-export function getEffectiveCustomValue(profileId, portal, rank, override, year) {
-  const profile = getProfile(profileId);
+export function resolveEffectiveCustomValue(profiles, profileId, portal, rank, override, year) {
+  const profile = resolveProfile(profiles, profileId);
   if (!profile) return { value: rank?.value ?? 'Unranked', hasEntry: false };
   const entry = profile.entries[entryKeyFor(portal, rank, override)];
   if (!entry) return { value: rank?.value ?? 'Unranked', hasEntry: false };
@@ -186,6 +195,10 @@ export function getEffectiveCustomValue(profileId, portal, rank, override, year)
   // specific year always wins over 'ALL' -- decision 4.
   const value = entry.byEdition[year] ?? entry.byEdition['ALL'];
   return value != null ? { value, hasEntry: true } : { value: rank?.value ?? 'Unranked', hasEntry: false };
+}
+
+export function getEffectiveCustomValue(profileId, portal, rank, override, year) {
+  return resolveEffectiveCustomValue(read(), profileId, portal, rank, override, year);
 }
 
 // applyToAllEditions writes only the 'ALL' key; otherwise `year` (the
@@ -270,6 +283,17 @@ export function customProfileIdForPortal(activeCustomProfileIds, portal) {
 // existing (non-custom) caller keeps exactly today's behavior byte for
 // byte. RankBadge.js/RankSummary.js/Statistics.js all funnel through this
 // now instead of calling getEffectiveValue directly.
+// Pure core, `overrides`/`profiles` passed in explicitly -- same reasoning
+// as resolveProfile/resolveEffectiveCustomValue above. api/src/recordPresentation.js
+// is the only caller that needs this form; every front-end one keeps using
+// getDisplayValue (unchanged below), which already has its own localStorage
+// read wired in via getEffectiveValue/getEffectiveCustomValue.
+export function resolveDisplayValue(overrides, profiles, rank, { portal, sharedMap, customProfileId, override, year } = {}) {
+  if (!rank) return undefined;
+  if (!customProfileId) return resolveEffectiveValue(overrides, rank, sharedMap);
+  return resolveEffectiveCustomValue(profiles, customProfileId, portal, rank, override, year).value;
+}
+
 export function getDisplayValue(rank, { portal, sharedMap, customProfileId, override, year } = {}) {
   if (!rank) return undefined;
   if (!customProfileId) return getEffectiveValue(rank, sharedMap);
@@ -397,6 +421,54 @@ export function importProfilesFromCSV(text, { nameOverride } = {}) {
     entry.byEdition[edition] = value;
     profile.entries[key] = entry;
     profiles[profileId] = profile;
+    count++;
+  }
+  write(profiles);
+  return count;
+}
+
+// JSON sibling of profileToCSV/allProfilesToCSV -- unlike the CSV export
+// (one flattened row per profile/venue/edition triple, needed for a
+// spreadsheet), a profile's own `entries` object already IS the natural
+// JSON shape, so this exports the plain profile object(s) directly, no
+// flattening/reconstruction needed. Also what the public API's own
+// customRankings request parameter expects (openapi.js) --
+// api/src/recordPresentation.js runs parseProfilesJSON directly against a
+// caller-supplied file, nothing stored server-side.
+export function profileToJSON(profileId) {
+  return JSON.stringify(getProfile(profileId), null, 2);
+}
+
+export function allProfilesToJSON() {
+  return JSON.stringify(listProfiles(), null, 2);
+}
+
+// Pure parse: JSON text (one profile object, or an array of them) -> the
+// {[id]: profile} map resolveProfile/resolveEffectiveCustomValue expect --
+// validated but never touching localStorage, shared by
+// importProfilesFromJSON below (front) and the API (reads it directly).
+export function parseProfilesJSON(text) {
+  const parsed = JSON.parse(text);
+  const list = Array.isArray(parsed) ? parsed : [parsed];
+  const profiles = {};
+  for (const profile of list) {
+    if (!profile?.id || !REFERENCES.includes(profile.reference)) continue;
+    profiles[profile.id] = { entries: {}, ...profile };
+  }
+  return profiles;
+}
+
+// Whole-profile upsert by id -- simpler than importProfilesFromCSV's
+// per-entry merge (that one has to reconstruct a profile from flattened
+// rows one at a time; here the file already carries each profile's
+// complete `entries` object, so replacing it wholesale is both simpler and
+// what a re-imported "export this profile" file should do anyway).
+export function importProfilesFromJSON(text) {
+  const parsed = parseProfilesJSON(text);
+  const profiles = read();
+  let count = 0;
+  for (const [id, profile] of Object.entries(parsed)) {
+    profiles[id] = profile;
     count++;
   }
   write(profiles);

@@ -15,16 +15,15 @@
 //
 // effectiveValueAccessor: what to check a filterRanks checkbox against,
 // instead of pub.rank.value straight off the automatic match -- defaults to
-// exactly that (pub => pub.rank?.value), so every existing caller keeps
-// today's behavior byte for byte, including its known pre-existing quirk
-// (a personal/community match correction already isn't reflected here,
-// unlike RanksByYearChart/RankSummary's own getEffectiveValue -- out of
-// scope to fix generally, see the implementation plan's own "risques"
-// section). A caller with a custom ranking active on either axis passes one
-// that substitutes the custom value only for records on an axis that
-// actually has a profile active (customRankings.js's
-// getDisplayValue/customProfileIdForPortal) -- otherwise a filter checkbox
-// for a custom letter nobody assigned yet would just never match anything.
+// exactly that (pub => pub.rank?.value) only for a caller that doesn't pass
+// one at all. Both real callers (Author.js/AuthorHal.js) pass one built from
+// customRankings.js's own getDisplayValue, so a filter checkbox always
+// matches exactly what RankBadge.js shows for that publication: personal
+// override/community correction when no custom ranking is active on that
+// axis, the custom ranking's own entry when one is (customRankings.js's
+// customProfileIdForPortal) -- this used to fall back to the raw automatic
+// value whenever no custom ranking was active, silently ignoring a
+// personal/community correction; fixed so the two can no longer drift.
 export function filterPublications(publications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor = pub => pub.type, filterRanks, effectiveValueAccessor = pub => pub.rank?.value }) {
   return publications
     .filter(pub => {

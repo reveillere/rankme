@@ -72,10 +72,22 @@ export function getClientId() {
   return id;
 }
 
+// Pure core of getOverride below, `overrides` (the {[key]: entry} shape
+// read()/write() persist) passed in explicitly instead of read from
+// localStorage -- so the exact same resolution logic can run server-side
+// (api/src/recordPresentation.js) against a caller-supplied matchOverrides
+// JSON payload, with no browser and nothing stored, per the API's own
+// "JSON-encoded personal match-corrections file content" contract
+// (openapi.js). getOverride itself stays the thin, localStorage-backed
+// wrapper every existing front-end caller already uses, unchanged.
+export function resolveOverride(overrides, portal, rank) {
+  if (!rank?.source || !rank?.queryText) return null;
+  return overrides[keyFor(portal, rank.source, rank.queryText)] || null;
+}
+
 // rank: the structured rank object from the API (needs .source + .queryText).
 export function getOverride(portal, rank) {
-  if (!rank?.source || !rank?.queryText) return null;
-  return read()[keyFor(portal, rank.source, rank.queryText)] || null;
+  return resolveOverride(read(), portal, rank);
 }
 
 // Community-confirmed corrections: once enough different browsers land on
@@ -156,14 +168,21 @@ export function portalFromRank(rank) {
 // fuzzy match doesn't change its value, so effective and automatic count
 // the same there, but a full override (including markAsUnranked's
 // synthetic "Unranked" candidate, see RankDetailsPopover.js) does.
-export function getEffectiveValue(rank, sharedMap) {
+// Pure core, see resolveOverride's own comment -- api/src/recordPresentation.js
+// calls this directly with a caller-supplied overrides map instead of
+// localStorage.
+export function resolveEffectiveValue(overrides, rank, sharedMap) {
   if (!rank) return undefined;
   const portal = portalFromRank(rank);
-  const override = getOverride(portal, rank);
+  const override = resolveOverride(overrides, portal, rank);
   if (override) return override.candidate.value;
   const sharedOverride = getSharedOverride(rank, sharedMap);
   if (sharedOverride) return sharedOverride.candidate.value;
   return rank.value;
+}
+
+export function getEffectiveValue(rank, sharedMap) {
+  return resolveEffectiveValue(read(), rank, sharedMap);
 }
 
 // Whether a rank's automatic match still needs a human look -- used by the
@@ -392,6 +411,49 @@ export function importOverridesFromCSV(text) {
       },
       savedAt: get('savedAt') ? Number(get('savedAt')) : Date.now(),
     };
+    count++;
+  }
+  write(overrides);
+  return count;
+}
+
+// JSON sibling of overridesToCSV/importOverridesFromCSV above -- a plain
+// array of entries (the exact shape listOverrides() already returns), not
+// the internal {[key]: entry} map itself: an array needs no explanation of
+// what the map's own keys mean to someone reading the file, and matches
+// what a human/API consumer would expect from "the list of my corrections".
+// This is also what the public API's own matchOverrides request parameter
+// expects (openapi.js) -- api/src/recordPresentation.js runs
+// parseOverridesJSON directly against a caller-supplied file, no
+// localStorage/persistence involved server-side at all.
+export function overridesToJSON() {
+  return JSON.stringify(listOverrides(), null, 2);
+}
+
+// Pure parse: JSON text -> {[key]: entry} map (resolveOverride's own input
+// shape), validated but never touching localStorage -- shared by
+// importOverridesFromJSON below (front, merges into local storage) and the
+// API (reads it directly, nothing to merge or persist).
+export function parseOverridesJSON(text) {
+  const parsed = JSON.parse(text);
+  if (!Array.isArray(parsed)) throw new Error('Expected a JSON array of override entries');
+  const overrides = {};
+  for (const entry of parsed) {
+    if (!entry?.portal || !entry?.rankSource || !entry?.queryText || !entry?.candidate) continue;
+    const key = entry.key || keyFor(entry.portal, entry.rankSource, entry.queryText);
+    overrides[key] = { ...entry, key };
+  }
+  return overrides;
+}
+
+// Same "imported rows become local overrides only, never re-posted to the
+// server copy" rule as importOverridesFromCSV above.
+export function importOverridesFromJSON(text) {
+  const parsed = parseOverridesJSON(text);
+  const overrides = read();
+  let count = 0;
+  for (const [key, entry] of Object.entries(parsed)) {
+    overrides[key] = entry;
     count++;
   }
   write(overrides);

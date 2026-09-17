@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { filterRecords, sortRecords, presentationOptionsFrom, renderExport } from './recordPresentation.js';
+import { filterRecords, sortRecords, presentationOptionsFrom, renderExport, applyCorrections, parseCustomRankingsAxes } from './recordPresentation.js';
 
 function dblpPub({ year, type = 'inproceedings', rank, key = `k${year}${Math.random()}` }) {
     return { type, dblp: { key, year: String(year), title: `Paper ${key}`, ee: [] }, venue: 'Some Venue', authors: [], rank };
@@ -78,7 +78,16 @@ test('presentationOptionsFrom: parses comma-separated categories/ranks and valid
     const req = { query: { from: '2015', to: '2020', categories: 'article,inproceedings', ranks: 'A,B', sort: 'rank-date', export: 'csv' } };
     assert.deepEqual(presentationOptionsFrom(req), {
         from: 2015, to: 2020, categories: ['article', 'inproceedings'], ranks: ['A', 'B'], sort: 'rank-date', export: 'csv',
+        useCommunityCorrections: true, matchOverridesText: null, customRankingsText: null,
     });
+});
+
+test('presentationOptionsFrom: reads matchOverrides/customRankings as opaque JSON text, and useCommunityCorrections=false as an explicit opt-out', () => {
+    const req = { query: { matchOverrides: '[{"portal":"core"}]', customRankings: '{"conference":{}}', useCommunityCorrections: 'false' } };
+    const options = presentationOptionsFrom(req);
+    assert.equal(options.matchOverridesText, '[{"portal":"core"}]');
+    assert.equal(options.customRankingsText, '{"conference":{}}');
+    assert.equal(options.useCommunityCorrections, false);
 });
 
 test('presentationOptionsFrom: invalid/absent values fall back to safe defaults, never throw', () => {
@@ -116,4 +125,92 @@ test('renderExport: markdown lists each record with its rank and escapes markdow
     assert.match(body, /^# My Title/);
     assert.match(body, /\*\*\[A\]\*\*/);
     assert.match(body, /\\\[brackets\\\]/);
+});
+
+// ****************************************************************************************************
+// applyCorrections / parseCustomRankingsAxes
+
+function coreRank(overrides = {}) {
+    return { value: 'B', source: 'ICORE2026', queryText: 'Some Conference', matchType: 'fuzzy', matchedId: 'core-entry-1', ...overrides };
+}
+
+const noSharedCorrections = async () => ({});
+
+test('applyCorrections: no corrections supplied still attaches effectiveValue, equal to the automatic value', async () => {
+    const records = [dblpPub({ year: 2024, rank: coreRank() })];
+    const [result] = await applyCorrections(records, 'dblp', {}, { fetchSharedMap: noSharedCorrections });
+    assert.equal(result.rank.effectiveValue, 'B');
+    assert.equal(result.rank.value, 'B'); // never touched
+});
+
+test('applyCorrections: a personal override wins over a community correction', async () => {
+    const rank = coreRank();
+    const records = [dblpPub({ year: 2024, rank })];
+    const matchOverridesText = JSON.stringify([
+        { portal: 'core', rankSource: rank.source, queryText: rank.queryText, candidate: { value: 'A' } },
+    ]);
+    const fetchSharedMap = async () => ({ [rank.queryText]: { candidate: { value: 'C' } } });
+    const [result] = await applyCorrections(records, 'dblp', { matchOverridesText }, { fetchSharedMap });
+    assert.equal(result.rank.effectiveValue, 'A');
+});
+
+test('applyCorrections: a community correction applies when there is no personal override', async () => {
+    const rank = coreRank();
+    const records = [dblpPub({ year: 2024, rank })];
+    const fetchSharedMap = async () => ({ [rank.queryText]: { candidate: { value: 'C' } } });
+    const [result] = await applyCorrections(records, 'dblp', {}, { fetchSharedMap });
+    assert.equal(result.rank.effectiveValue, 'C');
+});
+
+test('applyCorrections: useCommunityCorrections=false never calls fetchSharedMap and skips shared corrections', async () => {
+    const rank = coreRank();
+    const records = [dblpPub({ year: 2024, rank })];
+    let called = false;
+    const fetchSharedMap = async () => { called = true; return { [rank.queryText]: { candidate: { value: 'C' } } }; };
+    const [result] = await applyCorrections(records, 'dblp', { useCommunityCorrections: false }, { fetchSharedMap });
+    assert.equal(called, false);
+    assert.equal(result.rank.effectiveValue, 'B'); // falls back to the automatic value
+});
+
+test('applyCorrections: community promotion works for a CCF-sourced rank too', async () => {
+    const rank = { value: 'B', source: 'CCF2026', queryText: 'Some Venue', matchType: 'fuzzy' };
+    const records = [dblpPub({ year: 2024, type: 'inproceedings', rank })];
+    const fetchSharedMap = async (portal) => (portal === 'ccf' ? { [rank.queryText]: { candidate: { value: 'A' } } } : {});
+    const [result] = await applyCorrections(records, 'dblp', {}, { fetchSharedMap });
+    assert.equal(result.rank.effectiveValue, 'A');
+});
+
+test('applyCorrections: a custom ranking active on one axis never leaks onto the other', async () => {
+    // customProfileIdForPortal only ever resolves 'core'->conference,
+    // 'sjr'->journal -- a conference-axis profile must have no effect on a
+    // journal-sourced (SJR) record even if both are present in the batch.
+    const conferenceProfile = { id: 'conf-1', reference: 'core', entries: { 'core:id:core-entry-1': { byEdition: { ALL: 'A*' } } } };
+    const journalRank = { value: 'Q3', source: 'scimagojr:2024', queryText: 'Some Journal', matchType: 'fuzzy', matchedId: 'sjr-entry-1' };
+    const records = [
+        dblpPub({ year: 2024, type: 'inproceedings', rank: coreRank() }),
+        dblpPub({ year: 2024, type: 'article', rank: journalRank }),
+    ];
+    const customRankingsText = JSON.stringify({ conference: conferenceProfile });
+    const [confResult, journalResult] = await applyCorrections(records, 'dblp', { customRankingsText }, { fetchSharedMap: noSharedCorrections });
+    assert.equal(confResult.rank.effectiveValue, 'A*');
+    assert.equal(journalResult.rank.effectiveValue, 'Q3'); // untouched, no journal profile supplied
+});
+
+test('parseCustomRankingsAxes: accepts a profile per axis, validated against its own reference', () => {
+    const text = JSON.stringify({
+        conference: { id: 'c1', reference: 'core' },
+        journal: { id: 'j1', reference: 'ccf' }, // ccf covers both axes
+    });
+    const axes = parseCustomRankingsAxes(text);
+    assert.equal(axes.conference.id, 'c1');
+    assert.equal(axes.journal.id, 'j1');
+});
+
+test('parseCustomRankingsAxes: rejects a profile whose reference cannot cover the axis it is placed under', () => {
+    const text = JSON.stringify({ conference: { id: 'j1', reference: 'sjr' } }); // sjr never covers conferences
+    assert.throws(() => parseCustomRankingsAxes(text));
+});
+
+test('parseCustomRankingsAxes: absent axes default to null, not an error', () => {
+    assert.deepEqual(parseCustomRankingsAxes('{}'), { conference: null, journal: null });
 });

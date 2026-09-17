@@ -1,5 +1,8 @@
 import { computeDblpPublicationRank, computeHalPublicationRank, confSourceFrom, journalSourceFrom } from './authorStream.js';
 import { mapWithConcurrency } from './concurrency.js';
+import { getSharedOverridesMap } from './matchOverrides.js';
+import { resolveOverride, portalFromRank, parseOverridesJSON } from '../../front/src/matchOverrides.js';
+import { resolveDisplayValue, axesForReference, customProfileIdForPortal } from '../../front/src/customRankings.js';
 
 // Public-API-only: applies the from/to/categories/ranks/sort/export
 // presentation contract documented in openapi.js's recordPresentationParameters
@@ -54,6 +57,74 @@ export async function attachRanks(records, source, { confSource, journalSource }
     return mapWithConcurrency(records, RANK_CONCURRENCY, pub => attachRank(pub, source, { confSource, journalSource }));
 }
 
+// customRankings request parameter: {conference?, journal?}, each a whole
+// custom-ranking profile object (front/src/customRankings.js's own shape --
+// see profileToJSON/allProfilesToJSON) to actively apply on that axis. An
+// explicit per-axis key, not one/several profiles with the axis inferred
+// from their own `reference` (axesForReference) -- that inference is
+// genuinely ambiguous for a 'ccf'-referenced profile, which covers *both*
+// axes (axesForReference('ccf') === ['conference','journal']): supplying
+// one would silently force both axes into it, with no way to say "CCF for
+// journals only, leave conferences on the automatic match" -- exactly the
+// independent-per-axis choice front/src/rankingSource.js's own
+// conferenceSource/journalSource already model (two separate localStorage
+// keys, never inferred from each other). This mirrors that shape directly.
+export function parseCustomRankingsAxes(text) {
+    const parsed = JSON.parse(text);
+    const axes = { conference: null, journal: null };
+    for (const axis of ['conference', 'journal']) {
+        const profile = parsed?.[axis];
+        if (!profile) continue;
+        if (!profile.id || !profile.reference) {
+            throw new Error(`customRankings.${axis} must be a profile object with at least id and reference`);
+        }
+        if (!axesForReference(profile.reference).includes(axis)) {
+            throw new Error(`customRankings.${axis}: a profile referencing '${profile.reference}' cannot apply to the ${axis} axis`);
+        }
+        axes[axis] = { entries: {}, ...profile };
+    }
+    return axes;
+}
+
+// Attaches rank.effectiveValue (the exact value RankBadge.js would show,
+// see resolveDisplayValue's own comment) to every already-ranked record,
+// per the matchOverrides/customRankings/useCommunityCorrections request
+// parameters. rank.value itself is never touched -- it stays the raw
+// automatic match, same as authorStream.js's SSE path always returned.
+// `fetchSharedMap` is injected (defaulting to the real Mongo-backed
+// getSharedOverridesMap) so this stays testable without a database, same
+// "pure core, injected I/O" shape as the rest of this codebase.
+export async function applyCorrections(records, source, { matchOverridesText, customRankingsText, useCommunityCorrections = true } = {}, { fetchSharedMap = getSharedOverridesMap } = {}) {
+    const overrides = matchOverridesText ? parseOverridesJSON(matchOverridesText) : {};
+    const axes = customRankingsText ? parseCustomRankingsAxes(customRankingsText) : { conference: null, journal: null };
+    const activeCustomProfileIds = { conference: axes.conference?.id ?? null, journal: axes.journal?.id ?? null };
+    const profiles = {};
+    if (axes.conference) profiles[axes.conference.id] = axes.conference;
+    if (axes.journal) profiles[axes.journal.id] = axes.journal;
+
+    // One shared-map fetch per portal actually present in this batch, not
+    // per record -- mirrors useSharedOverridesMaps.js's own "once per page
+    // load, not once per badge" reasoning.
+    const portalsPresent = new Set(records.map(pub => pub.rank && portalFromRank(pub.rank)).filter(Boolean));
+    const sharedMaps = {};
+    if (useCommunityCorrections) {
+        for (const portal of portalsPresent) {
+            sharedMaps[portal] = await fetchSharedMap(portal);
+        }
+    }
+
+    return records.map(pub => {
+        if (!pub.rank) return pub;
+        const portal = portalFromRank(pub.rank);
+        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+        const override = resolveOverride(overrides, portal, pub.rank);
+        const effectiveValue = resolveDisplayValue(overrides, profiles, pub.rank, {
+            portal, sharedMap: sharedMaps[portal], customProfileId, override, year: yearOf(pub, source),
+        });
+        return { ...pub, rank: { ...pub.rank, effectiveValue } };
+    });
+}
+
 function yearOf(pub, source) {
     const year = source === 'dblp' ? pub.dblp?.year : pub.year;
     return year != null ? parseInt(year, 10) : null;
@@ -86,7 +157,7 @@ export function filterRecords(records, source, { from, to, categories, ranks }) 
             return year == null || ((from == null || year >= from) && (to == null || year <= to));
         })
         .filter(pub => !categories || categories.includes(categoryOf(pub, source)))
-        .filter(pub => !ranks || !pub.rank || ranks.includes(pub.rank.value));
+        .filter(pub => !ranks || !pub.rank || ranks.includes(pub.rank.effectiveValue ?? pub.rank.value));
 }
 
 // Ported from front/src/rankOrder.js's rankTier/orderPublicationsForDisplay
@@ -97,7 +168,7 @@ export function filterRecords(records, source, { from, to, categories, ranks }) 
 // year/rank are already their own fields.
 const TIER_BY_VALUE = { 'A*': 1, 'Q1': 1, 'A': 2, 'Q2': 2, 'B': 3, 'Q3': 3, 'C': 4, 'Q4': 4, 'Misc': 5, 'Unranked': 6 };
 function rankTier(rank) {
-    return TIER_BY_VALUE[rank?.value] || 6;
+    return TIER_BY_VALUE[rank?.effectiveValue ?? rank?.value] || 6;
 }
 
 export function sortRecords(records, source, sortMode) {
@@ -133,6 +204,12 @@ export function presentationOptionsFrom(req) {
         ranks: parseCsvParam(req.query.ranks),
         sort: ['date', 'date-rank', 'rank-date'].includes(req.query.sort) ? req.query.sort : 'date',
         export: ['md', 'csv', 'json'].includes(req.query.export) ? req.query.export : null,
+        // Default true, same as front/src/matchOverrides.js's own
+        // getUseCommunityOverrides -- an opt-out, not opt-in, or the
+        // feature would only ever reach whoever explicitly asks for it.
+        useCommunityCorrections: req.query.useCommunityCorrections !== 'false',
+        matchOverridesText: typeof req.query.matchOverrides === 'string' ? req.query.matchOverrides : null,
+        customRankingsText: typeof req.query.customRankings === 'string' ? req.query.customRankings : null,
     };
 }
 
@@ -169,16 +246,22 @@ function trimLastDigits(str) {
 }
 
 function fieldsOf(pub, source) {
+    // effectiveValue when corrections were applied (see applyCorrections),
+    // else the raw automatic value -- same priority the front's own export
+    // (exportPublications.js's rankLabel: item.rank?.value) would need
+    // updating to if it ever grows the same correction-aware export this
+    // one already has.
+    const rankValue = pub.rank?.effectiveValue ?? pub.rank?.value ?? 'Unranked';
     if (source === 'dblp') {
         return {
-            year: pub.dblp.year, rank: pub.rank?.value || 'Unranked',
+            year: pub.dblp.year, rank: rankValue,
             authors: (pub.authors || []).map(a => trimLastDigits(a._)).join(', ') || 'No authors listed',
             title: dblpTitleText(pub.dblp.title), venue: pub.venue || '', type: pub.type,
             doiUrl: findDoiUrl(pub.dblp.ee),
         };
     }
     return {
-        year: pub.year, rank: pub.rank?.value || 'Unranked',
+        year: pub.year, rank: rankValue,
         authors: (pub.authors || []).map(a => a.name).join(', ') || 'No authors listed',
         title: pub.title, venue: pub.venue || '', type: pub.type,
         doiUrl: pub.doi ? `https://doi.org/${pub.doi}` : null,
@@ -229,7 +312,8 @@ export async function respondWithRecords(req, res, rawRecords, source, exportTit
     const options = presentationOptionsFrom(req);
 
     const ranked = await attachRanks(rawRecords, source, { confSource, journalSource });
-    const filtered = filterRecords(ranked, source, options);
+    const corrected = await applyCorrections(ranked, source, options);
+    const filtered = filterRecords(corrected, source, options);
     const sorted = sortRecords(filtered, source, options.sort);
 
     if (options.export) {

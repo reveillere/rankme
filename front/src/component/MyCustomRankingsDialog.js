@@ -31,6 +31,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import {
   listProfiles, createProfile, renameProfile, deleteProfile, deleteEntryEdition,
   profileToCSV, allProfilesToCSV, importProfilesFromCSV, peekProfileNameFromCSV, axesForReference,
+  allProfilesToJSON, importProfilesFromJSON,
 } from '../customRankings';
 import { useFilterSettings } from '../FilterSettingsContext';
 
@@ -192,6 +193,7 @@ export function MyCustomRankingsDialog({ open, onClose }) {
   const [pendingImport, setPendingImport] = useState(null);
   const [importNameDraft, setImportNameDraft] = useState('');
   const fileInputRef = useRef();
+  const jsonFileInputRef = useRef();
 
   const refresh = () => setProfiles(listProfiles());
 
@@ -243,7 +245,40 @@ export function MyCustomRankingsDialog({ open, onClose }) {
     URL.revokeObjectURL(url);
   };
 
+  // JSON export -- see customRankings.js's own allProfilesToJSON comment:
+  // also what api/src/recordPresentation.js's `customRankings` request
+  // parameter expects, so this file can be forwarded to the API as-is.
+  const handleExportAllJson = () => {
+    const blob = new Blob([allProfilesToJSON()], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rankme-custom-rankings-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleImportClick = () => fileInputRef.current?.click();
+  const handleImportJsonClick = () => jsonFileInputRef.current?.click();
+
+  // No confirm-name step here unlike CSV import: a JSON export already
+  // carries each profile's own real `name` field (CSV instead repeats one
+  // profileName per row, ambiguous enough on re-import to need
+  // peekProfileNameFromCSV/nameOverride -- see handleImportFile below), so
+  // importProfilesFromJSON can run straight away.
+  const handleImportJsonFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const count = importProfilesFromJSON(text);
+      refresh();
+      setImportMessage({ severity: 'success', text: `Imported ${count} ranking${count === 1 ? '' : 's'}.` });
+    } catch (error) {
+      setImportMessage({ severity: 'error', text: `Import failed: ${error.message}` });
+    }
+  };
 
   // Reads the file and stops here -- importProfilesFromCSV itself isn't
   // called until the user confirms a name below (handleConfirmImport), so a
@@ -388,6 +423,15 @@ export function MyCustomRankingsDialog({ open, onClose }) {
             Import CSV
           </Button></Tooltip>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
+          <Tooltip title="Also the format the public API's customRankings parameter expects">
+            <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportAllJson} disabled={profiles.length === 0}>
+              Export all (JSON)
+            </Button>
+          </Tooltip>
+          <Tooltip title="Import rankings from a JSON file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportJsonClick}>
+            Import JSON
+          </Button></Tooltip>
+          <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
         </Box>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>

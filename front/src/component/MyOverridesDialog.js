@@ -16,7 +16,7 @@ import Alert from '@mui/material/Alert';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 
-import { listOverrides, clearOverride, clearAllOverrides, overridesToCSV, importOverridesFromCSV } from '../matchOverrides';
+import { listOverrides, clearOverride, clearAllOverrides, overridesToCSV, importOverridesFromCSV, overridesToJSON, importOverridesFromJSON } from '../matchOverrides';
 
 // Every CORE/SJR match a user has manually corrected in RankDetailsPopover,
 // kept in this browser's localStorage (see matchOverrides.js) -- this is
@@ -29,6 +29,7 @@ export function MyOverridesDialog({ open, onClose }) {
   const [overrides, setOverrides] = useState([]);
   const [importMessage, setImportMessage] = useState(null);
   const fileInputRef = useRef();
+  const jsonFileInputRef = useRef();
 
   useEffect(() => {
     if (open) { setOverrides(listOverrides()); setImportMessage(null); }
@@ -54,7 +55,21 @@ export function MyOverridesDialog({ open, onClose }) {
     URL.revokeObjectURL(url);
   };
 
+  // JSON export -- see matchOverrides.js's own overridesToJSON comment:
+  // also what api/src/recordPresentation.js's `matchOverrides` request
+  // parameter expects, so this file can be forwarded to the API as-is.
+  const handleExportJson = () => {
+    const blob = new Blob([overridesToJSON()], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rankme-match-corrections-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleImportClick = () => fileInputRef.current?.click();
+  const handleImportJsonClick = () => jsonFileInputRef.current?.click();
 
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
@@ -63,6 +78,20 @@ export function MyOverridesDialog({ open, onClose }) {
     try {
       const text = await file.text();
       const count = importOverridesFromCSV(text);
+      setOverrides(listOverrides());
+      setImportMessage({ severity: 'success', text: `Imported ${count} correction${count === 1 ? '' : 's'}.` });
+    } catch (error) {
+      setImportMessage({ severity: 'error', text: `Import failed: ${error.message}` });
+    }
+  };
+
+  const handleImportJsonFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const count = importOverridesFromJSON(text);
       setOverrides(listOverrides());
       setImportMessage({ severity: 'success', text: `Imported ${count} correction${count === 1 ? '' : 's'}.` });
     } catch (error) {
@@ -145,6 +174,15 @@ export function MyOverridesDialog({ open, onClose }) {
             Import CSV
           </Button></Tooltip>
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
+          <Tooltip title="Also the format the public API's matchOverrides parameter expects">
+            <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportJson} disabled={overrides.length === 0}>
+              Export JSON
+            </Button>
+          </Tooltip>
+          <Tooltip title="Import overrides from a JSON file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportJsonClick}>
+            Import JSON
+          </Button></Tooltip>
+          <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
         </Box>
         <Box>
           {overrides.length > 0 && <Button color="error" onClick={handleClearAll}>Reset all</Button>}

@@ -30,7 +30,7 @@ import { filterPublications } from '../filterPublications';
 import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
 import { fetchIdentitySuggestion, postIdentityLink } from '../identityResolution';
 import { exportDblpPublicationsMarkdown, exportDblpPublicationsJson, exportDblpPublicationsCsv } from '../exportPublications';
-import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
+import { getDisplayValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
@@ -155,18 +155,21 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
     () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
     [conferenceSource, journalSource]
   );
-  // Substitutes a custom ranking's own value in place of the raw automatic
-  // match, but only for an axis that actually has a profile active
-  // (customProfileIdForPortal) -- identical to pub.rank.value otherwise, so
-  // filterPublications' filterRanks checkboxes behave exactly as before for
-  // anyone not using a custom profile (see filterPublications.js's own
-  // default parameter).
+  // The exact value RankBadge.js shows for this publication -- delegates
+  // straight to getDisplayValue (personal override/community correction
+  // when no custom profile is active on this axis, the custom profile's own
+  // entry when one is) so the "filter by rank" checkboxes can never drift
+  // from what's actually on screen. This used to fall back to the raw
+  // pub.rank.value when no custom profile was active, silently ignoring a
+  // personal/community correction -- a real inconsistency (a publication
+  // corrected from B to A still showed up unchecked under "A" and checked
+  // under "B"), not a deliberate simplification.
   const effectiveValueAccessor = pub => {
     if (!pub.rank) return undefined;
     const portal = portalAccessor(pub);
     const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
-    if (!customProfileId) return pub.rank.value;
-    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
+    const override = getOverride(portal, pub.rank);
+    return getDisplayValue(pub.rank, { portal, sharedMap: sharedMaps[portal], customProfileId, override, year: yearAccessor(pub) });
   };
   // For RanksByYearChart/RankSummary: same type-based axis resolution as
   // effectiveValueAccessor above (portalAccessor never returns 'ccf'), not

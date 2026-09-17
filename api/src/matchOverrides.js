@@ -1,6 +1,18 @@
 import { getClient } from './db.js';
 
-// A user-chosen correction to a CORE/SJR match, applied only in that
+// Every ranking source that carries a fuzzy/approximate automatic match a
+// user might need to correct -- CORE and SJR were the only two originally
+// wired up here (controllerRecord/controllerSharedList below both rejected
+// anything else with a 400), but CCF's own HAL-venue fuzzy match
+// (ccfPortal.js's getRankForHalVenue) is exactly as capable of mismatching
+// a venue, and front/src/matchOverrides.js's setOverride/confirmMatch never
+// actually restricted personal overrides to core/sjr in the first place --
+// only the community-promotion path (this file) did, with no recorded
+// reason to. Kept as one list so a future ranking source only needs adding
+// here, not re-auditing both endpoints separately.
+const KNOWN_PORTALS = ['core', 'sjr', 'ccf'];
+
+// A user-chosen correction to a CORE/SJR/CCF match, applied only in that
 // user's own browser (see front/src/matchOverrides.js) but also mirrored
 // here so we keep a server-side copy of every correction anyone makes --
 // used both for later analysis (which venues keep getting mismatched, in
@@ -32,7 +44,7 @@ async function collection() {
 // Keyed on venueText alone, not the ranking edition a given submission
 // happened to be computed against (unlike a personal override, see the
 // note in front/src/matchOverrides.js) -- the same exact venue text almost
-// always identifies the same CORE/SJR entry regardless of which year's
+// always identifies the same CORE/SJR/CCF entry regardless of which year's
 // snapshot someone was looking at when they corrected it, and keying this
 // way is what lets corroboration accumulate across different people/years
 // in the first place.
@@ -49,14 +61,14 @@ async function sharedCollection() {
 
 // How many distinct browsers (see clientId below) need to independently
 // land on the same (source, venueText) -> candidate before it's promoted
-// from "one person's correction" to "shown to everyone by default". Low
-// enough to actually promote things on a small/low-traffic site, high
+// from "one person's correction" to "shown to everyone by default". High
 // enough that one person can't unilaterally rewrite a shared result by
 // resubmitting (distinct() only counts each clientId once regardless of
 // how many times they submit, so that specific attack doesn't work either
-// way -- this is really about requiring independent agreement, not about
-// resisting any one browser's volume).
-const PROMOTION_THRESHOLD = 3;
+// way -- this is really about requiring broad independent agreement before
+// a correction goes live for every visitor, not about resisting any one
+// browser's volume).
+const PROMOTION_THRESHOLD = 10;
 
 function sharedKey(source, venueText) {
     return `${source}:${venueText}`;
@@ -64,8 +76,8 @@ function sharedKey(source, venueText) {
 
 export async function controllerRecord(req, res) {
     const { source, year, venueText, previousMatch, newMatch, clientId, action } = req.body || {};
-    if (source !== 'core' && source !== 'sjr') {
-        res.status(400).json({ error: 'Bad Request', message: 'source must be "core" or "sjr"' });
+    if (!KNOWN_PORTALS.includes(source)) {
+        res.status(400).json({ error: 'Bad Request', message: `source must be one of: ${KNOWN_PORTALS.join(', ')}` });
         return;
     }
     if (!venueText || !newMatch?.id) {
@@ -122,21 +134,37 @@ export async function controllerRecord(req, res) {
     }
 }
 
-// Every community-confirmed correction for one portal -- the front end
-// fetches this once per portal per page load (see fetchSharedOverrides,
-// front/src/matchOverrides.js) and checks it before falling back to the
-// automatic match, whenever there's no personal override for that exact
-// text (personal always wins -- see getOverride/getSharedOverride).
+// Every community-confirmed correction for one portal, keyed by venueText --
+// the shape front/src/matchOverrides.js's resolveEffectiveValue (sharedMap
+// param) and api/src/recordPresentation.js's own correction pipeline both
+// expect. Empty (not an error) for an unknown portal -- callers that just
+// want "whatever community corrections exist for this portal, if any"
+// (recordPresentation.js loops over every portal actually present in a
+// batch) shouldn't need to pre-validate against KNOWN_PORTALS themselves;
+// controllerSharedList below still validates for its own direct callers.
+export async function getSharedOverridesMap(portal) {
+    if (!KNOWN_PORTALS.includes(portal)) return {};
+    const shared = await sharedCollection();
+    const docs = await shared.find({ source: portal }, { projection: { _id: 0, venueText: 1, candidate: 1, confirmedCount: 1 } }).toArray();
+    return Object.fromEntries(docs.map((d) => [d.venueText, { venueText: d.venueText, candidate: d.candidate, confirmedCount: d.confirmedCount }]));
+}
+
+// The front end fetches this once per portal per page load (see
+// fetchSharedOverrides, front/src/matchOverrides.js) and checks it before
+// falling back to the automatic match, whenever there's no personal
+// override for that exact text (personal always wins -- see
+// getOverride/getSharedOverride). Kept as a plain array (not
+// getSharedOverridesMap's {[venueText]: entry} shape) since that's this
+// endpoint's own established, already-consumed response contract.
 export async function controllerSharedList(req, res) {
     const { portal } = req.params;
-    if (portal !== 'core' && portal !== 'sjr') {
-        res.status(400).json({ error: 'Bad Request', message: 'portal must be "core" or "sjr"' });
+    if (!KNOWN_PORTALS.includes(portal)) {
+        res.status(400).json({ error: 'Bad Request', message: `portal must be one of: ${KNOWN_PORTALS.join(', ')}` });
         return;
     }
     try {
-        const shared = await sharedCollection();
-        const docs = await shared.find({ source: portal }, { projection: { venueText: 1, candidate: 1, confirmedCount: 1 } }).toArray();
-        res.json(docs.map((d) => ({ venueText: d.venueText, candidate: d.candidate, confirmedCount: d.confirmedCount })));
+        const map = await getSharedOverridesMap(portal);
+        res.json(Object.values(map));
     } catch (error) {
         console.error('[matchOverrides] Error listing shared overrides', error);
         res.status(500).json({ error: 'Internal Server Error', message: error.message });

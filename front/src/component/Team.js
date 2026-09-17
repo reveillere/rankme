@@ -33,7 +33,7 @@ import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
 import { filterPublications } from '../filterPublications';
 import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
-import { getEffectiveCustomValue, customProfileIdForPortal } from '../customRankings';
+import { getDisplayValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
@@ -172,16 +172,17 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
     () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
     [conferenceSource, journalSource]
   );
-  // See Author.js's identical effectiveValueAccessor comment -- portalAccessor
-  // here is itself already memoized on team.source (above), so this only
-  // needs its own on top of that plus activeCustomProfileIds.
+  // See Author.js's identical effectiveValueAccessor comment/fix
+  // (delegates to getDisplayValue) -- portalAccessor here is itself already
+  // memoized on team.source (above), so this only needs its own on top of
+  // that plus activeCustomProfileIds/sharedMaps.
   const effectiveValueAccessor = useMemo(() => (pub) => {
     if (!pub.rank) return undefined;
     const portal = portalAccessor(pub);
     const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
-    if (!customProfileId) return pub.rank.value;
-    return getEffectiveCustomValue(customProfileId, portal, pub.rank, getOverride(portal, pub.rank), yearAccessor(pub)).value;
-  }, [portalAccessor, yearAccessor, activeCustomProfileIds]);
+    const override = getOverride(portal, pub.rank);
+    return getDisplayValue(pub.rank, { portal, sharedMap: sharedMaps[portal], customProfileId, override, year: yearAccessor(pub) });
+  }, [portalAccessor, yearAccessor, activeCustomProfileIds, sharedMaps]);
   // See Author.js's identical customProfileIdAccessor comment.
   const customProfileIdAccessor = useMemo(
     () => (pub) => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub)),
