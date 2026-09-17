@@ -130,26 +130,26 @@ Teams are stored locally in the web application, so there is no team-record GET 
     '/dblp/author/{pid}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get DBLP records for an author',
-        parameters: [path('pid', 'DBLP person identifier (PID).', '11/1262'), ...recordPresentationParameters],
+        parameters: [path('pid', 'DBLP person identifier (PID).', '11/1262'), ...recordPresentationParameters, ...rankingParameters],
         responses: jsonResponse('DBLP author records', dblpAuthorExample, { ...NOT_FOUND, ...DUMP_NOT_READY }),
       }),
     },
     '/hal/author/{idHal}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get HAL records for an author',
-        parameters: [path('idHal', 'HAL author identifier (idHal).', 'laurent-reveillere'), ...recordPresentationParameters], responses: jsonResponse('HAL author records', halRecordExample),
+        parameters: [path('idHal', 'HAL author identifier (idHal).', 'laurent-reveillere'), ...recordPresentationParameters, ...rankingParameters], responses: jsonResponse('HAL author records', halRecordExample),
       }),
     },
     '/hal/structure/{structId}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get HAL records for a structure',
-        parameters: [path('structId', 'HAL structure identifier.', '12345'), ...recordPresentationParameters], responses: jsonResponse('HAL structure records', halRecordExample),
+        parameters: [path('structId', 'HAL structure identifier.', '12345'), ...recordPresentationParameters, ...rankingParameters], responses: jsonResponse('HAL structure records', halRecordExample),
       }),
     },
     '/records/team': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get merged, deduplicated records for a locally defined team',
-        parameters: recordPresentationParameters,
+        parameters: [...recordPresentationParameters, ...rankingParameters],
         requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['source', 'pids'], properties: {
           source: { type: 'string', enum: ['dblp', 'hal'], example: 'dblp' },
           pids: { type: 'array', description: 'DBLP PIDs for source=dblp; HAL idHals for source=hal.', items: { type: 'string' }, example: ['11/1262', '12/3456'] },
