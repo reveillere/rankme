@@ -30,7 +30,13 @@ import '../App.css';
 // structId directly as a prop instead of reading a client-side store, and
 // its network call is a plain GET keyed by structId, no member list to send.
 
-export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor }) {
+// yearRange: see CrossCheck.js's identical comment -- the structure page's
+// own year filter (Structure.js), active at the moment "Cross-check with
+// HAL" was clicked. Applied per-member (see filteredMembers below) rather
+// than to a single flat list, since each member carries their own results.
+const yearAccessor = r => parseInt(r.publication.dblp.year, 10) || 0;
+
+export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor, yearRange }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     // Bumped after a confirm/reject click or a manual identity link lands,
@@ -78,19 +84,36 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         : null;
 
-    const handleExportCsv = () => exportCsv(structId, report.members);
+    // See CrossCheck.js's own hasYearRange/filtered -- same "absent/invalid
+    // means don't filter" rule. member.results includes 'confirmed' entries
+    // too (only missing/to-review are ever rendered, see
+    // StructureMemberSection below), so confirmedCount is recomputed from
+    // the same filtered set rather than left as the server's unfiltered
+    // count -- otherwise "N confirmed, not shown" would count publications
+    // the current year range doesn't even include.
+    const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
+    const filteredMembers = report.members.map(member => {
+        const results = !hasYearRange ? member.results : member.results.filter(r => {
+            const y = yearAccessor(r);
+            return y >= yearRange[0] && y <= yearRange[1];
+        });
+        return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed').length };
+    });
+    const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
+
+    const handleExportCsv = () => exportCsv(structId, filteredMembers);
     const title = structureName || structId;
     const memberLabel = member => `${member.name || member.idHal} (idHal: ${member.idHal}, pid: ${member.pid})`;
     const handleExportMarkdown = () => exportCrossCheckByMemberMarkdown({
         title: `DBLP → HAL cross-check for ${title}`,
         filename: `crosscheck-structure-${structId}.md`,
-        members: report.members,
+        members: filteredMembers,
         memberLabel,
     });
     const handleExportJson = () => exportCrossCheckByMemberJson({
         title: `DBLP → HAL cross-check for ${title}`,
         filename: `crosscheck-structure-${structId}.json`,
-        members: report.members,
+        members: filteredMembers,
         memberLabel,
     });
     const allMembers = [
@@ -117,7 +140,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>No members in this structure</Typography>
             )}
 
-            {report.members.map(member => (
+            {filteredMembers.map(member => (
                 <StructureMemberSection
                     key={member.idHal}
                     member={member}
@@ -130,7 +153,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
             ))}
 
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {report.confirmedCount} confirmed, not shown
+                {totalConfirmedCount} confirmed, not shown
             </Typography>
         </div>
     );

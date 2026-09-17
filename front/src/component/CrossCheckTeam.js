@@ -31,7 +31,12 @@ import '../App.css';
 // localStorage only) -- teamId only ever resolves client-side, so this reads
 // it the same way Team.js does before doing anything else, including for a
 // tab reopened from a bare /crosscheck/team/:teamId URL.
-export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive }) {
+// yearRange: see CrossCheck.js's identical comment -- the team page's own
+// year filter (Team.js), active at the moment "Cross-check with
+// HAL"/"Cross-check with DBLP" was clicked.
+const yearAccessor = r => parseInt(r.publication.dblp.year, 10) || 0;
+
+export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive, yearRange }) {
     // getTeam reads and parses localStorage. Keep this snapshot stable for the
     // lifetime of this route: otherwise every state update creates a new
     // members array, retriggers the fetching effect below and clears the
@@ -42,10 +47,10 @@ export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive 
         return <div style={{ textAlign: 'center', marginTop: '80px' }}>This team no longer exists.</div>;
     }
 
-    return <CrossCheckTeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} isActive={isActive} />;
+    return <CrossCheckTeamShow team={team} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} isActive={isActive} yearRange={yearRange} />;
 }
 
-function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor }) {
+function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     const [report, setReport] = useState(null);
     const [error, setError] = useState(null);
     // Bumped after a confirm/reject click or a manual identity link lands,
@@ -90,18 +95,31 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor }) {
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         : null;
 
-    const handleExportCsv = () => exportCsv(team, report.members);
+    // See CrossCheckStructure.js's identical hasYearRange/filteredMembers
+    // comment -- same reasoning, confirmedCount recomputed from the same
+    // filtered set so "N confirmed, not shown" matches the current range.
+    const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
+    const filteredMembers = report.members.map(member => {
+        const results = !hasYearRange ? member.results : member.results.filter(r => {
+            const y = yearAccessor(r);
+            return y >= yearRange[0] && y <= yearRange[1];
+        });
+        return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed').length };
+    });
+    const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
+
+    const handleExportCsv = () => exportCsv(team, filteredMembers);
     const memberLabel = member => `${member.name || member.pid} (pid: ${member.pid}, idHal: ${member.idHal})`;
     const handleExportMarkdown = () => exportCrossCheckByMemberMarkdown({
         title: `DBLP → HAL cross-check for ${team.name}`,
         filename: `crosscheck-team-${team.id}.md`,
-        members: report.members,
+        members: filteredMembers,
         memberLabel,
     });
     const handleExportJson = () => exportCrossCheckByMemberJson({
         title: `DBLP → HAL cross-check for ${team.name}`,
         filename: `crosscheck-team-${team.id}.json`,
-        members: report.members,
+        members: filteredMembers,
         memberLabel,
     });
 
@@ -124,7 +142,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor }) {
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>No members in this team</Typography>
             )}
 
-            {report.members.map(member => (
+            {filteredMembers.map(member => (
                 <TeamMemberSection
                     key={member.pid}
                     member={member}
@@ -137,7 +155,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor }) {
             ))}
 
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {report.confirmedCount} confirmed, not shown
+                {totalConfirmedCount} confirmed, not shown
             </Typography>
         </div>
     );

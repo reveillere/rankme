@@ -113,8 +113,11 @@ function TeamShow({ team, onOpenAuthor, onSearchAuthor, isActive, initialYearRan
 // now resolves both directions (see its own resolveDblpSourcedMember/
 // resolveHalSourcedMember), so this same handler works regardless of
 // team.source; only the button's own label differs below.
-function handleCrossCheckTeam(team, onOpenAuthor) {
-  onOpenAuthor({ type: 'crosscheck-team', id: `crosscheck-team:${team.id}`, teamId: team.id, label: `Cross-check: ${team.name}` });
+// yearRange: see Author.js's identical handleCrossCheckConfirm -- this
+// page's own currently active year filter, carried onto the crosscheck tab
+// (CrossCheckTeam.js) the same way.
+function handleCrossCheckTeam(team, onOpenAuthor, yearRange) {
+  onOpenAuthor({ type: 'crosscheck-team', id: `crosscheck-team:${team.id}`, teamId: team.id, label: `Cross-check: ${team.name}`, yearRange });
 }
 
 function TeamContent({ team, publications: rankedPublications, progress, done, queued, queuePosition, onOpenAuthor, onSearchAuthor, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
@@ -314,7 +317,7 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
           color="primary"
           size="small"
           startIcon={<CompareArrowsIcon />}
-          onClick={() => handleCrossCheckTeam(team, onOpenAuthor)}
+          onClick={() => handleCrossCheckTeam(team, onOpenAuthor, isFilterActive ? filterYears : undefined)}
           sx={{ borderRadius: '20px', textTransform: 'none', fontWeight: 500, boxShadow: 'none' }}
         >
           Cross-check with {isHal ? 'DBLP' : 'HAL'}

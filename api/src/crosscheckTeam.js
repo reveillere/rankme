@@ -4,6 +4,7 @@ import * as dblpLocal from './dblpLocal.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
 import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
 import { mapWithConcurrency } from './concurrency.js';
+import { crossCheckPresentationOptionsFrom, filterResultsByYear, applyCorrectionsToResults, renderCrossCheckExportByMember } from './crosscheckPresentation.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -192,6 +193,33 @@ export async function controllerCrossCheckTeam(req, res) {
     try {
         const identityLinks = parseIdentityLinks(suppliedIdentityLinks);
         const report = await getTeamCrossCheckReport({ source, pids }, { confSource, journalSource, identityLinks });
+        // '/crosscheck/team' only, not '/internal/crosscheck/team' -- both
+        // are POST (unlike crosscheck.js/crosscheckStructure.js's own
+        // GET-vs-POST split, see routes.js), so req.route.path is what
+        // distinguishes the token-protected public route from
+        // CrossCheckTeam.js's own internal one, which already does this
+        // filtering/correction work client-side.
+        if (req.route.path === '/crosscheck/team') {
+            const options = crossCheckPresentationOptionsFrom(req);
+            const members = [];
+            let totalConfirmedCount = 0;
+            for (const member of report.members) {
+                const filtered = filterResultsByYear(member.results, options);
+                const results = await applyCorrectionsToResults(filtered, options);
+                const confirmedCount = results.filter(r => r.status === 'confirmed').length;
+                totalConfirmedCount += confirmedCount;
+                members.push({ ...member, results, confirmedCount });
+            }
+            if (options.export) {
+                const title = `DBLP → HAL cross-check for team`;
+                const memberLabel = member => `${member.name || member.pid} (pid: ${member.pid}, idHal: ${member.idHal})`;
+                const { contentType, body } = renderCrossCheckExportByMember(options.export, members, title, memberLabel);
+                res.set('Content-Type', contentType).send(body);
+                return;
+            }
+            res.json({ ...report, members, confirmedCount: totalConfirmedCount });
+            return;
+        }
         res.json(report);
     } catch (error) {
         console.log('Error during team cross-check computation', error);

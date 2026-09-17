@@ -90,13 +90,22 @@ function tabPath(tab) {
   // the member list can change client-side any time. :teamId here is only
   // ever used to look the team back up via teamStore.js at render time (see
   // CrossCheckTeam.js), not sent to the server as-is -- same as the plain
-  // /team/:teamId route already does for Team.js.
-  if (tab.type === 'crosscheck-team') return `/crosscheck/team/${tab.teamId}`;
+  // /team/:teamId route already does for Team.js. yearRange travels as
+  // ?from=&to=, same bespoke (not tabSearch's) serialization as
+  // crosscheck-author above -- neither crosscheck page has a sort/export
+  // control of its own for tabSearch's other fields to ever be set.
+  if (tab.type === 'crosscheck-team') {
+    const base = '/crosscheck/team/' + tab.teamId;
+    return Array.isArray(tab.yearRange) ? `${base}?from=${tab.yearRange[0]}&to=${tab.yearRange[1]}` : base;
+  }
   // A HAL structure DOES have a stable server-side structId (unlike a team
   // above) -- so :structId here plays the same role hal-structure's own
   // :structId already does, just under /crosscheck/structure instead of
-  // /structure. No yearRange either, same reasoning as crosscheck-team.
-  if (tab.type === 'crosscheck-structure') return `/crosscheck/structure/${tab.structId}`;
+  // /structure.
+  if (tab.type === 'crosscheck-structure') {
+    const base = '/crosscheck/structure/' + tab.structId;
+    return Array.isArray(tab.yearRange) ? `${base}?from=${tab.yearRange[0]}&to=${tab.yearRange[1]}` : base;
+  }
   return '/';
 }
 
@@ -121,23 +130,32 @@ function tabFromPath(pathname, search) {
   m = pathname.match(/^\/crosscheck\/team\/(.+)$/);
   if (m) {
     const teamId = decodeURIComponent(m[1]);
-    // No yearRange here (see tabPath above) -- CrossCheckTeam.js has no year
-    // control of its own, same choice as the structure crosscheck. label is
-    // the raw teamId, same minimalism as the plain /team/:teamId branch
-    // below -- CrossCheckTeam.js/Team.js already look the team's own name up
-    // via teamStore.js once rendered, this is only ever the tab bar's
-    // fallback label.
-    return { type: 'crosscheck-team', id: `crosscheck-team:${teamId}`, teamId, label: teamId };
+    // ?from=&to=, see tabPath above and crosscheck-author's identical
+    // parsing -- both must parse as numbers or the range is dropped
+    // entirely. label is the raw teamId, same minimalism as the plain
+    // /team/:teamId branch below -- CrossCheckTeam.js/Team.js already look
+    // the team's own name up via teamStore.js once rendered, this is only
+    // ever the tab bar's fallback label.
+    const params = new URLSearchParams(search || '');
+    const from = parseInt(params.get('from'), 10);
+    const to = parseInt(params.get('to'), 10);
+    const yearRange = Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+    return { type: 'crosscheck-team', id: `crosscheck-team:${teamId}`, teamId, label: teamId, yearRange };
   }
   m = pathname.match(/^\/crosscheck\/structure\/(.+)$/);
   if (m) {
     const structId = decodeURIComponent(m[1]);
-    // No yearRange, same as crosscheck-team above. label/structureName are
-    // the raw structId, same minimalism as the plain /structure/:id branch
-    // below -- Structure.js's button already knows the resolved name when
-    // navigating here directly (see Structure.js's handleCrossCheckStructure),
-    // this is only ever the fallback for a reloaded/shared bare URL.
-    return { type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName: undefined, label: structId };
+    // ?from=&to=, same parsing as crosscheck-team above. label/structureName
+    // are the raw structId, same minimalism as the plain /structure/:id
+    // branch below -- Structure.js's button already knows the resolved name
+    // when navigating here directly (see Structure.js's
+    // handleCrossCheckStructure), this is only ever the fallback for a
+    // reloaded/shared bare URL.
+    const params = new URLSearchParams(search || '');
+    const from = parseInt(params.get('from'), 10);
+    const to = parseInt(params.get('to'), 10);
+    const yearRange = Number.isFinite(from) && Number.isFinite(to) ? [from, to] : undefined;
+    return { type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName: undefined, label: structId, yearRange };
   }
   // ?from=&to=, see tabPath above -- same parsing as crosscheck-author's own
   // yearRange: both must parse as numbers or the range is dropped entirely,
@@ -439,8 +457,8 @@ function App() {
           {tab.type === 'structures' && <StructureSearch onOpenStructure={openAuthorTab} />}
           {tab.type === 'hal-structure' && <Structure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} onNameResolved={(name) => updateTabInfo(tab.id, { structureName: name, label: name })} isActive={tab.id === activeTabId} initialYearRange={tab.yearRange} onYearRangeChange={(range) => updateTabInfo(tab.id, { yearRange: range })} initialSort={tab.sort} onSortChange={(sort) => updateTabInfo(tab.id, { sort })} initialExport={tab.export} />}
           {tab.type === 'crosscheck-author' && <CrossCheck pid={tab.pid} halId={tab.halId} yearRange={tab.yearRange} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
-          {tab.type === 'crosscheck-team' && <CrossCheckTeam teamId={tab.teamId} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
-          {tab.type === 'crosscheck-structure' && <CrossCheckStructure structId={tab.structId} structureName={tab.structureName} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
+          {tab.type === 'crosscheck-team' && <CrossCheckTeam teamId={tab.teamId} yearRange={tab.yearRange} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
+          {tab.type === 'crosscheck-structure' && <CrossCheckStructure structId={tab.structId} structureName={tab.structureName} yearRange={tab.yearRange} onOpenAuthor={openAuthorTab} onSearchAuthor={searchAuthorByName} isActive={tab.id === activeTabId} />}
         </div>
       ))}
     </div>

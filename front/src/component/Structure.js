@@ -117,8 +117,11 @@ export function Structure({ structId, structureName, onOpenAuthor, onSearchAutho
 // identity-picking step either -- resolution happens automatically per
 // member on the server (see api/src/crosscheckStructure.js), so the button
 // jumps straight to the report tab.
-function handleCrossCheckStructure(structId, structureName, onOpenAuthor) {
-  onOpenAuthor({ type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName, label: `Cross-check: ${structureName || structId}` });
+// yearRange: see Author.js's identical handleCrossCheckConfirm -- this
+// page's own currently active year filter, carried onto the crosscheck tab
+// (CrossCheckStructure.js) the same way.
+function handleCrossCheckStructure(structId, structureName, onOpenAuthor, yearRange) {
+  onOpenAuthor({ type: 'crosscheck-structure', id: `crosscheck-structure:${structId}`, structId, structureName, label: `Cross-check: ${structureName || structId}`, yearRange });
 }
 
 function StructureContent({ structId, structureName, onOpenAuthor, onSearchAuthor, publications: rankedPublications, progress, done, queued, queuePosition, memberIds, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
@@ -314,7 +317,7 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
           color="primary"
           size="small"
           startIcon={<CompareArrowsIcon />}
-          onClick={() => handleCrossCheckStructure(structId, structureName, onOpenAuthor)}
+          onClick={() => handleCrossCheckStructure(structId, structureName, onOpenAuthor, isFilterActive ? filterYears : undefined)}
           sx={{ borderRadius: '20px', textTransform: 'none', fontWeight: 500, boxShadow: 'none' }}
         >
           Cross-check with DBLP

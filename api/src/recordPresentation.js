@@ -222,26 +222,26 @@ export function presentationOptionsFrom(req) {
 // server-side: the caller just gets the rendered body back with the right
 // Content-Type instead of triggering a save).
 
-function mdEscape(text) {
+export function mdEscape(text) {
     return String(text ?? '').replace(/([*_[\]])/g, '\\$1');
 }
 
-function csvEscape(value) {
+export function csvEscape(value) {
     const s = value == null ? '' : String(value);
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-function dblpTitleText(o) {
+export function dblpTitleText(o) {
     if (o && typeof o === 'object') return `${o.i || ''}${o._ || ''}`;
     return o || '';
 }
 
-function findDoiUrl(ee) {
+export function findDoiUrl(ee) {
     const urls = Array.isArray(ee) ? ee : (ee ? [ee] : []);
     return urls.find(u => /^https?:\/\/doi\.org\//i.test(u)) || null;
 }
 
-function trimLastDigits(str) {
+export function trimLastDigits(str) {
     return str.replace(/\s*\d*$/, '').trim();
 }
 

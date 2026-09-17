@@ -5,6 +5,7 @@ import * as crosscheck from './crosscheck.js';
 import { confSourceFrom, journalSourceFrom } from './authorStream.js';
 import { parseIdentityLinks, IdentityLinksConflictError } from './identityLinksInput.js';
 import { mapWithConcurrency } from './concurrency.js';
+import { crossCheckPresentationOptionsFrom, filterResultsByYear, applyCorrectionsToResults, renderCrossCheckExportByMember } from './crosscheckPresentation.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -148,6 +149,30 @@ export async function controllerCrossCheckStructure(req, res) {
     try {
         const identityLinks = parseIdentityLinks(req.body?.identityLinks ?? req.query.identityLinks);
         const report = await getStructureCrossCheckReport(structId, { confSource, journalSource, identityLinks });
+        // POST-only, same as crosscheck.js's own controllerCrossCheck: the
+        // GET compat route is what CrossCheckStructure.js itself uses, and
+        // it already does this filtering/correction work client-side.
+        if (req.method === 'POST') {
+            const options = crossCheckPresentationOptionsFrom(req);
+            const members = [];
+            let totalConfirmedCount = 0;
+            for (const member of report.members) {
+                const filtered = filterResultsByYear(member.results, options);
+                const results = await applyCorrectionsToResults(filtered, options);
+                const confirmedCount = results.filter(r => r.status === 'confirmed').length;
+                totalConfirmedCount += confirmedCount;
+                members.push({ ...member, results, confirmedCount });
+            }
+            if (options.export) {
+                const title = `DBLP → HAL cross-check for ${structId}`;
+                const memberLabel = member => `${member.name || member.idHal} (idHal: ${member.idHal}, pid: ${member.pid})`;
+                const { contentType, body } = renderCrossCheckExportByMember(options.export, members, title, memberLabel);
+                res.set('Content-Type', contentType).send(body);
+                return;
+            }
+            res.json({ ...report, members, confirmedCount: totalConfirmedCount });
+            return;
+        }
         res.json(report);
     } catch (error) {
         console.log('Error during structure cross-check computation', error);

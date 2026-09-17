@@ -7,6 +7,7 @@ import { levenshtein } from './levenshtein.js';
 import { computeDblpPublicationRank, computeHalPublicationRank, confSourceFrom, journalSourceFrom } from './authorStream.js';
 import * as crosscheckOverrides from './crosscheckOverrides.js';
 import { parseIdentityLinks, assertIdentityPairIsCompatible, IdentityLinksConflictError } from './identityLinksInput.js';
+import { crossCheckPresentationOptionsFrom, filterResultsByYear, applyCorrectionsToResults, renderCrossCheckExport } from './crosscheckPresentation.js';
 
 // ****************************************************************************************************
 // ****************************************************************************************************
@@ -431,6 +432,24 @@ export async function controllerCrossCheck(req, res) {
         const report = await getCrossCheckReport(pid, halId, { confSource, journalSource });
         if (report === null) {
             res.status(404).json({ error: 'Not Found', message: `No DBLP author with pid ${pid}` });
+            return;
+        }
+        // POST-only, same as dblp.controllerAuthor's own branch: the GET
+        // compat route above is what CrossCheck.js itself uses, and it
+        // already does this exact filtering/correction work client-side
+        // (its own hasYearRange/effectiveValueAccessor-equivalent) -- redoing
+        // it server-side there too would be redundant work on every page
+        // load, not just a behavior change.
+        if (req.method === 'POST') {
+            const options = crossCheckPresentationOptionsFrom(req);
+            const filtered = filterResultsByYear(report.results, options);
+            const corrected = await applyCorrectionsToResults(filtered, options);
+            if (options.export) {
+                const { contentType, body } = renderCrossCheckExport(options.export, corrected, `DBLP → HAL cross-check for ${pid}`);
+                res.set('Content-Type', contentType).send(body);
+                return;
+            }
+            res.json({ ...report, results: corrected });
             return;
         }
         res.json(report);

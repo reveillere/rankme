@@ -37,36 +37,33 @@ const identityLinks = {
   items: { type: 'object', required: ['idHal', 'pid'], properties: { idHal: { type: 'string', example: 'laurent-reveillere' }, pid: { type: 'string', example: '11/1262' } } },
 };
 
+// No categories/ranks/sort here -- see crosscheckPresentation.js's own
+// header comment for why: no crosscheck page in the web app has a
+// category/rank filter or a sort control (verified directly against
+// CrossCheck.js/CrossCheckStructure.js/CrossCheckTeam.js), so the API
+// doesn't invent them either. from/to, export, matchOverrides,
+// customRankings and useCommunityCorrections all mirror real web behavior
+// (year filter on all 3 crosscheck pages; export via
+// front/src/exportCrossCheck.js; corrections via RankBadge.js, which every
+// crosscheck page already threads sharedMaps/activeCustomProfileIds into).
 const crossCheckOptions = {
   from: { type: 'integer', minimum: 1800, example: 2015, description: 'First publication year to include.' },
   to: { type: 'integer', minimum: 1800, example: 2024, description: 'Last publication year to include.' },
-  categories: {
-    type: 'array', uniqueItems: true,
-    description: 'Publication categories selected in the interface.',
-    items: { type: 'string', enum: ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'informal'] },
-    example: ['article', 'inproceedings'],
-  },
-  ranks: {
-    type: 'array', uniqueItems: true,
-    description: 'Rank values selected in the interface, for example A*, A, B, C, Q1–Q4 or Unranked.',
-    items: { type: 'string' }, example: ['A*', 'A', 'Q1'],
-  },
-  sort: { type: 'string', enum: ['date', 'date-rank', 'rank-date'], default: 'date', description: 'Result ordering.' },
-  export: { type: 'string', enum: ['md', 'csv', 'json'], description: 'Requested representation of the filtered result.' },
+  export: { type: 'string', enum: ['md', 'csv', 'json'], description: 'When set, the response is the rendered export instead of the normal JSON envelope -- same md/csv/json formats and fields as the record endpoints\' own export parameter, adapted to this endpoint\'s missing/to-review shape.' },
   identityLinks,
   useCommunityCorrections: {
     type: 'boolean', default: true,
-    description: 'Reserved for applying community-confirmed venue-match corrections to API rankings.',
+    description: 'Whether community-confirmed venue-match corrections are applied to rank.effectiveValue, on both the DBLP publication and every HAL candidate in matches. Default true, matching the web app. Has no effect on CCF-sourced ranks (no community-correction data exists for CCF yet).',
   },
   customRankings: {
-    type: 'object',
-    description: 'Reserved for portable custom-ranking profiles, one per axis (conference and journal).',
-    additionalProperties: true,
+    type: 'string', format: 'json',
+    example: '{"conference":{"id":"...","reference":"core","entries":{}},"journal":{"id":"...","reference":"ccf","entries":{}}}',
+    description: 'JSON-encoded {conference?, journal?}, same format as the record endpoints\' own customRankings parameter -- see its description there for the exact contract.',
   },
   matchOverrides: {
-    type: 'array',
-    description: 'Reserved for a future per-request import of personal venue-match corrections. It is not applied yet.',
-    items: { type: 'object' },
+    type: 'string', format: 'json',
+    example: '[{"portal":"core","rankSource":"ICORE2026","queryText":"AINA 2017","candidate":{"id":"conf-example","title":"...","value":"A"}}]',
+    description: 'JSON-encoded array of personal venue-match corrections, same format as the record endpoints\' own matchOverrides parameter.',
   },
 };
 
@@ -78,14 +75,7 @@ const protectedOperation = operation => ({ ...operation, security: [{ apiToken: 
 const rankExample = { value: 'A', effectiveValue: 'A', source: 'core', matchType: 'exact', queryText: 'International Conference on Example Systems', matchedTitle: 'International Conference on Example Systems', matchedId: 'conf-example' };
 const dblpAuthorExample = { author: { pid: '11/1262', name: 'Laurent Réveillère' }, records: [{ type: 'inproceedings', dblp: { key: 'conf/example/Reveillere22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }] };
 const halRecordExample = [{ docid: 'hal-01234567', title: 'A plausible HAL publication', year: 2022, type: 'ART', authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère'], rank: rankExample }];
-// Cross-check endpoints attach a rank the same way (computeDblpPublicationRank/
-// computeHalPublicationRank) but never run it through recordPresentation.js's
-// applyCorrections -- see openapi.js's own "Cross-check options" paragraph
-// (useCommunityCorrections/matchOverrides/customRankings are accepted for
-// contract parity there but not yet applied). No effectiveValue here, or
-// this example would show a field the real response never has.
-const { effectiveValue: _unusedInCrossCheckExample, ...crossCheckRankExample } = rankExample;
-const crossCheckExample = { dblpStatus: { version: 'example-dump', importedAt: '2026-09-17T00:00:00.000Z' }, halCacheNote: 'HAL data may be up to 24h stale', results: [{ status: 'missing', publication: { type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: crossCheckRankExample }, matches: [] }] };
+const crossCheckExample = { dblpStatus: { version: 'example-dump', importedAt: '2026-09-17T00:00:00.000Z' }, halCacheNote: 'HAL data may be up to 24h stale', results: [{ status: 'missing', publication: { type: 'inproceedings', dblp: { key: 'conf/example/Smith22', title: 'A plausible DBLP publication', year: '2022' }, rank: rankExample }, matches: [] }] };
 const teamCrossCheckExample = { ...crossCheckExample, members: [{ pid: '11/1262', idHal: 'laurent-reveillere', name: 'Laurent Réveillère', confirmedCount: 3, results: crossCheckExample.results }], unresolvedMembers: [], confirmedCount: 3 };
 
 // This specification intentionally contains only the externally usable
@@ -95,7 +85,7 @@ export const openapiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'RankMe API',
-    version: '0.9.0',
+    version: '0.9.1',
     description: `**Beta:** this API is under active development. Endpoints, parameters and response shapes may still change without notice -- avoid depending on it for production use yet.
 
 Protected read-only API for author and HAL structure records, plus cross-checks.
@@ -127,7 +117,11 @@ Each rankable record's \`rank\` also carries an \`effectiveValue\` alongside the
 
 Cross-check POST requests accept \`identityLinks\`, the JSON content of an exported Identity links file. The links apply only to that request and override inferred identities. A malformed file, or a file that maps one idHal or PID to multiple counterparts, returns \`409 Conflict\` and no partial result.
 
-\`from\`, \`to\`, \`categories\`, \`ranks\`, \`sort\`, \`export\`, \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` are also accepted here, for contract parity with the record endpoints above, but are not yet applied server-side on cross-check operations -- unlike on the record endpoints, where they now are.
+\`from\`/\`to\` filter \`results\` (and, for \`/crosscheck/structure\`/\`/crosscheck/team\`, every member's own \`results\`) by publication year, the same year filter every crosscheck page in the web app now has. \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` attach \`rank.effectiveValue\` to both a result's own \`publication.rank\` and every HAL candidate's \`rank\` in \`matches\` -- same contract and JSON shape as the record endpoints' own parameters of the same name, just applied to this endpoint's missing/to-review shape instead of a flat record list. \`export\` renders the (year-filtered, correction-applied) report as Markdown/CSV/JSON instead of the normal JSON envelope.
+
+Unlike the record endpoints (where these are query parameters), all of the above are read from the request body first, falling back to the query string -- the same place \`identityLinks\`, \`pid\`/\`halId\`/\`structId\`/\`source\`/\`pids\` already live for these endpoints.
+
+\`categories\`, \`ranks\` and \`sort\` are deliberately not offered here: no crosscheck page in the web app has a category/rank filter or a sort control, unlike the record endpoints' own (see "Record options" above) -- the API mirrors what the product actually does, not a richer contract than it.
 
 ## Teams
 
