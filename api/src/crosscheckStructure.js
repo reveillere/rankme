@@ -51,8 +51,13 @@ export function createStructureCrossChecker({ getIdentityResolutionReport, getCr
         const key = `crosscheck:structure:local-v1:${structId}:${dblpStatus.version}:${confSource}:${journalSource}:${linksVersion}`;
 
         // Supplied links are request-specific and must never leak into the
-        // shared structure cache.
-        if (!identityLinks) {
+        // shared structure cache. Note parseIdentityLinks returns a truthy
+        // {byIdHal, byPid} object even for an empty links array (the front
+        // end always sends an `identityLinks` field, [] when the user has
+        // none) -- so it's the presence of an actual link, not just a non-null
+        // object, that has to bypass the cache, or it never gets used.
+        const hasSuppliedLinks = identityLinks && identityLinks.byIdHal.size > 0;
+        if (!hasSuppliedLinks) {
             const cached = await getCache(key);
             if (cached !== null) return cached;
         }
@@ -124,7 +129,7 @@ export function createStructureCrossChecker({ getIdentityResolutionReport, getCr
             unresolvedMembers: unresolvedMembers.map(m => ({ idHal: m.idHal, name: m.name, confidence: m.confidence, candidates: m.candidates })),
             confirmedCount: totalConfirmedCount,
         };
-        if (!identityLinks) await setCache(key, report, CACHE_TTL_S);
+        if (!hasSuppliedLinks) await setCache(key, report, CACHE_TTL_S);
         return report;
     };
 }
@@ -150,8 +155,8 @@ export async function controllerCrossCheckStructure(req, res) {
         const identityLinks = parseIdentityLinks(req.body?.identityLinks ?? req.query.identityLinks);
         const report = await getStructureCrossCheckReport(structId, { confSource, journalSource, identityLinks });
         // POST-only, same as crosscheck.js's own controllerCrossCheck: the
-        // GET compat route is what CrossCheckStructure.js itself uses, and
-        // it already does this filtering/correction work client-side.
+        // front end now POSTs to /internal/crosscheck/structure, and that
+        // route already does this filtering/correction work client-side.
         if (req.method === 'POST' && req.route.path !== '/internal/crosscheck/structure') {
             const options = crossCheckPresentationOptionsFrom(req);
             const members = [];

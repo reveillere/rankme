@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // DBLP/HAL
 import { fetchCrossCheck, postCrossCheckOverride } from '../crosscheck';
@@ -18,9 +22,9 @@ import { ReportButton } from './ReportButton';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
-import { applyLocalDecisions, listIdentityLinks, LINKS_KEY } from '../personalData';
+import { applyLocalDecisions, listIdentityLinks, removeCrosscheckDecision, LINKS_KEY } from '../personalData';
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
-import { IdentityLinksButton } from './IdentityLinksButton';
+import { IdentityLinksIconButton } from './IdentityLinksIconButton';
 import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 
 const yearAccessor = result => parseInt(result.publication.dblp.year, 10) || 0;
@@ -59,6 +63,9 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
     const [refreshToken, setRefreshToken] = useState(0);
+    // Collapsed by default -- a decided-confirmed row is the exception, not
+    // the common case, and most reports have none at all.
+    const [confirmedOpen, setConfirmedOpen] = useState(false);
     const { conferenceSource, journalSource } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
@@ -92,6 +99,12 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             .catch(err => setError(err));
     };
 
+    // Undo just removes the stored decision -- applyLocalDecisions then
+    // recomputes this pair's status from the automatic report alone on the
+    // next render, same PERSONAL_DATA_EVENT-driven refresh confirming
+    // already relies on, no separate fetch needed.
+    const handleUndo = (dblpKey, halDocid) => removeCrosscheckDecision({ dblpKey, halDocid });
+
     const results = report?.results;
 
     const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
@@ -113,7 +126,13 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     const numbered = withRowNumbers(filtered);
     const missingRows = numbered.filter(({ result }) => result.status === 'missing');
     const toReviewRows = numbered.filter(({ result }) => result.status === 'to-review');
-    const confirmedCount = filtered.length - missingRows.length - toReviewRows.length;
+    // A decided-confirmed row (a manual click, or an imported decision file)
+    // is surfaced with an undo below; a 'confirmed' row statusFromMatches
+    // (api/src/crosscheck.js) produced on its own -- an exact DOI/arXiv or
+    // strong title+year match, no local decision behind it -- is not: there
+    // can be hundreds of those, and there is nothing to undo.
+    const confirmedRows = numbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
+    const automaticConfirmedCount = filtered.length - missingRows.length - toReviewRows.length - confirmedRows.length;
 
     const importedAtLabel = report.dblpStatus.importedAt
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -146,9 +165,9 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             </Alert>
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <IdentityLinksButton pids={[pid]} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+                <IdentityLinksIconButton pids={[pid]} onLinksChanged={() => setRefreshToken(t => t + 1)} />
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
-                <ReportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
+                <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
             </Box>
 
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} boxSx={SECTION_BOX_SX} headingVariant="h6" />
@@ -167,8 +186,38 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
                 headingVariant="h6"
             />
 
+            {confirmedRows.length > 0 && (
+                <Box sx={SECTION_BOX_SX}>
+                    <Typography
+                        variant="h6"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: confirmedOpen ? 1 : 0 }}
+                        onClick={() => setConfirmedOpen(o => !o)}
+                    >
+                        <IconButton size="small" sx={{ p: 0 }}>
+                            {confirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                        </IconButton>
+                        Confirmed ({confirmedRows.length})
+                    </Typography>
+                    <Collapse in={confirmedOpen}>
+                        <CrossCheckSection
+                            title="Confirmed"
+                            rows={confirmedRows}
+                            confirmed
+                            hideHeading
+                            pids={pids}
+                            onOpenAuthor={onOpenAuthor}
+                            onSearchAuthor={onSearchAuthor}
+                            onUndo={handleUndo}
+                            sharedMaps={sharedMaps}
+                            activeCustomProfileIds={activeCustomProfileIds}
+                            boxSx={{}}
+                        />
+                    </Collapse>
+                </Box>
+            )}
+
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {confirmedCount} confirmed, not shown
+                {automaticConfirmedCount} confirmed automatically, not shown
             </Typography>
         </div>
     );

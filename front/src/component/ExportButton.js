@@ -5,19 +5,22 @@ import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import DownloadIcon from '@mui/icons-material/Download';
 
-// One shared button/menu for every page that offers an export (the 4
-// publication-list pages -- Author.js/AuthorHal.js/Team.js/Structure.js --
-// and the 3 cross-check pages -- CrossCheck.js/CrossCheckTeam.js/
-// CrossCheckStructure.js) -- replaces what used to be two separate
-// "Export Markdown"/"Export CSV" buttons per page with a single "Export"
-// button opening a 3-way choice. Same IconButton+Menu+MenuItem pattern as
-// SortButton.js (see that file), reused as-is here so the two buttons that
-// sit side by side in each page's button row look and behave the same way.
-// Deliberately agnostic of *what* gets exported: each page passes its own
+// One shared button/menu for every page/dialog that offers a plain-data
+// export -- Teams.js (teams and team members), IdentityLinksPanel.js,
+// MyOverridesDialog.js, MyCustomRankingsDialog.js. The 4 publication-list
+// pages (Author.js/AuthorHal.js/Team.js/Structure.js) and the 3 cross-check
+// pages (CrossCheck.js/CrossCheckTeam.js/CrossCheckStructure.js) use
+// ReportButton.js instead -- same Menu-of-formats shape, but its document
+// icon reads as a report rather than a raw data download. Same
+// IconButton+Menu+MenuItem pattern as SortButton.js (see that file) and
+// ReportButton.js, reused as-is here so buttons that sit side by side in a
+// page's button row look and behave the same way. Deliberately agnostic of
+// *what* gets exported: each caller passes its own
 // onExportMarkdown/onExportJson/onExportCsv callback, already closed over
-// whatever title/filename/sortMode (or results/members) that page's own
-// export needs, so this component has no idea whether it's exporting a
-// publication list or a cross-check report.
+// whatever title/filename/sortMode (or results/members) its own export
+// needs. Each callback is optional -- only the formats a caller actually
+// supports get a menu entry, same as ImportButton's own
+// onImportJson/onImportCsv/onImportTxt.
 export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false, updateUrl = true }) {
   const [anchorEl, setAnchorEl] = useState(null);
 
@@ -52,9 +55,9 @@ export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disa
         </span>
       </Tooltip>
       <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-        <MenuItem onClick={() => handleSelect(onExportMarkdown, 'md')}>Markdown</MenuItem>
-        <MenuItem onClick={() => handleSelect(onExportJson, 'json')}>JSON</MenuItem>
-        <MenuItem onClick={() => handleSelect(onExportCsv, 'csv')}>CSV</MenuItem>
+        {onExportMarkdown && <MenuItem onClick={() => handleSelect(onExportMarkdown, 'md')}>Markdown</MenuItem>}
+        {onExportJson && <MenuItem onClick={() => handleSelect(onExportJson, 'json')}>JSON</MenuItem>}
+        {onExportCsv && <MenuItem onClick={() => handleSelect(onExportCsv, 'csv')}>CSV</MenuItem>}
       </Menu>
     </>
   );

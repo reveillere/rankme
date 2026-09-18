@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // DBLP/HAL
 import { fetchTeamCrossCheck, postCrossCheckOverride } from '../crosscheck';
@@ -21,7 +25,7 @@ import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
-import { applyLocalDecisions, LINKS_KEY } from '../personalData';
+import { applyLocalDecisions, removeCrosscheckDecision, LINKS_KEY } from '../personalData';
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 
@@ -89,6 +93,9 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
             .catch(err => setError(err));
     };
 
+    // See CrossCheck.js's identical handleUndo comment.
+    const handleUndo = (dblpKey, halDocid) => removeCrosscheckDecision({ dblpKey, halDocid });
+
     const targetLabel = team.source === 'dblp' ? 'HAL' : 'DBLP';
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this team against {targetLabel}. Please try again later.</div>;
     if (report === null) return <>
@@ -103,13 +110,16 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     // See CrossCheckStructure.js's identical hasYearRange/filteredMembers
     // comment -- same reasoning, confirmedCount recomputed from the same
     // filtered set so "N confirmed, not shown" matches the current range.
+    // Only the automatic ones count here -- a decided-confirmed result is
+    // now surfaced (with undo) in its own member's "Confirmed" section
+    // instead, see TeamMemberSection below.
     const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
     const filteredMembers = report.members.map(member => {
         const results = !hasYearRange ? member.results : member.results.filter(r => {
             const y = yearAccessor(r);
             return y >= yearRange[0] && y <= yearRange[1];
         });
-        return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed').length };
+        return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
     });
     const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
 
@@ -141,7 +151,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'team', id: team.id, name: team.name }} />
-                <ReportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
+                <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
             </Box>
 
             {report.members.length === 0 && report.unresolvedMembers.length === 0 && (
@@ -155,13 +165,14 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
                     onOpenAuthor={onOpenAuthor}
                     onSearchAuthor={onSearchAuthor}
                     onDecide={handleOverrideDecision}
+                    onUndo={handleUndo}
                     sharedMaps={sharedMaps}
                     activeCustomProfileIds={activeCustomProfileIds}
                 />
             ))}
 
             <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {totalConfirmedCount} confirmed, not shown
+                {totalConfirmedCount} confirmed automatically, not shown
             </Typography>
         </div>
     );
@@ -173,11 +184,16 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
 // results so a number still means "Nth item of this type among this
 // member's own publications", not something meaningless spanning several
 // different people's dblp records.
-function TeamMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, sharedMaps, activeCustomProfileIds }) {
+function TeamMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds }) {
     const pids = useMemo(() => [member.pid], [member.pid]);
+    // Collapsed by default, one flag per member -- see CrossCheck.js's
+    // identical confirmedOpen comment.
+    const [confirmedOpen, setConfirmedOpen] = useState(false);
     const numbered = withRowNumbers(member.results);
     const missingRows = numbered.filter(({ result }) => result.status === 'missing');
     const toReviewRows = numbered.filter(({ result }) => result.status === 'to-review');
+    // See CrossCheck.js's identical confirmedRows comment.
+    const confirmedRows = numbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
 
     return (
         <Box sx={{ maxWidth: 900, margin: '0 auto 40px' }}>
@@ -197,6 +213,34 @@ function TeamMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, sha
                 sharedMaps={sharedMaps}
                 activeCustomProfileIds={activeCustomProfileIds}
             />
+            {confirmedRows.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                    <Typography
+                        variant="subtitle2"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: confirmedOpen ? 1 : 0 }}
+                        onClick={() => setConfirmedOpen(o => !o)}
+                    >
+                        <IconButton size="small" sx={{ p: 0 }}>
+                            {confirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                        </IconButton>
+                        Confirmed ({confirmedRows.length})
+                    </Typography>
+                    <Collapse in={confirmedOpen}>
+                        <CrossCheckSection
+                            title="Confirmed"
+                            rows={confirmedRows}
+                            confirmed
+                            hideHeading
+                            pids={pids}
+                            onOpenAuthor={onOpenAuthor}
+                            onSearchAuthor={onSearchAuthor}
+                            onUndo={onUndo}
+                            sharedMaps={sharedMaps}
+                            activeCustomProfileIds={activeCustomProfileIds}
+                        />
+                    </Collapse>
+                </Box>
+            )}
         </Box>
     );
 }

@@ -7,18 +7,17 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import LinkIcon from '@mui/icons-material/Link';
 
 import { useRankedPublications } from '../useRankedPublications';
 import { rankingQueryParams, customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import DateRangeSlider from './DateRangeSlider';
 import { MemberListDialog } from './MemberListDialog';
-import { IdentityLinksPanel } from './IdentityLinksPanel';
+import { IdentityLinksIconButton } from './IdentityLinksIconButton';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
-import { ExportButton } from './ExportButton';
+import { ReportButton } from './ReportButton';
 import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -185,7 +184,6 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
-  const [linksPanelOpen, setLinksPanelOpen] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
   // See Author.js's identical comment: stable unless a source actually
@@ -271,14 +269,12 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
               <VisibilityIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Manage identity links">
-            <IconButton size="small" onClick={() => setLinksPanelOpen(true)} aria-label="Manage identity links">
-              <LinkIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+          {/* A HAL structure's own membership is always idHals -- see
+              memberIds's own comment above. */}
+          <IdentityLinksIconButton structId={structId} idHals={memberIds} resolveName={resolveMemberName} />
         </span>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<ExportButton
+        exportButton={<ReportButton
           onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })}
           onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${structureName ? ` of ${structureName}` : ''}`, filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.json`, sortMode })}
           onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-structure-${(structureName || 'structure').replace(/\s+/g, '-').toLowerCase()}.csv`, sortMode })}
@@ -290,16 +286,6 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
         onClose={() => setMembersDialogOpen(false)}
         title={`Members${structureName ? ` of ${structureName}` : ''} (${memberIds.length})`}
         members={dialogMembers}
-      />
-
-      {/* A HAL structure's own membership is always idHals -- see
-          memberIds's own comment above. */}
-      <IdentityLinksPanel
-        open={linksPanelOpen}
-        onClose={() => setLinksPanelOpen(false)}
-        structId={structId}
-        idHals={memberIds}
-        resolveName={resolveMemberName}
       />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>

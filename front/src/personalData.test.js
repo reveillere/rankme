@@ -96,6 +96,17 @@ describe('personal cross-check decisions', () => {
     expect(applied.members[0].confirmedCount).toBe(1);
     expect(automatic.confirmedCount).toBe(0);
   });
+  it('flags a result as decided only when a stored decision actually applied to it', async () => {
+    const automatic = { results: [...report().results, { publication: { dblp: { key: 'exact-match' } }, status: 'confirmed', matches: [{ confidence: 'exact', halPub: { docid: '99' } }] }] };
+    await postCrossCheckOverride(decision);
+    const applied = applyLocalDecisions(automatic);
+    // The decided result: touched by a stored decision, status flipped to confirmed by it.
+    expect(applied.results[0]).toMatchObject({ status: 'confirmed', decided: true });
+    // The untouched result: confirmed by statusFromMatches itself (an exact
+    // match), never went through a decision -- must not carry the flag, or
+    // the "Confirmed" section (CrossCheck.js) would wrongly surface it.
+    expect(applied.results[1].decided).toBeFalsy();
+  });
   it('surfaces storage failures instead of reporting a successful save', async () => {
     localStorage.setItem = () => { throw new Error('Quota exceeded'); };
     await expect(postCrossCheckOverride(decision)).rejects.toThrow('Quota exceeded');

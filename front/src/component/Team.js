@@ -9,7 +9,6 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import LinkIcon from '@mui/icons-material/Link';
 
 import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
@@ -21,13 +20,13 @@ import { customProfileIdFrom } from '../rankingSource';
 // Components
 import DateRangeSlider from './DateRangeSlider';
 import { MemberListDialog } from './MemberListDialog';
-import { IdentityLinksPanel } from './IdentityLinksPanel';
+import { IdentityLinksIconButton } from './IdentityLinksIconButton';
 import { Publications } from './Publications';
 import { HalPublications } from './HalPublications';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
-import { ExportButton } from './ExportButton';
+import { ReportButton } from './ReportButton';
 import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -165,7 +164,6 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
-  const [linksPanelOpen, setLinksPanelOpen] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
   // See Author.js's identical comment: stable unless a source actually
@@ -258,14 +256,20 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
               <VisibilityIcon fontSize="inherit" />
             </IconButton>
           </Tooltip>
-          <Tooltip title="Manage identity links">
-            <IconButton size="small" onClick={() => setLinksPanelOpen(true)} aria-label="Manage identity links">
-              <LinkIcon fontSize="inherit" />
-            </IconButton>
-          </Tooltip>
+          {/* A dblp-sourced team's own member ids ARE dblp pids (search by
+              pids), a hal-sourced team's are idHals (search by idHals) --
+              selfIds already carries whichever one team.source made it, see
+              its own useMemo above. */}
+          <IdentityLinksIconButton
+            idHals={isHal ? selfIds : []}
+            pids={isHal ? [] : selfIds}
+            resolveName={resolveMemberName}
+            teamSource={team.source}
+            teamMembers={identityMembers}
+          />
         </span>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} deduplicated records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<ExportButton
+        exportButton={<ReportButton
           onExportMarkdown={() => (isHal
             ? exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records of ${team.name} (${team.members.length} members)`, filename: `hal-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
             : exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${team.name} (${team.members.length} members)`, filename: `dblp-team-${team.name.replace(/\s+/g, '-').toLowerCase()}.md`, sortMode })
@@ -286,20 +290,6 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
         onClose={() => setMembersDialogOpen(false)}
         title={`Members of ${team.name} (${team.members.length})`}
         members={dialogMembers}
-      />
-
-      {/* A dblp-sourced team's own member ids ARE dblp pids (search by
-          pids), a hal-sourced team's are idHals (search by idHals) --
-          selfIds already carries whichever one team.source made it, see its
-          own useMemo above. */}
-      <IdentityLinksPanel
-        open={linksPanelOpen}
-        onClose={() => setLinksPanelOpen(false)}
-        idHals={isHal ? selfIds : []}
-        pids={isHal ? [] : selfIds}
-        resolveName={resolveMemberName}
-        teamSource={team.source}
-        teamMembers={identityMembers}
       />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>

@@ -5,10 +5,14 @@ import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import DescriptionIcon from '@mui/icons-material/Description';
 
-// Cross-check report export. Kept separate from ExportButton so the regular
-// publication-list export keeps its familiar download icon while this action
-// reads as a report/document next to the personal decision file controls.
-export function ReportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false }) {
+// Document-style export, as opposed to ExportButton's plain-data download
+// icon: used both for a cross-check page's own report (title="Cross-check
+// report", set explicitly by CrossCheck.js/CrossCheckTeam.js/
+// CrossCheckStructure.js) and, with the default title, as the main
+// Markdown/JSON/CSV export on the publication-list pages (Author.js/
+// AuthorHal.js/Team.js/Structure.js) -- those used ExportButton's download
+// icon previously, but a formatted publication list reads as a report too.
+export function ReportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false, title = 'Report' }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const select = (callback, format) => {
     setAnchorEl(null);
@@ -18,9 +22,9 @@ export function ReportButton({ onExportMarkdown, onExportJson, onExportCsv, disa
     callback();
   };
   return <>
-    <Tooltip title="Cross-check report">
+    <Tooltip title={title}>
       <span>
-        <IconButton color="primary" size="small" aria-label="cross-check report" disabled={disabled} onClick={event => setAnchorEl(event.currentTarget)} sx={{ border: '1px solid', borderColor: 'primary.main', borderRadius: '20px', padding: '6px' }}>
+        <IconButton color="primary" size="small" aria-label={title.toLowerCase()} disabled={disabled} onClick={event => setAnchorEl(event.currentTarget)} sx={{ border: '1px solid', borderColor: 'primary.main', borderRadius: '20px', padding: '6px' }}>
           <DescriptionIcon fontSize="small" />
         </IconButton>
       </span>

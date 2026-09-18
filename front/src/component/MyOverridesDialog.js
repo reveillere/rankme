@@ -5,7 +5,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
@@ -13,8 +12,8 @@ import ListItemText from '@mui/material/ListItemText';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
+import { ExportButton } from './ExportButton';
+import { ImportButton } from './ImportButton';
 
 import { listOverrides, clearOverride, clearAllOverrides, overridesToCSV, importOverridesFromCSV, overridesToJSON, importOverridesFromJSON } from '../matchOverrides';
 
@@ -166,22 +165,13 @@ export function MyOverridesDialog({ open, onClose }) {
         )}
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
-        <Box>
-          <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExport} disabled={overrides.length === 0}>
-            Export CSV
-          </Button>
-          <Tooltip title="Import overrides from a CSV file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
-            Import CSV
-          </Button></Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* updateUrl=false: unlike the report pages ExportButton also
+              serves, this dialog has no routable URL of its own to reflect
+              the chosen format into. */}
+          <ExportButton onExportJson={handleExportJson} onExportCsv={handleExport} disabled={overrides.length === 0} updateUrl={false} />
+          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import corrections" />
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
-          <Tooltip title="Also the format the public API's matchOverrides parameter expects">
-            <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportJson} disabled={overrides.length === 0}>
-              Export JSON
-            </Button>
-          </Tooltip>
-          <Tooltip title="Import overrides from a JSON file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportJsonClick}>
-            Import JSON
-          </Button></Tooltip>
           <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
         </Box>
         <Box>

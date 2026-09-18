@@ -21,8 +21,8 @@ import { Publications } from './Publications';
 import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
-import { ExportButton } from './ExportButton';
-import { IdentityLinksButton } from './IdentityLinksButton';
+import { ReportButton } from './ReportButton';
+import { IdentityLinksIconButton } from './IdentityLinksIconButton';
 import { LINKS_KEY } from '../personalData';
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { RecordsHeader } from './RecordsHeader';
@@ -336,7 +336,7 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
             ))}
         </>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<><IdentityLinksButton pids={[pid]} /><ExportButton
+        exportButton={<><IdentityLinksIconButton pids={[pid]} /><ReportButton
           onExportMarkdown={() => exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.md`, sortMode })}
           onExportJson={() => exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.json`, sortMode })}
           onExportCsv={() => exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-${pid.replace(/\//g, '-')}.csv`, sortMode })}

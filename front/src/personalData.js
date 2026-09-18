@@ -106,7 +106,14 @@ export function applyLocalDecisions(report, decisions = listCrosscheckDecisions(
     const matches = confirmed.length ? confirmed : kept;
     const status = confirmed.length || matches.some(match => ['exact', 'strong'].includes(match.confidence))
       ? 'confirmed' : matches.length ? 'to-review' : 'missing';
-    return { ...result, matches, status };
+    // Marks that this result's status was touched by a locally recorded
+    // decision (postCrossCheckOverride/removeCrosscheckDecision), as
+    // opposed to a 'confirmed' status statusFromMatches (crosscheck.js)
+    // produced on its own from an exact DOI/arXiv or strong title+year
+    // match -- CrossCheck.js and its structure/team siblings need to tell
+    // the two apart so only the former gets surfaced (with an undo) in the
+    // new "Confirmed" section, not the hundreds of automatic ones.
+    return { ...result, matches, status, decided: true };
   });
   if (report.members) {
     const members = report.members.map(member => {

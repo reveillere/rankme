@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStructureCrossChecker } from './crosscheckStructure.js';
+import { parseIdentityLinks } from './identityLinksInput.js';
 
 // Builds a fake getCrossCheckReport response in the same shape
 // crosscheck.js's own getCrossCheckReport produces (only the fields the
@@ -166,6 +167,32 @@ test('getStructureCrossCheckReport: caches the computed report under a key scope
     assert.equal(setKey, 'crosscheck:structure:local-v1:struct1:v42:core:sjr:links-v1');
     assert.equal(setValue, report);
     assert.equal(setTtl, 60 * 60);
+});
+
+test('getStructureCrossCheckReport: an empty identityLinks array (parseIdentityLinks([])) still uses the shared cache', async () => {
+    // The front end always sends an `identityLinks` field, `[]` when the
+    // user has no personal links of their own -- parseIdentityLinks([])
+    // returns a truthy but empty {byIdHal, byPid} object, not null. That
+    // must not be mistaken for "the caller supplied real links", or the
+    // shared 1h cache is bypassed on every request in practice.
+    const identityLinks = parseIdentityLinks([]);
+    let cacheReadKey = null;
+    let cacheWriteKey = null;
+    const identityReport = [{ idHal: 'h1', name: 'Alice', resolved: { pid: '11/1262', source: 'orcid' }, confidence: 'confirmed', candidates: [] }];
+
+    const resolve = createStructureCrossChecker({
+        getIdentityResolutionReport: async () => identityReport,
+        getCrossCheckReport: async () => fakeReport({ confirmed: 1 }),
+        getPersonLinksVersion: async () => 'links-v1',
+        getDblpStatus: async () => ({ version: 'v42', importedAt: '2026-01-01' }),
+        getCache: async key => { cacheReadKey = key; return null; },
+        setCache: async key => { cacheWriteKey = key; },
+    });
+
+    await resolve('struct1', { confSource: 'core', journalSource: 'sjr', identityLinks });
+
+    assert.equal(cacheReadKey, 'crosscheck:structure:local-v1:struct1:v42:core:sjr:links-v1');
+    assert.equal(cacheWriteKey, 'crosscheck:structure:local-v1:struct1:v42:core:sjr:links-v1');
 });
 
 test('personal structure links are request-specific and never read or write the shared report cache', async () => {

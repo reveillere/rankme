@@ -18,8 +18,6 @@ import Alert from '@mui/material/Alert';
 import RadioGroup from '@mui/material/RadioGroup';
 import Radio from '@mui/material/Radio';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -27,6 +25,9 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import DownloadIcon from '@mui/icons-material/Download';
+import { ExportButton } from './ExportButton';
+import { ImportButton } from './ImportButton';
 
 import {
   listProfiles, createProfile, renameProfile, deleteProfile, deleteEntryEdition,
@@ -400,14 +401,11 @@ export function MyCustomRankingsDialog({ open, onClose }) {
                     onToggleExpand={toggleExpand}
                     onChanged={refresh}
                   />
-                  <Button
-                    size="small"
-                    startIcon={<FileDownloadIcon />}
-                    onClick={() => handleExportOne(profile.id)}
-                    sx={{ ml: 4, mb: 1 }}
-                  >
-                    Export this profile
-                  </Button>
+                  <Tooltip title="Export this profile">
+                    <IconButton size="small" onClick={() => handleExportOne(profile.id)} aria-label="export this profile" sx={{ ml: 4, mb: 1 }}>
+                      <DownloadIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
               );
             })}
@@ -415,22 +413,13 @@ export function MyCustomRankingsDialog({ open, onClose }) {
         )}
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
-        <Box>
-          <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportAll} disabled={profiles.length === 0}>
-            Export all
-          </Button>
-          <Tooltip title="Import rankings from a CSV file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportClick}>
-            Import CSV
-          </Button></Tooltip>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* updateUrl=false: unlike the report pages ExportButton also
+              serves, this dialog has no routable URL of its own to reflect
+              the chosen format into. */}
+          <ExportButton onExportJson={handleExportAllJson} onExportCsv={handleExportAll} disabled={profiles.length === 0} updateUrl={false} />
+          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import rankings" />
           <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
-          <Tooltip title="Also the format the public API's customRankings parameter expects">
-            <Button size="small" startIcon={<FileDownloadIcon />} onClick={handleExportAllJson} disabled={profiles.length === 0}>
-              Export all (JSON)
-            </Button>
-          </Tooltip>
-          <Tooltip title="Import rankings from a JSON file"><Button size="small" startIcon={<FileUploadIcon />} onClick={handleImportJsonClick}>
-            Import JSON
-          </Button></Tooltip>
           <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
         </Box>
         <Button onClick={onClose}>Close</Button>

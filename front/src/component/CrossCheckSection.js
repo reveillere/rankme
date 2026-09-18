@@ -6,6 +6,7 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import UndoIcon from '@mui/icons-material/Undo';
 
 import { dblpCategories } from '../dblp';
 import { getHalCategory } from '../hal';
@@ -31,11 +32,12 @@ import { HalPublicationRow } from './HalPublications';
 // that matters, same reasoning as Structure.js/Team.js's own selfIds.
 export const NO_SELF_IDS = [];
 
-// Width reserved for the confirm/reject IconButton pair on a HAL candidate
-// row -- the DBLP row above it reserves the same empty width (see the
-// spacer Box there) purely so both rows' chip+publication content start at
-// the same x position, letting the .box/.nr/.rank/cite columns of
-// PublicationRow/HalPublicationRow line up visually between the two.
+// Width reserved for the confirm/reject (or, in the "Confirmed" section,
+// undo) IconButton(s) on a HAL candidate row -- the DBLP row above it
+// reserves the same empty width (see the spacer Box there) purely so both
+// rows' chip+publication content start at the same x position, letting the
+// .box/.nr/.rank/cite columns of PublicationRow/HalPublicationRow line up
+// visually between the two.
 export const ACTION_WIDTH = 76;
 
 // Fixed width for the DBLP/HAL chips below -- MUI's Chip otherwise sizes
@@ -67,94 +69,132 @@ export function csvEscape(value) {
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+// One DBLP publication (greyed out, no actions of its own) stacked above
+// every HAL candidate it might be the same paper as -- shared by the
+// "to review" (confirm/reject) and "confirmed" (undo) layouts below, which
+// differ only in what `renderActions` puts in the ACTION_WIDTH column next
+// to each HAL row. Factored out so those two call sites don't copy-paste
+// the whole DBLP-row/HAL-row/chip/alignment block, only the actions.
+function DblpWithMatches({ result, isLast, pids, onOpenAuthor, onSearchAuthor, sharedMaps, activeCustomProfileIds, renderActions }) {
+    return (
+        <Box>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, opacity: 0.55 }}>
+                {/* Empty spacer the same width as the actions column below, so
+                    the DBLP row's chip (and, past it, PublicationRow's own
+                    .box/.rank/cite columns) line up with every HAL candidate
+                    row underneath instead of starting further left than they
+                    do. */}
+                <Box sx={{ width: ACTION_WIDTH, flexShrink: 0 }} />
+                <Chip label={`DBLP ${result.publication.dblp.year}`} size="small" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
+                <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
+                    <li className={`entry ${result.publication.type}`}>
+                        {/* No nr here -- see PublicationRow's own comment: it
+                            would sit right next to a HAL candidate row that
+                            never gets one either (a number computed over just
+                            the handful of publications in this section would
+                            be as meaningless as the HAL side's would be), so
+                            neither row shows one. */}
+                        <PublicationRow item={result.publication} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
+                    </li>
+                </ul>
+            </Box>
+            {result.matches.map(m => {
+                const category = getHalCategory(m.halPub.type);
+                return (
+                    <Box key={m.halPub.docid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
+                        <Box sx={{ width: ACTION_WIDTH, flexShrink: 0, display: 'flex', mt: '2px' }}>
+                            {renderActions(m)}
+                        </Box>
+                        <Chip label={`HAL ${m.halPub.year || '—'}`} size="small" color="info" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
+                        <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
+                            <li className={`entry ${category.cssClass}`}>
+                                <HalPublicationRow
+                                    item={m.halPub}
+                                    category={category}
+                                    selfIds={NO_SELF_IDS}
+                                    onOpenAuthor={onOpenAuthor}
+                                    onSearchAuthor={onSearchAuthor}
+                                    sharedMaps={sharedMaps}
+                                    activeCustomProfileIds={activeCustomProfileIds}
+                                />
+                            </li>
+                        </ul>
+                    </Box>
+                );
+            })}
+            {!isLast && <Divider sx={{ my: 2 }} />}
+        </Box>
+    );
+}
+
 // boxSx/headingVariant: CrossCheck.js renders this straight at page level (a
 // wider block, own top-level heading), while CrossCheckStructure.js/
 // CrossCheckTeam.js nest it inside their own per-member section (which
 // already provides that outer width/margin and its own "Publications for
 // X" heading above it) -- everything else about the section is identical
 // between all three, only how it's introduced differs.
-export function CrossCheckSection({ title, description, rows, showCandidates, pids, onOpenAuthor, onSearchAuthor, onDecide, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2' }) {
+//
+// showCandidates ("To review") and confirmed ("Confirmed") are mutually
+// exclusive DBLP-row/HAL-row layouts (see DblpWithMatches above); a plain
+// flat list is used for everything else (Missing from HAL).
+//
+// hideHeading: the "Confirmed" section on each page wraps this component in
+// its own collapsible header (a clickable "Confirmed (N)" row with an
+// expand/collapse icon -- see CrossCheck.js), which already shows the same
+// title+count this component would otherwise render a second time.
+export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', hideHeading = false }) {
     return (
         <Box sx={boxSx}>
-            <Typography variant={headingVariant} sx={{ mb: description ? 0.5 : 1 }}>{title} ({rows.length})</Typography>
+            {!hideHeading && <Typography variant={headingVariant} sx={{ mb: description ? 0.5 : 1 }}>{title} ({rows.length})</Typography>}
             {description && (
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{description}</Typography>
             )}
             {rows.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">None</Typography>
             ) : showCandidates ? (
-                // "To review" gets its own layout, not the flat <ul> below:
-                // the DBLP publication and each HAL candidate it might be the
-                // same paper as are stacked vertically (not side by side),
-                // each labeled with a DBLP/HAL chip so it's never ambiguous
-                // which is which, with the confirm/reject actions to the
-                // left of the HAL row they apply to. A Divider separates one
-                // DBLP pub (+ its candidates) from the next.
                 rows.map(({ result }, i) => (
-                    <Box key={result.publication.dblp.key}>
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, opacity: 0.55 }}>
-                            {/* Empty spacer the same width as the confirm/reject
-                                IconButton pair below, so the DBLP row's chip
-                                (and, past it, PublicationRow's own .box/.rank/
-                                cite columns) line up with every HAL candidate
-                                row underneath instead of starting further left
-                                than they do. */}
-                            <Box sx={{ width: ACTION_WIDTH, flexShrink: 0 }} />
-                            <Chip label={`DBLP ${result.publication.dblp.year}`} size="small" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
-                            <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
-                                <li className={`entry ${result.publication.type}`}>
-                                    {/* No nr here -- see PublicationRow's own
-                                        comment: it would sit right next to a HAL
-                                        candidate row that never gets one either
-                                        (a number computed over just the handful
-                                        of publications in this section would be
-                                        as meaningless as the HAL side's would
-                                        be), so neither row shows one. */}
-                                    <PublicationRow item={result.publication} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
-                                </li>
-                            </ul>
-                        </Box>
-                        {result.matches.map(m => {
-                            const category = getHalCategory(m.halPub.type);
-                            return (
-                                <Box key={m.halPub.docid} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mt: 1 }}>
-                                    <Box sx={{ width: ACTION_WIDTH, flexShrink: 0, display: 'flex', mt: '2px' }}>
-                                        <Tooltip title="Confirm same paper">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'same')}
-                                            >
-                                                <CheckCircleOutlineIcon fontSize="small" color="success" />
-                                            </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Not the same paper">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'different')}
-                                            >
-                                                <HighlightOffIcon fontSize="small" color="error" />
-                                            </IconButton>
-                                        </Tooltip>
-                                    </Box>
-                                    <Chip label={`HAL ${m.halPub.year || '—'}`} size="small" color="info" sx={{ mt: '4px', flexShrink: 0, width: CHIP_WIDTH }} />
-                                    <ul className="publ-list" style={{ flex: 1, margin: 0 }}>
-                                        <li className={`entry ${category.cssClass}`}>
-                                            <HalPublicationRow
-                                                item={m.halPub}
-                                                category={category}
-                                                selfIds={NO_SELF_IDS}
-                                                onOpenAuthor={onOpenAuthor}
-                                                onSearchAuthor={onSearchAuthor}
-                                                sharedMaps={sharedMaps}
-                                                activeCustomProfileIds={activeCustomProfileIds}
-                                            />
-                                        </li>
-                                    </ul>
-                                </Box>
-                            );
-                        })}
-                        {i < rows.length - 1 && <Divider sx={{ my: 2 }} />}
-                    </Box>
+                    <DblpWithMatches
+                        key={result.publication.dblp.key}
+                        result={result}
+                        isLast={i === rows.length - 1}
+                        pids={pids}
+                        onOpenAuthor={onOpenAuthor}
+                        onSearchAuthor={onSearchAuthor}
+                        sharedMaps={sharedMaps}
+                        activeCustomProfileIds={activeCustomProfileIds}
+                        renderActions={m => <>
+                            <Tooltip title="Confirm same paper">
+                                <IconButton size="small" onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'same')}>
+                                    <CheckCircleOutlineIcon fontSize="small" color="success" />
+                                </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Not the same paper">
+                                <IconButton size="small" onClick={() => onDecide(result.publication.dblp.key, m.halPub.docid, 'different')}>
+                                    <HighlightOffIcon fontSize="small" color="error" />
+                                </IconButton>
+                            </Tooltip>
+                        </>}
+                    />
+                ))
+            ) : confirmed ? (
+                rows.map(({ result }, i) => (
+                    <DblpWithMatches
+                        key={result.publication.dblp.key}
+                        result={result}
+                        isLast={i === rows.length - 1}
+                        pids={pids}
+                        onOpenAuthor={onOpenAuthor}
+                        onSearchAuthor={onSearchAuthor}
+                        sharedMaps={sharedMaps}
+                        activeCustomProfileIds={activeCustomProfileIds}
+                        renderActions={m => (
+                            <Tooltip title="Undo, back to review">
+                                <IconButton size="small" onClick={() => onUndo(result.publication.dblp.key, m.halPub.docid)}>
+                                    <UndoIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                    />
                 ))
             ) : (
                 <ul className="publ-list">
