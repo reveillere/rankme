@@ -17,11 +17,9 @@ import { controllerTeamRecords } from './teamRecords.js';
 
 const router = express.Router();
 
-// Applied only to the expensive cross-check/team-resolution routes below --
-// generous enough (30 req/min per IP) not to bother normal browser use, just
-// to stop a runaway script or scraper from hammering the costliest
-// computations in the app. See rateLimit.js.
-const costlyRouteLimit = rateLimit({ windowMs: 60_000, max: 30 });
+// Only the documented, token-protected public API is rate-limited.
+// Browser-internal identity and cross-check routes do not consume this quota.
+const publicApiLimit = rateLimit({ windowMs: 60_000, max: 30 });
 
 // Liveness probe for Docker healthchecks: confirms the Express process is
 // up and responsive. Deliberately doesn't touch DBLP/HAL/mongo/redis, so it
@@ -48,30 +46,29 @@ router.get('/dblp/status', admin.controllerDblpStatus);
 // Browser-internal compatibility routes. They are deliberately omitted from
 // OpenAPI; the documented API uses the protected POST endpoints below.
 router.get('/dblp/author/*', dblp.controllerAuthor);
-// costlyRouteLimit here too, not just on the crosscheck/team-family routes
-// below: since recordPresentation.js started ranking/correcting every
+// Public records endpoints are limited too: since recordPresentation.js started ranking/correcting every
 // record on this path (see respondWithRecords), the POST branch is no
 // longer the cheap "just the display name" lookup the GET compat route
 // above still is.
-router.post('/dblp/author/*', requireApiToken, costlyRouteLimit, dblp.controllerAuthor);
+router.post('/dblp/author/*', requireApiToken, publicApiLimit, dblp.controllerAuthor);
 router.get('/dblp/author-info/*', dblp.controllerAuthorInfo);
 router.get('/dblp/search/*', dblp.controllerSearch);
 router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
 
-router.post('/hal/author/:idHal', requireApiToken, costlyRouteLimit, hal.controllerAuthor);
+router.post('/hal/author/:idHal', requireApiToken, publicApiLimit, hal.controllerAuthor);
 router.get('/hal/author-info/*', hal.controllerAuthorInfo);
 router.get('/hal/search/*', hal.controllerSearch);
 router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
 
-router.post('/hal/structure/:structId', requireApiToken, costlyRouteLimit, hal.controllerStructurePublications);
+router.post('/hal/structure/:structId', requireApiToken, publicApiLimit, hal.controllerStructurePublications);
 router.get('/hal/structure-search/*', hal.controllerSearchStructure);
 router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
-router.post('/records/team', requireApiToken, costlyRouteLimit, controllerTeamRecords);
+router.post('/records/team', requireApiToken, publicApiLimit, controllerTeamRecords);
 
 // Read-only automatic suggestions. Personal link CRUD lives in localStorage.
-router.get('/identity/structure/:structId', costlyRouteLimit, identityResolution.controllerResolveStructure);
-router.post('/identity/team', costlyRouteLimit, identityResolution.controllerResolveTeam);
+router.get('/identity/structure/:structId', identityResolution.controllerResolveStructure);
+router.post('/identity/team', identityResolution.controllerResolveTeam);
 router.get('/identity/suggest/*', identityResolution.controllerSuggestIdentity);
 router.get('/identity/suggest-dblp/:idHal', identityResolution.controllerSuggestDblpIdentity);
 
@@ -82,18 +79,18 @@ router.get('/rank/ccf/candidates', ccf.controllerCandidates);
 router.post('/match-overrides', matchOverrides.controllerRecord);
 router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);
 
-router.get('/crosscheck/author/*', costlyRouteLimit, crosscheck.controllerCrossCheck);
-router.post('/crosscheck/author', requireApiToken, costlyRouteLimit, crosscheck.controllerCrossCheck);
-router.get('/crosscheck/structure/:structId', costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
-router.post('/crosscheck/structure', requireApiToken, costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
+router.get('/crosscheck/author/*', crosscheck.controllerCrossCheck);
+router.post('/crosscheck/author', requireApiToken, publicApiLimit, crosscheck.controllerCrossCheck);
+router.get('/crosscheck/structure/:structId', crosscheckStructure.controllerCrossCheckStructure);
+router.post('/crosscheck/structure', requireApiToken, publicApiLimit, crosscheckStructure.controllerCrossCheckStructure);
 // POST, not GET .../*: a team's member list (dblp pids) comes from the
 // client's own localStorage (front/src/teamStore.js -- the server has no
 // notion of a team at all) and can be long, so it travels in the body
 // rather than a query string the way a single wildcard id does above.
-router.post('/crosscheck/team', requireApiToken, costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
+router.post('/crosscheck/team', requireApiToken, publicApiLimit, crosscheckTeam.controllerCrossCheckTeam);
 // Browser calculation with request-scoped links; no shared identity writes.
-router.post('/internal/crosscheck/structure', costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
-router.post('/internal/crosscheck/team', costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
+router.post('/internal/crosscheck/structure', crosscheckStructure.controllerCrossCheckStructure);
+router.post('/internal/crosscheck/team', crosscheckTeam.controllerCrossCheckTeam);
 
 // requireAdminToken added here: this triggers a full drop + rebuild of
 // every DBLP collection (see admin.js's processXML) -- CPU/memory/disk

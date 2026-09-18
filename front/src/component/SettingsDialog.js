@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -15,8 +16,14 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import TextField from '@mui/material/TextField';
-import Link from '@mui/material/Link';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Tooltip from '@mui/material/Tooltip';
 import EditIcon from '@mui/icons-material/Edit';
+import LeaderboardIcon from '@mui/icons-material/Leaderboard';
+import RuleIcon from '@mui/icons-material/Rule';
+import LinkIcon from '@mui/icons-material/Link';
+import { HelpButton } from './HelpButton';
 
 import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
 import { listProfiles, axesForReference, createProfile } from '../customRankings';
@@ -39,6 +46,10 @@ const CUSTOM_RADIO_VALUE = 'custom';
 // Select below treats as "open the inline creation form instead of
 // selecting a profile".
 const CREATE_SENTINEL = '__create__';
+
+function RankingOption({ children, description }) {
+  return <Tooltip title={description} arrow><span>{children}</span></Tooltip>;
+}
 
 // The Select + inline "create new profile" form shown under a "Custom"
 // radio once it's checked -- identical shape for both axes, parameterized
@@ -133,7 +144,8 @@ function CustomAxisSection({ source, onSourceChange, profiles, creationReference
   );
 }
 
-export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
+export function SettingsDialog({ open, onClose, onManageCustomRankings, onManageCorrections }) {
+  const [preferenceTab, setPreferenceTab] = useState(0);
   // Not part of FilterSettingsContext: that context is for chart/list
   // filtering (re-applied reactively as you change it), while this is a
   // one-off "trust the crowd or not" preference, read fresh by each
@@ -189,19 +201,6 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
   const handleConferenceCustomResolved = (value) => { setConferencePendingCustom(false); setConferenceSource(value); };
   const handleJournalCustomResolved = (value) => { setJournalPendingCustom(false); setJournalSource(value); };
 
-  // The edition/year actually being used for CORE/SJR right now -- fetched
-  // fresh each time this dialog opens rather than hardcoded, so it can
-  // never drift out of date the way a string someone has to remember to
-  // bump by hand would (see routes.js's /ranking-editions, which reads
-  // each portal's own live in-process state).
-  const [editions, setEditions] = useState(null);
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    fetch('/api/ranking-editions').then(r => r.json()).then(data => { if (!cancelled) setEditions(data); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [open]);
-
   // A custom ranking profile (customRankings.js) is offered here as a
   // single "Custom" radio per axis (not one per profile -- see
   // CustomAxisSection) -- but only on the axis(es) its own reference
@@ -226,74 +225,67 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Preferences</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Preferences</span>
+        <HelpButton title="Preferences help" sections={[
+          { title: 'Conference rankings', description: 'CORE ranks conferences and workshops on the A*, A, B and C scale. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
+          { title: 'Journal rankings', description: 'SJR / Scimago ranks journals from Q1 to Q4. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
+          { title: 'Custom rankings', description: 'Create a personal profile from CORE, SJR or CCF, then override selected venues or editions. Profiles are saved only in this browser.' },
+        ]} />
+      </DialogTitle>
       <DialogContent>
+        <Tabs value={preferenceTab} onChange={(_, value) => setPreferenceTab(value)} variant="fullWidth" sx={{ mb: 2 }}>
+          <Tab icon={<LeaderboardIcon fontSize="small" />} iconPosition="start" label="Rankings" />
+          <Tab icon={<RuleIcon fontSize="small" />} iconPosition="start" label="Match corrections" />
+          <Tab icon={<LinkIcon fontSize="small" />} iconPosition="start" label="Identity links" />
+        </Tabs>
+        {preferenceTab === 0 && <>
+        <Paper variant="outlined" sx={{ p: 2.25, mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}><LeaderboardIcon color="primary" /><Typography variant="h6">Rankings</Typography></Box>
         <Typography variant="subtitle1" gutterBottom>Conference ranking</Typography>
         <RadioGroup value={conferenceRadioValue} onChange={handleConferenceSourceChange}>
-          <FormControlLabel value="core" control={<Radio size="small" />} label={<Typography variant="body2">CORE (default)</Typography>} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
-            Conferences and workshops ranked by{' '}
-            <Link href="http://portal.core.edu.au/conf-ranks/" target="_blank" rel="noreferrer">CORE</Link> (A*, A, B, C) —
-            each publication matched against whichever edition was current the year it came out.
-            Latest available: CORE {editions?.core ?? '…'}.
-          </Typography>
-          <FormControlLabel value="ccf" control={<Radio size="small" />} label={<Typography variant="body2">CCF</Typography>} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
-            Ranked instead on the{' '}
-            <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-            A/B/C scale, matched against the edition current when each paper was published.
-            Latest available: {editions?.ccf ?? '…'}.
-          </Typography>
-          <FormControlLabel value={CUSTOM_RADIO_VALUE} control={<Radio size="small" />} label={<Typography variant="body2">Custom</Typography>} />
+          <FormControlLabel value="core" control={<Radio size="small" />} label={<RankingOption description="Conferences and workshops ranked by CORE on the A*, A, B and C scale. Each publication uses the edition current for its publication year."><Typography variant="body2">CORE (default)</Typography></RankingOption>} />
+          <FormControlLabel value="ccf" control={<Radio size="small" />} label={<RankingOption description="Conferences and workshops ranked by CCF on the A/B/C scale, using the edition current for the publication year."><Typography variant="body2">CCF</Typography></RankingOption>} />
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <FormControlLabel value={CUSTOM_RADIO_VALUE} control={<Radio size="small" />} label={<RankingOption description="Use a personal ranking profile, starting from CORE or CCF and overriding selected venues or editions."><Typography variant="body2">Custom</Typography></RankingOption>} />
           {conferenceRadioValue === CUSTOM_RADIO_VALUE && (
-            <CustomAxisSection
+            <Box sx={{ flex: 1 }}><CustomAxisSection
               source={conferenceSource}
               onSourceChange={handleConferenceCustomResolved}
               profiles={conferenceProfiles}
               creationReferences={['core', 'ccf']}
-            />
+            /></Box>
           )}
+          </Box>
         </RadioGroup>
         <Divider sx={{ mt: 2, mb: 2.5 }} />
 
         <Typography variant="subtitle1" gutterBottom>Journal ranking</Typography>
         <RadioGroup value={journalRadioValue} onChange={handleJournalSourceChange}>
-          <FormControlLabel value="sjr" control={<Radio size="small" />} label={<Typography variant="body2">SJR (default)</Typography>} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
-            Journals ranked by{' '}
-            <Link href="https://www.scimagojr.com/" target="_blank" rel="noreferrer">SJR / Scimago</Link> (Q1–Q4) —
-            each publication matched against whichever edition was current the year it came out.
-            Latest available: SJR {editions?.sjr ?? '…'}.
-          </Typography>
-          <FormControlLabel value="ccf" control={<Radio size="small" />} label={<Typography variant="body2">CCF</Typography>} />
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5, mb: 1.5 }}>
-            Ranked instead on the{' '}
-            <Link href="https://www.ccf.org.cn/Academic_Evaluation/By_category/" target="_blank" rel="noreferrer">CCF</Link>{' '}
-            A/B/C scale, matched against the edition current when each paper was published.
-            Latest available: {editions?.ccf ?? '…'}.
-          </Typography>
-          <FormControlLabel value={CUSTOM_RADIO_VALUE} control={<Radio size="small" />} label={<Typography variant="body2">Custom</Typography>} />
+          <FormControlLabel value="sjr" control={<Radio size="small" />} label={<RankingOption description="Journals ranked by SJR / Scimago from Q1 to Q4. Each publication uses the edition current for its publication year."><Typography variant="body2">SJR (default)</Typography></RankingOption>} />
+          <FormControlLabel value="ccf" control={<Radio size="small" />} label={<RankingOption description="Journals ranked by CCF on the A/B/C scale, using the edition current for the publication year."><Typography variant="body2">CCF</Typography></RankingOption>} />
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+            <FormControlLabel value={CUSTOM_RADIO_VALUE} control={<Radio size="small" />} label={<RankingOption description="Use a personal ranking profile, starting from SJR or CCF and overriding selected venues or editions."><Typography variant="body2">Custom</Typography></RankingOption>} />
           {journalRadioValue === CUSTOM_RADIO_VALUE && (
-            <CustomAxisSection
+            <Box sx={{ flex: 1 }}><CustomAxisSection
               source={journalSource}
               onSourceChange={handleJournalCustomResolved}
               profiles={journalProfiles}
               creationReferences={['sjr', 'ccf']}
-            />
+            /></Box>
           )}
+          </Box>
         </RadioGroup>
         <Divider sx={{ mt: 2, mb: 2.5 }} />
 
-        <Typography variant="subtitle1" gutterBottom>Custom rankings</Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-          Define your own ranking by starting from CORE, SJR, or CCF and overriding specific venues by hand.
-        </Typography>
         <Button size="small" startIcon={<EditIcon />} onClick={onManageCustomRankings}>
           Manage custom rankings…
         </Button>
-        <Divider sx={{ mt: 2, mb: 2.5 }} />
+        </Paper>
+        </>}
 
-        <Typography variant="subtitle1" gutterBottom>Match corrections</Typography>
+        {preferenceTab === 1 && <Paper variant="outlined" sx={{ p: 2.25, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}><RuleIcon color="primary" /><Typography variant="h6" sx={{ flex: 1 }}>Match corrections</Typography><Button size="small" startIcon={<EditIcon />} onClick={onManageCorrections}>Manage corrections…</Button></Box>
         <FormControlLabel
           control={<Checkbox checked={useCommunityOverrides} onChange={handleCommunityOverridesChange} size="small" />}
           label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
@@ -302,15 +294,17 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
           When a match gets corrected the same way by several different people, everyone sees that correction
           by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
         </Typography>
-        <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle1" gutterBottom>Personal identity links and cross-check decisions</Typography>
+        </Paper>}
+        {preferenceTab === 2 && <Paper variant="outlined" sx={{ p: 2.25 }}>
+        <Typography variant="h6" sx={{ mb: 1.25 }}>Personal identity links and cross-check decisions</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Manage all choices saved in this browser. To share only one author or structure, use the controls on its page.
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <IdentityLinksButton all />
-          <CrosscheckDecisionsButton />
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25 }}>
+          <IdentityLinksButton all variant="text" startIcon={<EditIcon />} />
+          <CrosscheckDecisionsButton buttonVariant="text" startIcon={<EditIcon />} />
         </Box>
+        </Paper>}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

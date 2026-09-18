@@ -172,6 +172,10 @@ export function deleteProfile(profileId) {
   write(profiles);
 }
 
+export function deleteAllProfiles() {
+  write({});
+}
+
 // A profile is "its reference ranking, with specific venues/editions
 // overridden" -- not a blank slate starting at 'Unranked' everywhere. Every
 // fallback here (no profile at all, no entry for this venue, no value for

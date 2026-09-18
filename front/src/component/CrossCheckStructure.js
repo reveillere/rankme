@@ -52,7 +52,6 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
-    const [refreshToken, setRefreshToken] = useState(0);
     // A cross-check starts with the same identity-resolution dialog available
     // from the structure page. It can be revisited from the header icon.
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
@@ -72,7 +71,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [structId, conferenceSource, journalSource, refreshToken, identityVersion]);
+    }, [structId, conferenceSource, journalSource, identityVersion]);
 
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
@@ -88,7 +87,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     // getStructureCrossCheckReport has resolved it server-side, there is no
     // client-side list to read a count from before that first response lands.
     if (report === null) return <>
-        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} structId={structId} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} structId={structId} />
         <LoadingSpinner message="Cross-checking structure members against HAL…" />
     </>;
 
@@ -137,7 +136,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
 
     return (
         <div className='App' style={{ padding: '0 40px' }}>
-            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${title}`} scope="Structure" members={allMembers} unresolvedCount={report.unresolvedMembers.length} targetLabel="DBLP" panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ structId }} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${title}`} scope="Structure" members={allMembers} unresolvedCount={report.unresolvedMembers.length} targetLabel="DBLP" panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ structId }} />
 
             {(importedAtLabel || report.halCacheNote) && (
                 <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '0 auto 20px' }}>

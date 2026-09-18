@@ -296,7 +296,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
             ))}
         </>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<><IdentityLinksIconButton idHals={[id]} /><ReportButton
+        exportButton={<><IdentityLinksIconButton idHals={[id]} resolveName={() => authorName || rankedPublications.flatMap(pub => pub.authors).find(a => a.idHal === id)?.name} /><ReportButton
           onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.md`, sortMode })}
           onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.json`, sortMode })}
           onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-${id}.csv`, sortMode })}

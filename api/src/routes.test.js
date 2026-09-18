@@ -99,6 +99,16 @@ test('every requireApiToken-protected route also has a rate limiter in its middl
     }
 });
 
+test('browser-internal routes never consume the public API rate limit', () => {
+    for (const route of expressRoutes()) {
+        if (route.middlewareNames.includes('requireApiToken')) continue;
+        assert.equal(
+            route.middlewareNames.includes('rateLimitMiddleware'), false,
+            `${route.method} ${route.path} is not a public API route but has a rate limiter`
+        );
+    }
+});
+
 test('browser choices have no global write or legacy read routes', () => {
     const routes = expressRoutes();
     for (const path of ['/identity/link', '/identity/links', '/identity/links/import', '/crosscheck/override']) {
@@ -106,5 +116,5 @@ test('browser choices have no global write or legacy read routes', () => {
     }
     const structure = routes.find(route => route.path === '/internal/crosscheck/structure');
     assert.ok(structure);
-    assert.ok(structure.middlewareNames.includes('rateLimitMiddleware'));
+    assert.equal(structure.middlewareNames.includes('rateLimitMiddleware'), false);
 });

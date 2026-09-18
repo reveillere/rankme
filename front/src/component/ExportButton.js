@@ -21,7 +21,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 // needs. Each callback is optional -- only the formats a caller actually
 // supports get a menu entry, same as ImportButton's own
 // onImportJson/onImportCsv/onImportTxt.
-export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false, updateUrl = true }) {
+export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false, updateUrl = true, title = 'Export' }) {
   const [anchorEl, setAnchorEl] = useState(null);
 
   const handleSelect = (onExport, format) => {
@@ -36,7 +36,7 @@ export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disa
 
   return (
     <>
-      <Tooltip title="Export">
+      <Tooltip title={title}>
         {/* Span wrapper so the Tooltip still works when `disabled` is true --
             CrossCheckTeam.js/CrossCheckStructure.js pass disabled while a
             report has no members yet, and MUI's Tooltip needs a
@@ -46,7 +46,7 @@ export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disa
             color="primary"
             size="small"
             onClick={(e) => setAnchorEl(e.currentTarget)}
-            aria-label="export"
+            aria-label={title.toLowerCase()}
             disabled={disabled}
             sx={{ border: '1px solid', borderColor: 'primary.main', borderRadius: '20px', padding: '6px' }}
           >

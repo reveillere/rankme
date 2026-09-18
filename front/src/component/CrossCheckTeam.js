@@ -66,7 +66,6 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
-    const [refreshToken, setRefreshToken] = useState(0);
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
     const { conferenceSource, journalSource } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
@@ -86,7 +85,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [team.id, team.source, pids, conferenceSource, journalSource, refreshToken, identityVersion]);
+    }, [team.id, team.source, pids, conferenceSource, journalSource, identityVersion]);
 
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
@@ -99,7 +98,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     const targetLabel = team.source === 'dblp' ? 'HAL' : 'DBLP';
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this team against {targetLabel}. Please try again later.</div>;
     if (report === null) return <>
-        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} teamSource={team.source} teamMembers={identityMembers} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+        <IdentityLinksPanel open={identityPanelOpen} onClose={() => setIdentityPanelOpen(false)} onViewResults={() => setIdentityPanelOpen(false)} teamSource={team.source} teamMembers={identityMembers} />
         <LoadingSpinner message={`Cross-checking ${team.members.length} members against ${targetLabel}…`} />
     </>;
 
@@ -140,7 +139,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
 
     return (
         <div className='App' style={{ padding: '0 40px' }}>
-            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${team.name}`} scope="Team" members={team.members.map(member => ({ id: member.id, label: member.label, idKind: team.source === 'hal' ? 'idHal' : 'pid' }))} unresolvedCount={report.unresolvedMembers.length} targetLabel={targetLabel} panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ teamSource: team.source, teamMembers: identityMembers }} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+            <CrossCheckIdentityHeader title={`DBLP → HAL cross-check for ${team.name}`} scope="Team" members={team.members.map(member => ({ id: member.id, label: member.label, idKind: team.source === 'hal' ? 'idHal' : 'pid' }))} unresolvedCount={report.unresolvedMembers.length} targetLabel={targetLabel} panelOpen={identityPanelOpen} setPanelOpen={setIdentityPanelOpen} panelProps={{ teamSource: team.source, teamMembers: identityMembers }} />
 
             {(importedAtLabel || report.halCacheNote) && (
                 <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '0 auto 20px' }}>

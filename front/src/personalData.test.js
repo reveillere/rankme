@@ -1,13 +1,16 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { applyLocalDecisions, DECISIONS_KEY, importLocalDecisions, importLocalLinks, LINKS_KEY, listCrosscheckDecisions, listIdentityLinks, personalDataFile, removeCrosscheckDecision, removeIdentityLink, reportPublicationKeys } from './personalData';
-import { fetchIdentitySuggestion, fetchStructureIdentityResolution, postIdentityLink, deleteIdentityLink } from './identityResolution';
-import { fetchStructureCrossCheck, fetchTeamCrossCheck, postCrossCheckOverride } from './crosscheck';
+let fetchIdentitySuggestion, fetchStructureIdentityResolution, postIdentityLink, deleteIdentityLink;
+let fetchStructureCrossCheck, fetchTeamCrossCheck, postCrossCheckOverride;
 
 function storage() {
   const data = new Map();
   return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value), clear: () => data.clear() };
 }
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ fetchIdentitySuggestion, fetchStructureIdentityResolution, postIdentityLink, deleteIdentityLink } = await import('./identityResolution'));
+  ({ fetchStructureCrossCheck, fetchTeamCrossCheck, postCrossCheckOverride } = await import('./crosscheck'));
   vi.stubGlobal('localStorage', storage());
   vi.stubGlobal('window', new EventTarget());
   vi.stubGlobal('fetch', vi.fn());

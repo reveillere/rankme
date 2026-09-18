@@ -336,7 +336,7 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
             ))}
         </>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<><IdentityLinksIconButton pids={[pid]} /><ReportButton
+        exportButton={<><IdentityLinksIconButton pids={[pid]} resolveName={() => trimLastDigits(author.name)} /><ReportButton
           onExportMarkdown={() => exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.md`, sortMode })}
           onExportJson={() => exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.json`, sortMode })}
           onExportCsv={() => exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-${pid.replace(/\//g, '-')}.csv`, sortMode })}

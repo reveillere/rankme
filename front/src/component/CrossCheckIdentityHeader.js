@@ -9,7 +9,7 @@ import { HelpButton } from './HelpButton';
 
 // Shared chrome for structure and team cross-checks. Their only difference
 // is where the members came from and which identity direction is needed.
-export function CrossCheckIdentityHeader({ title, scope, members, unresolvedCount, targetLabel, panelProps, panelOpen, setPanelOpen, onLinksChanged }) {
+export function CrossCheckIdentityHeader({ title, scope, members, unresolvedCount, targetLabel, panelProps, panelOpen, setPanelOpen }) {
   const [membersOpen, setMembersOpen] = useState(false);
   return <>
     <div style={{ textAlign: 'center', marginTop: '40px', marginBottom: '20px' }}>
@@ -17,7 +17,7 @@ export function CrossCheckIdentityHeader({ title, scope, members, unresolvedCoun
       <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94', marginTop: '-0.6em', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '2px' }}>
         {scope} of {members.length} members
         <Tooltip title="View members"><IconButton size="small" onClick={() => setMembersOpen(true)}><VisibilityIcon fontSize="inherit" /></IconButton></Tooltip>
-        <IdentityLinksIconButton open={panelOpen} onOpen={() => setPanelOpen(true)} onClose={() => setPanelOpen(false)} onViewResults={() => setPanelOpen(false)} onLinksChanged={onLinksChanged} {...panelProps} />
+        <IdentityLinksIconButton open={panelOpen} onOpen={() => setPanelOpen(true)} onClose={() => setPanelOpen(false)} onViewResults={() => setPanelOpen(false)} {...panelProps} />
       </div>
     </div>
     <MemberListDialog open={membersOpen} onClose={() => setMembersOpen(false)} title={`Members (${members.length})`} members={members} />

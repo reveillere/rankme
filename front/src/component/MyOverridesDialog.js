@@ -100,7 +100,13 @@ export function MyOverridesDialog({ open, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>My match corrections</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <span>My match corrections</span>
+        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+          <ExportButton title="Export corrections" onExportJson={handleExportJson} onExportCsv={handleExport} disabled={overrides.length === 0} updateUrl={false} />
+          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import corrections" />
+        </Box>
+      </DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Corrections you&apos;ve made to CORE/SJR/CCF matches, kept in this browser only.
@@ -164,20 +170,11 @@ export function MyOverridesDialog({ open, onClose }) {
           </List>
         )}
       </DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {/* updateUrl=false: unlike the report pages ExportButton also
-              serves, this dialog has no routable URL of its own to reflect
-              the chosen format into. */}
-          <ExportButton onExportJson={handleExportJson} onExportCsv={handleExport} disabled={overrides.length === 0} updateUrl={false} />
-          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import corrections" />
-          <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
-          <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
-        </Box>
-        <Box>
-          {overrides.length > 0 && <Button color="error" onClick={handleClearAll}>Reset all</Button>}
-          <Button onClick={onClose}>Close</Button>
-        </Box>
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
+      <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
+      <DialogActions sx={{ justifyContent: 'space-between' }}>
+        <Button color="error" disabled={overrides.length === 0} onClick={handleClearAll}>Reset all</Button>
+        <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>
   );

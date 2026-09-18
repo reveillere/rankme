@@ -63,7 +63,12 @@ export function importLocalLinks(input, scope) {
 }
 
 export function removeIdentityLink(idHal) {
-  write(LINKS_KEY, read(LINKS_KEY).filter(link => link.idHal !== idHal));
+  removeIdentityLinks({ idHals: [idHal] });
+}
+
+export function removeIdentityLinks(scope) {
+  const selected = new Set(listIdentityLinks(scope).map(link => link.idHal));
+  write(LINKS_KEY, read(LINKS_KEY).filter(link => !selected.has(link.idHal)));
 }
 
 export function listCrosscheckDecisions(dblpKeys) {
@@ -94,6 +99,15 @@ export function importLocalDecisions(input, dblpKeys) {
 
 export function removeCrosscheckDecision(entry) {
   write(DECISIONS_KEY, read(DECISIONS_KEY).filter(value => decisionKey(value) !== decisionKey(entry)));
+}
+
+export function removeCrosscheckDecisions(dblpKeys) {
+  if (dblpKeys === undefined) {
+    write(DECISIONS_KEY, []);
+    return;
+  }
+  const selected = new Set(dblpKeys);
+  write(DECISIONS_KEY, read(DECISIONS_KEY).filter(value => !selected.has(value.dblpKey)));
 }
 
 export function applyLocalDecisions(report, decisions = listCrosscheckDecisions()) {

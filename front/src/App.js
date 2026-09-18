@@ -5,8 +5,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { AppBar, Toolbar, Typography, Button, IconButton, Box, Tabs, Tab, Divider } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import SettingsIcon from '@mui/icons-material/Settings';
-import RuleIcon from '@mui/icons-material/Rule';
-import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 
 // Custom Components
 import AuthorSearch from './component/Search';
@@ -352,12 +350,6 @@ function App() {
           <Box display="flex" alignItems="center">
             <RankingSourceIndicator onOpenSettings={() => setSettingsDialogOpen(true)} />
             <CategoriesFilterButton />
-            <IconButton color="inherit" onClick={() => setOverridesDialogOpen(true)} aria-label="my match corrections">
-              <RuleIcon />
-            </IconButton>
-            <IconButton color="inherit" onClick={() => setCustomRankingsDialogOpen(true)} aria-label="my custom rankings">
-              <LeaderboardIcon />
-            </IconButton>
             <IconButton color="inherit" onClick={() => setSettingsDialogOpen(true)} aria-label="settings">
               <SettingsIcon />
             </IconButton>
@@ -366,7 +358,7 @@ function App() {
       </AppBar>
 
       <About open={aboutDialogOpen} onClose={handleAboutClose} />
-      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} onManageCustomRankings={() => setCustomRankingsDialogOpen(true)} />
+      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} onManageCustomRankings={() => setCustomRankingsDialogOpen(true)} onManageCorrections={() => setOverridesDialogOpen(true)} />
       <MyOverridesDialog open={overridesDialogOpen} onClose={() => setOverridesDialogOpen(false)} />
       <MyCustomRankingsDialog open={customRankingsDialogOpen} onClose={() => setCustomRankingsDialogOpen(false)} />
 

@@ -1,7 +1,32 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { resolveProfile, resolveEffectiveCustomValue, resolveDisplayValue, parseProfilesJSON, entryKeyFor } from './customRankings';
 
 const rank = { source: 'ICORE2026', queryText: 'International Conference on Testing', matchedId: 'core-id-1', value: 'B' };
+
+it('deletes all custom profiles in one update and keeps other personal data', async () => {
+  const saved = new Map([
+    ['rankme:customRankings', JSON.stringify({ p1: profileWith({ venue: { byEdition: { ALL: 'A' } } }), p2: { ...profileWith({}), id: 'p2' } })],
+    ['rankme:identityLinks', 'keep'],
+  ]);
+  const changed = vi.fn();
+  const events = new EventTarget();
+  events.addEventListener('rankme:customrankingchange', changed);
+  vi.stubGlobal('window', events);
+  vi.stubGlobal('localStorage', { getItem: key => saved.get(key) ?? null, setItem: (key, value) => saved.set(key, value) });
+  try {
+    vi.resetModules();
+    const { listProfiles, getProfile, deleteAllProfiles } = await import('./customRankings');
+    expect(listProfiles()).toHaveLength(2);
+    deleteAllProfiles();
+    expect(listProfiles()).toEqual([]);
+    expect(getProfile('p1')).toBeNull();
+    expect(saved.get('rankme:customRankings')).toBe('{}');
+    expect(saved.get('rankme:identityLinks')).toBe('keep');
+    expect(changed).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 function profileWith(entries) {
   return { id: 'p1', name: 'My ranking', reference: 'core', entries };

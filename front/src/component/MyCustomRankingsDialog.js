@@ -30,7 +30,7 @@ import { ExportButton } from './ExportButton';
 import { ImportButton } from './ImportButton';
 
 import {
-  listProfiles, createProfile, renameProfile, deleteProfile, deleteEntryEdition,
+  listProfiles, createProfile, renameProfile, deleteProfile, deleteAllProfiles, deleteEntryEdition,
   profileToCSV, allProfilesToCSV, importProfilesFromCSV, peekProfileNameFromCSV, axesForReference,
   allProfilesToJSON, importProfilesFromJSON,
 } from '../customRankings';
@@ -177,6 +177,7 @@ function ProfileRow({ profile, isFirst, activeAxes, expanded, onToggleExpand, on
 export function MyCustomRankingsDialog({ open, onClose }) {
   const { conferenceSource, journalSource } = useFilterSettings();
   const [profiles, setProfiles] = useState([]);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [newName, setNewName] = useState('');
   // 'core' default: matches CONFERENCE_SOURCES/JOURNAL_SOURCES' own default
@@ -199,6 +200,7 @@ export function MyCustomRankingsDialog({ open, onClose }) {
   const refresh = () => setProfiles(listProfiles());
 
   useEffect(() => {
+    setDeleteAllOpen(false);
     if (open) { refresh(); setImportMessage(null); }
   }, [open]);
 
@@ -222,6 +224,14 @@ export function MyCustomRankingsDialog({ open, onClose }) {
     if (!newName.trim()) return;
     createProfile(newName, newReference);
     setNewName('');
+    refresh();
+  };
+
+  const handleDeleteAll = () => {
+    deleteAllProfiles();
+    setDeleteAllOpen(false);
+    setExpandedIds(new Set());
+    setImportMessage(null);
     refresh();
   };
 
@@ -314,7 +324,13 @@ export function MyCustomRankingsDialog({ open, onClose }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>My custom rankings</DialogTitle>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        <span>My custom rankings</span>
+        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+          <ExportButton title="Export custom rankings" onExportJson={handleExportAllJson} onExportCsv={handleExportAll} disabled={profiles.length === 0} updateUrl={false} />
+          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import rankings" />
+        </Box>
+      </DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           Your own named ranking profiles (letters you&apos;ve assigned by hand), kept in this browser only. Select
@@ -412,18 +428,22 @@ export function MyCustomRankingsDialog({ open, onClose }) {
           </List>
         )}
       </DialogContent>
-      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {/* updateUrl=false: unlike the report pages ExportButton also
-              serves, this dialog has no routable URL of its own to reflect
-              the chosen format into. */}
-          <ExportButton onExportJson={handleExportAllJson} onExportCsv={handleExportAll} disabled={profiles.length === 0} updateUrl={false} />
-          <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import rankings" />
-          <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
-          <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
-        </Box>
+      <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
+      <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
+      <DialogActions sx={{ justifyContent: 'space-between' }}>
+        <Button color="error" disabled={profiles.length === 0} onClick={() => setDeleteAllOpen(true)}>Delete all</Button>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
+      <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete all custom rankings?</DialogTitle>
+        <DialogContent>
+          <Typography>This will delete all {profiles.length} custom ranking {profiles.length === 1 ? 'profile' : 'profiles'} and their entries from this browser. Any active custom ranking will revert to the default ranking.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllOpen(false)}>Cancel</Button>
+          <Button color="error" disabled={profiles.length === 0} onClick={handleDeleteAll}>Delete all</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

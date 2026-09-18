@@ -117,6 +117,11 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
         });
     };
 
+    const cancelSearch = () => {
+        requestIdRef.current++;
+        clearTimeout(debounceRef.current);
+    };
+
     // Reset on every open -- this dialog stays mounted (rendered
     // unconditionally so Dialog's own exit transition plays), so a stale
     // query/result set from a previous open must not flash before the user
@@ -140,8 +145,9 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
             setQuery('');
             setManualId(suggestedId || '');
         }
+        return cancelSearch;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [open, suggestion]);
+    }, [open, suggestion, direction]);
 
     const handleInputChange = (value) => {
         setQuery(value);
@@ -190,7 +196,7 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
                             {results.map((elt, i) => (
                                 <div key={i}>
                                     <ListItem disablePadding>
-                                        <ListItemButton onClick={() => onConfirm(dir.resultId(elt))}>
+                                        <ListItemButton onClick={() => onConfirm(dir.resultId(elt), { name: elt.author })}>
                                             <PersonListItemText name={elt.author} affiliation={elt.affiliation} idLabel={dir.idLabel} idValue={dir.resultId(elt)} />
                                         </ListItemButton>
                                     </ListItem>

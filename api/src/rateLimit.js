@@ -1,9 +1,7 @@
 // A minimal fixed-window rate limiter, in the same spirit as inFlight.js:
 // an in-memory Map keyed by caller, no external dependency. Deliberately
-// per-IP rather than per-token: the crosscheck/team-family routes have both
-// a token-protected path and an unauthenticated internal twin (see
-// routes.js's /crosscheck/team vs /internal/crosscheck/team), so a token
-// isn't a reliable identity to key on here.
+// per-IP for the token-protected public API. Browser-internal routes do
+// not use this middleware or consume the public API quota.
 //
 // Single-process, in-memory state -- fine for the current one-instance
 // deployment (see index.js/docker-compose.prod.yml); would need a shared

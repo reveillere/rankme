@@ -62,7 +62,6 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
-    const [refreshToken, setRefreshToken] = useState(0);
     // Collapsed by default -- a decided-confirmed row is the exception, not
     // the common case, and most reports have none at all.
     const [confirmedOpen, setConfirmedOpen] = useState(false);
@@ -86,7 +85,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [pid, effectiveHalId, conferenceSource, journalSource, refreshToken, identityVersion]);
+    }, [pid, effectiveHalId, conferenceSource, journalSource, identityVersion]);
 
     // dblpKey/halDocid identify the exact pair a maintainer just clicked
     // confirm/reject on. Choices are stored locally; errors are
@@ -165,7 +164,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             </Alert>
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <IdentityLinksIconButton pids={[pid]} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+                <IdentityLinksIconButton pids={[pid]} />
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
                 <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
             </Box>
