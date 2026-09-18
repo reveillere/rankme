@@ -96,6 +96,12 @@ function usePersistedSelection(storageKey, data) {
     localStorage.setItem(storageKey, JSON.stringify(selected));
   }, [storageKey, selected]);
 
+  useEffect(() => {
+    const reload = () => setSelected(loadOrDefault(storageKey, data));
+    window.addEventListener('rankme:preferenceschange', reload);
+    return () => window.removeEventListener('rankme:preferenceschange', reload);
+  }, [storageKey, data]);
+
   return [selected, setSelected];
 }
 
@@ -124,6 +130,15 @@ export function FilterSettingsProvider({ children }) {
     persistJournalSource(value);
     setJournalSourceState(value);
   };
+
+  useEffect(() => {
+    const reload = () => {
+      setConferenceSourceState(getConferenceSource());
+      setJournalSourceState(getJournalSource());
+    };
+    window.addEventListener('rankme:preferenceschange', reload);
+    return () => window.removeEventListener('rankme:preferenceschange', reload);
+  }, []);
 
   // Decision 5: a custom profile currently selected as an axis's source can
   // be deleted (from MyCustomRankingsDialog.js, or another tab/window)

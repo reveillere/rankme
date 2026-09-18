@@ -29,6 +29,7 @@ try {
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY) cachedOverrides = null;
   });
+  window.addEventListener('rankme:preferenceschange', () => { cachedOverrides = null; });
 } catch { /* non-browser env */ }
 
 function write(overrides) {

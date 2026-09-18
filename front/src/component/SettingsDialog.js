@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Dialog from '@mui/material/Dialog';
@@ -24,6 +24,9 @@ import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import RuleIcon from '@mui/icons-material/Rule';
 import LinkIcon from '@mui/icons-material/Link';
 import { HelpButton } from './HelpButton';
+import { ExportButton } from './ExportButton';
+import { ImportButton } from './ImportButton';
+import { downloadPreferences, importPreferences } from '../preferences';
 
 import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
 import { listProfiles, axesForReference, createProfile } from '../customRankings';
@@ -144,8 +147,30 @@ function CustomAxisSection({ source, onSourceChange, profiles, creationReference
   );
 }
 
-export function SettingsDialog({ open, onClose, onManageCustomRankings, onManageCorrections }) {
+export function SettingsDialog({ open, onClose, onManageCustomRankings, onManageCorrections, initialTab = 0 }) {
   const [preferenceTab, setPreferenceTab] = useState(0);
+  const preferencesInputRef = useRef(null);
+  const [preferencesMessage, setPreferencesMessage] = useState(null);
+  useEffect(() => {
+    if (open) setPreferenceTab(initialTab);
+  }, [open, initialTab]);
+
+  const handleImportPreferences = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const count = importPreferences(JSON.parse(reader.result));
+        setPreferencesMessage({ severity: 'success', text: `Imported ${count} preference entries.` });
+      } catch (error) {
+        setPreferencesMessage({ severity: 'error', text: error.message || 'Could not import preferences.' });
+      }
+    };
+    reader.onerror = () => setPreferencesMessage({ severity: 'error', text: 'Could not read this file.' });
+    reader.readAsText(file);
+  };
   // Not part of FilterSettingsContext: that context is for chart/list
   // filtering (re-applied reactively as you change it), while this is a
   // one-off "trust the crowd or not" preference, read fresh by each
@@ -153,6 +178,11 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
   // RankBadge.js) -- plain localStorage is enough, matching e.g. About.js's
   // "don't show this again" checkbox.
   const [useCommunityOverrides, setUseCommunityOverridesState] = useState(getUseCommunityOverrides);
+  useEffect(() => {
+    const reload = () => setUseCommunityOverridesState(getUseCommunityOverrides());
+    window.addEventListener('rankme:preferenceschange', reload);
+    return () => window.removeEventListener('rankme:preferenceschange', reload);
+  }, []);
   const handleCommunityOverridesChange = (e) => {
     setUseCommunityOverridesState(e.target.checked);
     setUseCommunityOverrides(e.target.checked);
@@ -226,14 +256,22 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span>Preferences</span>
-        <HelpButton title="Preferences help" sections={[
-          { title: 'Conference rankings', description: 'CORE ranks conferences and workshops on the A*, A, B and C scale. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
-          { title: 'Journal rankings', description: 'SJR / Scimago ranks journals from Q1 to Q4. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
-          { title: 'Custom rankings', description: 'Create a personal profile from CORE, SJR or CCF, then override selected venues or editions. Profiles are saved only in this browser.' },
-        ]} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+          <span>Preferences</span>
+          <HelpButton title="Preferences help" sections={[
+            { title: 'Conference rankings', description: 'CORE ranks conferences and workshops on the A*, A, B and C scale. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
+            { title: 'Journal rankings', description: 'SJR / Scimago ranks journals from Q1 to Q4. CCF provides an alternative A/B/C classification. Each publication uses the edition current for its publication year.' },
+            { title: 'Custom rankings', description: 'Create a personal profile from CORE, SJR or CCF, then override selected venues or editions. Profiles are saved only in this browser.' },
+          ]} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <ExportButton title="Export preferences" updateUrl={false} onExportJson={downloadPreferences} />
+          <ImportButton title="Import preferences" onImportJson={() => preferencesInputRef.current?.click()} />
+          <input ref={preferencesInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportPreferences} />
+        </Box>
       </DialogTitle>
       <DialogContent>
+        {preferencesMessage && <Typography variant="body2" color={preferencesMessage.severity === 'error' ? 'error' : 'success.main'} sx={{ mb: 1 }}>{preferencesMessage.text}</Typography>}
         <Tabs value={preferenceTab} onChange={(_, value) => setPreferenceTab(value)} variant="fullWidth" sx={{ mb: 2 }}>
           <Tab icon={<LeaderboardIcon fontSize="small" />} iconPosition="start" label="Rankings" />
           <Tab icon={<RuleIcon fontSize="small" />} iconPosition="start" label="Match corrections" />

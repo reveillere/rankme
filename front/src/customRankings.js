@@ -28,6 +28,7 @@ try {
   window.addEventListener('storage', (e) => {
     if (e.key === STORAGE_KEY) cachedProfiles = null;
   });
+  window.addEventListener('rankme:preferenceschange', () => { cachedProfiles = null; });
 } catch { /* non-browser env */ }
 
 function write(profiles) {

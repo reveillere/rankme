@@ -215,6 +215,7 @@ function App() {
   const location = useLocation();
   const [aboutDialogOpen, setAboutDialogOpen] = useState(() => localStorage.getItem(HIDE_ON_START_KEY) !== 'true');
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState(0);
   const [overridesDialogOpen, setOverridesDialogOpen] = useState(false);
   const [customRankingsDialogOpen, setCustomRankingsDialogOpen] = useState(false);
   const [tabs, setTabs] = useState(() => {
@@ -348,9 +349,9 @@ function App() {
             />
           </Box>
           <Box display="flex" alignItems="center">
-            <RankingSourceIndicator onOpenSettings={() => setSettingsDialogOpen(true)} />
+            <RankingSourceIndicator onOpenSettings={() => { setSettingsInitialTab(0); setSettingsDialogOpen(true); }} />
             <CategoriesFilterButton />
-            <IconButton color="inherit" onClick={() => setSettingsDialogOpen(true)} aria-label="settings">
+            <IconButton color="inherit" onClick={() => { setSettingsInitialTab(0); setSettingsDialogOpen(true); }} aria-label="settings">
               <SettingsIcon />
             </IconButton>
           </Box>
@@ -358,7 +359,7 @@ function App() {
       </AppBar>
 
       <About open={aboutDialogOpen} onClose={handleAboutClose} />
-      <SettingsDialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} onManageCustomRankings={() => setCustomRankingsDialogOpen(true)} onManageCorrections={() => setOverridesDialogOpen(true)} />
+      <SettingsDialog open={settingsDialogOpen} initialTab={settingsInitialTab} onClose={() => setSettingsDialogOpen(false)} onManageCustomRankings={() => setCustomRankingsDialogOpen(true)} onManageCorrections={() => setOverridesDialogOpen(true)} />
       <MyOverridesDialog open={overridesDialogOpen} onClose={() => setOverridesDialogOpen(false)} />
       <MyCustomRankingsDialog open={customRankingsDialogOpen} onClose={() => setCustomRankingsDialogOpen(false)} />
 
