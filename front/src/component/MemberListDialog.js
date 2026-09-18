@@ -72,7 +72,7 @@ export function MemberListDialog({ open, onClose, title, members }) {
 
 export function MemberList({ members, onDelete }) {
   return <List dense disablePadding>{members.map((m, i) => (
-    <ListItem key={`${m.id}-${i}`} disableGutters sx={{ px: 2, py: 1 }} secondaryAction={onDelete && <IconButton size="small" onClick={() => onDelete(m.id)} aria-label="remove member"><DeleteIcon fontSize="small" /></IconButton>}>
+    <ListItem key={`${m.id}-${i}`} disableGutters sx={{ px: 2, py: 1 }} secondaryAction={onDelete && <IconButton color="error" size="small" onClick={() => onDelete(m.id)} aria-label="remove member"><DeleteIcon color="error" fontSize="small" /></IconButton>}>
       <Typography variant="body2">{m.label && m.label !== m.id && <strong>{m.label}</strong>}{m.label && m.label !== m.id && ' '}<span style={{ fontStyle: 'italic' }}>({m.idKind}: {m.id})</span></Typography>
     </ListItem>
   ))}</List>;

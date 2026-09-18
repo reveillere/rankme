@@ -28,7 +28,7 @@ export function IdentityLinkRow({ member, source, onSelect, onConfirm, onDelete 
     <Box sx={{ display: 'flex', gap: 1 }}>
       {member.resolved
         ? counterpart.source === 'local'
-          ? <Tooltip title="Delete personal link"><IconButton size="small" onClick={() => onDelete(member)} aria-label="Delete personal link"><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+          ? <Tooltip title="Delete personal link"><IconButton color="error" size="small" onClick={() => onDelete(member)} aria-label="Delete personal link"><DeleteIcon color="error" fontSize="small" /></IconButton></Tooltip>
           : <Button size="small" onClick={() => onConfirm(member, counterpart)}>Save locally</Button>
         : <>
           {counterpart && <Button size="small" variant="contained" onClick={() => onConfirm(member, counterpart)} sx={{ textTransform: 'none' }}>Confirm</Button>}

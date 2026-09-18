@@ -33,6 +33,10 @@ export function deleteTeam(id) {
   write(read().filter(t => t.id !== id));
 }
 
+export function deleteAllTeams() {
+  write([]);
+}
+
 export function updateTeam(id, updates) {
   write(read().map(t => (t.id === id ? { ...t, ...updates } : t)));
 }

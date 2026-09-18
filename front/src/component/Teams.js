@@ -17,10 +17,10 @@ import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import ToggleButton from '@mui/material/ToggleButton';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Chip from '@mui/material/Chip';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -30,7 +30,7 @@ import AccountCircle from '@mui/icons-material/AccountCircle';
 
 import { searchAuthor as searchAuthorDblp } from '../dblp';
 import { searchAuthor as searchAuthorHal } from '../hal';
-import { getTeams, createTeam, updateTeam, deleteTeam } from '../teamStore';
+import { getTeams, createTeam, updateTeam, deleteTeam, deleteAllTeams } from '../teamStore';
 import { PersonListItemText } from './PersonListItemText';
 import { MemberList } from './MemberListDialog';
 import { ExportButton } from './ExportButton';
@@ -76,6 +76,7 @@ const SOURCES = {
 export default function Teams({ onOpenAuthor }) {
   const [teams, setTeams] = useState(() => getTeams());
   const [formOpen, setFormOpen] = useState(false);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [editingId, setEditingId] = useState(null); // null = creating a new team
   const [creationSetup, setCreationSetup] = useState(false);
   const [importMessage, setImportMessage] = useState('');
@@ -103,7 +104,9 @@ export default function Teams({ onOpenAuthor }) {
   // — only clear them on an actual user-driven switch, not when loading an
   // existing team into the form for editing (which also sets source).
   const handleSourceChange = (e, newSource) => {
-    setSource(newSource);
+    const selectedSource = newSource ?? e?.target?.value;
+    if (!selectedSource) return;
+    setSource(selectedSource);
     setMembers([]);
     setQuery('');
     setIdInput('');
@@ -225,6 +228,14 @@ export default function Teams({ onOpenAuthor }) {
     if (editingId === id) resetForm();
   };
 
+  const handleDeleteAll = () => {
+    deleteAllTeams();
+    setTeams([]);
+    setDeleteAllOpen(false);
+    resetForm();
+    setFormOpen(false);
+  };
+
   // Teams live only in this browser's localStorage (see teamStore.js) --
   // there is no server-side copy, so clearing site data or switching
   // machines loses them silently. Export/import is the only backup/transfer
@@ -325,7 +336,7 @@ export default function Teams({ onOpenAuthor }) {
 
   return (
     <div className="App">
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}><h1>Teams</h1><HelpButton title="Teams help" sections={[{ title: 'Create a team', description: 'A team needs a unique name and exactly one source: HAL or DBLP. The source cannot change later.' }, { title: 'Add members', description: 'Names come from source search. Typed ids, bulk ids and TXT files are checked against HAL or DBLP before they are added.' }, { title: 'Import teams: JSON', description: 'Import a JSON file with each team name, source and member identifiers.', example: '[{\n  "name": "My team",\n  "source": "dblp",\n  "members": [{ "id": "11/1262" }]\n}]' }, { title: 'Import teams: CSV', description: 'Import a CSV with each team name, source and member identifiers.', example: 'team,source,id\nMy team,dblp,11/1262' }, { title: 'Import members: TXT', description: 'TXT imports one identifier per line into the team currently being edited. A DBLP team accepts only PIDs; a HAL team accepts only idHals. Each identifier is checked before it is added.', example: '11/1262\n12/3456' }, { title: 'Import members', description: 'Members also accept JSON or CSV exports. A team with an existing name is skipped during import.' }]} /><ExportButton onExportMarkdown={handleExportTeamsMarkdown} onExportJson={handleExportTeamsJson} onExportCsv={handleExportTeamsCsv} disabled={teams.length === 0} /><ImportButton title="Import teams" onImportJson={() => teamsJsonInputRef.current?.click()} onImportCsv={() => teamsCsvInputRef.current?.click()} /></Box>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 1 }}><h1>Teams</h1><HelpButton title="Teams help" sections={[{ title: 'Create a team', description: 'A team needs a unique name and exactly one source: HAL or DBLP. The source cannot change later.' }, { title: 'Add members', description: 'Names come from source search. Typed ids, bulk ids and TXT files are checked against HAL or DBLP before they are added.' }, { title: 'Import teams: JSON', description: 'Import a JSON file with each team name, source and member identifiers.', example: '[{\n  "name": "My team",\n  "source": "dblp",\n  "members": [{ "id": "11/1262" }]\n}]' }, { title: 'Import teams: CSV', description: 'Import a CSV with each team name, source and member identifiers.', example: 'team,source,id\nMy team,dblp,11/1262' }, { title: 'Import members: TXT', description: 'TXT imports one identifier per line into the team currently being edited. A DBLP team accepts only PIDs; a HAL team accepts only idHals. Each identifier is checked before it is added.', example: '11/1262\n12/3456' }, { title: 'Import members', description: 'Members also accept JSON or CSV exports. A team with an existing name is skipped during import.' }]} /><Box sx={{ display: 'flex', gap: 0.75 }}><ExportButton onExportMarkdown={handleExportTeamsMarkdown} onExportJson={handleExportTeamsJson} onExportCsv={handleExportTeamsCsv} disabled={teams.length === 0} /><ImportButton title="Import teams" onImportJson={() => teamsJsonInputRef.current?.click()} onImportCsv={() => teamsCsvInputRef.current?.click()} /></Box></Box>
       <div style={{ fontSize: 'large', marginTop: '-0.8em', marginBottom: '10px', color: 'GrayText' }}>
         Group several DBLP or HAL authors together and rank their merged, deduplicated publications
       </div>
@@ -344,10 +355,10 @@ export default function Teams({ onOpenAuthor }) {
                 secondaryAction={
                   <>
                     <IconButton edge="end" aria-label="edit" onClick={() => startEdit(team)}>
-                      <EditIcon fontSize="small" />
+                      <EditIcon color="primary" fontSize="small" />
                     </IconButton>
                     <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(team.id)}>
-                      <DeleteIcon fontSize="small" />
+                      <DeleteIcon color="error" fontSize="small" />
                     </IconButton>
                   </>
                 }
@@ -366,9 +377,20 @@ export default function Teams({ onOpenAuthor }) {
         </Box>
       )}
 
-      <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { resetForm(); setCreationSetup(true); setFormOpen(true); }} sx={{ display: 'block', mx: 'auto', mb: 2, textTransform: 'none' }}>New team</Button>
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mb: 2 }}>
+        <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { resetForm(); setCreationSetup(true); setFormOpen(true); }} sx={{ textTransform: 'none' }}>New team</Button>
+        <Button size="small" color="error" startIcon={<DeleteIcon color="error" />} disabled={!teams.length} onClick={() => setDeleteAllOpen(true)} sx={{ textTransform: 'none' }}>Delete all</Button>
+      </Box>
+      <Dialog open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete all teams?</DialogTitle>
+        <DialogContent><Typography>This will delete all {teams.length} teams from this browser.</Typography></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteAllOpen(false)}>Cancel</Button>
+          <Button color="error" onClick={handleDeleteAll}>Delete all</Button>
+        </DialogActions>
+      </Dialog>
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><span>{editingId ? 'Edit team' : 'New team'}</span>{source && <Chip label={SOURCES[source]?.label} size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} />}</Box><Box sx={{ display: 'flex', gap: 0.5 }}><ExportButton onExportMarkdown={handleExportMembersMarkdown} onExportJson={handleExportMembersJson} onExportCsv={handleExportMembersCsv} disabled={members.length === 0} /><ImportButton title="Import members" onImportJson={() => membersJsonInputRef.current?.click()} onImportCsv={() => membersCsvInputRef.current?.click()} onImportTxt={() => membersTxtInputRef.current?.click()} /><input ref={membersJsonInputRef} type="file" accept=".json,application/json" hidden onChange={e => handleImportMembersFile(e, 'json')} /><input ref={membersCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={e => handleImportMembersFile(e, 'csv')} /><input ref={membersTxtInputRef} type="file" accept=".txt,text/plain" hidden onChange={e => handleImportMembersFile(e, 'txt')} /></Box></DialogTitle>
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><span>{editingId ? 'Edit team' : 'New team'}</span>{source && <Chip label={SOURCES[source]?.label} size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} />}</Box><Box sx={{ display: 'flex', gap: 0.75 }}><ExportButton onExportMarkdown={handleExportMembersMarkdown} onExportJson={handleExportMembersJson} onExportCsv={handleExportMembersCsv} disabled={members.length === 0} /><ImportButton title="Import members" onImportJson={() => membersJsonInputRef.current?.click()} onImportCsv={() => membersCsvInputRef.current?.click()} onImportTxt={() => membersTxtInputRef.current?.click()} /><input ref={membersJsonInputRef} type="file" accept=".json,application/json" hidden onChange={e => handleImportMembersFile(e, 'json')} /><input ref={membersCsvInputRef} type="file" accept=".csv,text/csv" hidden onChange={e => handleImportMembersFile(e, 'csv')} /><input ref={membersTxtInputRef} type="file" accept=".txt,text/plain" hidden onChange={e => handleImportMembersFile(e, 'txt')} /></Box></DialogTitle>
       <DialogContent dividers>
       <Box sx={{ textAlign: 'left' }}>
         <Box component="section">
@@ -389,15 +411,16 @@ export default function Teams({ onOpenAuthor }) {
             </Typography>
           ) : creationSetup && (
             <>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>Source *</Typography>
-              <Tabs
-                value={source}
-                onChange={handleSourceChange}
-                sx={{ mt: 1, minHeight: 36, '& .MuiTab-root': { minHeight: 36, py: 0.5 } }}
-              >
-                {Object.entries(SOURCES).map(([key, { label }]) => <Tab key={key} value={key} label={<Chip label={label} size="small" color="primary" variant="outlined" />} sx={{ minWidth: 88 }} />)}
-              </Tabs>
-              {!source && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>Choose DBLP or HAL before adding members.</Typography>}
+              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>Source :</Typography>
+                {Object.entries(SOURCES).map(([key, { label }]) => (
+                  <FormControlLabel
+                    key={key}
+                    control={<Checkbox size="small" checked={source === key} onChange={event => event.target.checked && handleSourceChange({ target: { value: key } })} />}
+                    label={label}
+                  />
+                ))}
+              </Box>
               <Button variant="contained" size="small" disabled={!canStartCreation} onClick={() => setCreationSetup(false)} sx={{ mt: 2 }}>Continue</Button>
             </>
           )}

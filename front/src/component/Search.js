@@ -454,13 +454,13 @@ function RecentSearches({ source, onOpenAuthor }) {
     };
 
     return (
-        <Box sx={{ width: 500, maxWidth: '100%', margin: '0 auto', textAlign: 'left' }}>
+        <Box sx={{ width: 500, maxWidth: '100%', margin: '24px auto 0', textAlign: 'left' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
                     <HistoryIcon fontSize="small" />
                     <Typography variant="subtitle2">Recent on {SOURCES[source].label}</Typography>
                 </Box>
-                <Button size="small" startIcon={<DeleteOutlineIcon fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
+                <Button size="small" color="error" startIcon={<DeleteOutlineIcon color="error" fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
                     Clear
                 </Button>
             </Box>

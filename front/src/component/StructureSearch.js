@@ -258,7 +258,7 @@ function RecentStructures({ onOpenStructure }) {
           <HistoryIcon fontSize="small" />
           <Typography variant="subtitle2">Recent</Typography>
         </Box>
-        <Button size="small" startIcon={<DeleteOutlineIcon fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
+          <Button size="small" color="error" startIcon={<DeleteOutlineIcon color="error" fontSize="small" />} onClick={handleClear} sx={{ textTransform: 'none' }}>
           Clear
         </Button>
       </Box>

@@ -104,7 +104,7 @@ export function IdentityLinksPanel({ open, onClose, idHals = [], pids = [], reso
   return <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
     <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
       {all ? 'My identity links' : 'Identity links for this ' + scopeInfo.type}
-      <Box sx={{ display: 'flex', gap: 0.5 }}>
+      <Box sx={{ display: 'flex', gap: 0.75 }}>
         <ExportButton updateUrl={false} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={!links?.length} />
         <ImportButton title="Import identity links" disabled={resolution === null} onImportJson={() => importFileInputRef.current?.click()} onImportCsv={() => importCsvFileInputRef.current?.click()} />
       </Box>
@@ -130,17 +130,17 @@ export function IdentityLinksPanel({ open, onClose, idHals = [], pids = [], reso
       </>}
     </DialogContent>
     <DialogActions sx={{ justifyContent: 'space-between' }}>
-      <Button color="error" disabled={!personalLinkCount} onClick={() => setClearOpen(true)}>Reset all</Button>
+      <Button color="error" disabled={!personalLinkCount} onClick={() => setClearOpen(true)}>Delete all</Button>
       <Button onClick={onViewResults || onClose}>{onViewResults ? 'View results' : 'Close'}</Button>
     </DialogActions>
     <Dialog open={clearOpen} onClose={() => setClearOpen(false)} maxWidth="xs" fullWidth>
-      <DialogTitle>Reset all personal identity links?</DialogTitle>
+      <DialogTitle>Delete all personal identity links?</DialogTitle>
       <DialogContent>
         <Typography>This will delete {personalLinkCount} personal {personalLinkCount === 1 ? 'link' : 'links'} {all ? 'saved in this browser' : `for this ${scopeInfo.type}`}. Automatic suggestions will remain available.</Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={() => setClearOpen(false)}>Cancel</Button>
-        <Button color="error" disabled={!personalLinkCount} onClick={handleClear}>Reset all</Button>
+        <Button color="error" disabled={!personalLinkCount} onClick={handleClear}>Delete all</Button>
       </DialogActions>
     </Dialog>
     <IdentityLinkDialog

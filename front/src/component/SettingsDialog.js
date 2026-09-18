@@ -136,7 +136,7 @@ function CustomAxisSection({ source, onSourceChange, profiles, creationReference
                 the collapsed state -- no renderValue override needed. */}
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
               <Typography variant="body2" sx={{ flex: 1 }}>{p.name}</Typography>
-              <Chip size="small" variant="outlined" label={`base: ${REFERENCE_LABEL[p.reference] ?? p.reference}`} />
+              <Chip size="small" label={`base: ${REFERENCE_LABEL[p.reference] ?? p.reference}`} sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} />
             </Box>
           </MenuItem>
         ))}
@@ -264,7 +264,7 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
             { title: 'Custom rankings', description: 'Create a personal profile from CORE, SJR or CCF, then override selected venues or editions. Profiles are saved only in this browser.' },
           ]} />
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
           <ExportButton title="Export preferences" updateUrl={false} onExportJson={downloadPreferences} />
           <ImportButton title="Import preferences" onImportJson={() => preferencesInputRef.current?.click()} />
           <input ref={preferencesInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportPreferences} />
@@ -281,7 +281,7 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
         <Paper variant="outlined" sx={{ p: 2.25, mb: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}><LeaderboardIcon color="primary" /><Typography variant="h6">Rankings</Typography></Box>
         <Typography variant="subtitle1" gutterBottom>Conference ranking</Typography>
-        <RadioGroup value={conferenceRadioValue} onChange={handleConferenceSourceChange}>
+        <RadioGroup value={conferenceRadioValue} onChange={handleConferenceSourceChange} sx={{ ml: 1 }}>
           <FormControlLabel value="core" control={<Radio size="small" />} label={<RankingOption description="Conferences and workshops ranked by CORE on the A*, A, B and C scale. Each publication uses the edition current for its publication year."><Typography variant="body2">CORE (default)</Typography></RankingOption>} />
           <FormControlLabel value="ccf" control={<Radio size="small" />} label={<RankingOption description="Conferences and workshops ranked by CCF on the A/B/C scale, using the edition current for the publication year."><Typography variant="body2">CCF</Typography></RankingOption>} />
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
@@ -299,7 +299,7 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
         <Divider sx={{ mt: 2, mb: 2.5 }} />
 
         <Typography variant="subtitle1" gutterBottom>Journal ranking</Typography>
-        <RadioGroup value={journalRadioValue} onChange={handleJournalSourceChange}>
+        <RadioGroup value={journalRadioValue} onChange={handleJournalSourceChange} sx={{ ml: 1 }}>
           <FormControlLabel value="sjr" control={<Radio size="small" />} label={<RankingOption description="Journals ranked by SJR / Scimago from Q1 to Q4. Each publication uses the edition current for its publication year."><Typography variant="body2">SJR (default)</Typography></RankingOption>} />
           <FormControlLabel value="ccf" control={<Radio size="small" />} label={<RankingOption description="Journals ranked by CCF on the A/B/C scale, using the edition current for the publication year."><Typography variant="body2">CCF</Typography></RankingOption>} />
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
@@ -316,14 +316,14 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
         </RadioGroup>
         <Divider sx={{ mt: 2, mb: 2.5 }} />
 
-        <Button size="small" startIcon={<EditIcon />} onClick={onManageCustomRankings}>
+        <Button size="small" color="primary" startIcon={<EditIcon color="primary" />} onClick={onManageCustomRankings}>
           Manage custom rankings…
         </Button>
         </Paper>
         </>}
 
         {preferenceTab === 1 && <Paper variant="outlined" sx={{ p: 2.25, mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}><RuleIcon color="primary" /><Typography variant="h6" sx={{ flex: 1 }}>Match corrections</Typography><Button size="small" startIcon={<EditIcon />} onClick={onManageCorrections}>Manage corrections…</Button></Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.25 }}><RuleIcon color="primary" /><Typography variant="h6" sx={{ flex: 1 }}>Match corrections</Typography><Button size="small" color="primary" startIcon={<EditIcon color="primary" />} onClick={onManageCorrections}>Manage corrections…</Button></Box>
         <FormControlLabel
           control={<Checkbox checked={useCommunityOverrides} onChange={handleCommunityOverridesChange} size="small" />}
           label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
@@ -339,8 +339,8 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
           Manage all choices saved in this browser. To share only one author or structure, use the controls on its page.
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25 }}>
-          <IdentityLinksButton all variant="text" startIcon={<EditIcon />} />
-          <CrosscheckDecisionsButton buttonVariant="text" startIcon={<EditIcon />} />
+          <IdentityLinksButton all variant="text" startIcon={<EditIcon color="primary" />} />
+          <CrosscheckDecisionsButton buttonVariant="text" startIcon={<EditIcon color="primary" />} />
         </Box>
         </Paper>}
       </DialogContent>

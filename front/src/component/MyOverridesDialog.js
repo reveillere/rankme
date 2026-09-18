@@ -12,6 +12,9 @@ import ListItemText from '@mui/material/ListItemText';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { ExportButton } from './ExportButton';
 import { ImportButton } from './ImportButton';
 
@@ -102,7 +105,7 @@ export function MyOverridesDialog({ open, onClose }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <span>My match corrections</span>
-        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
           <ExportButton title="Export corrections" onExportJson={handleExportJson} onExportCsv={handleExport} disabled={overrides.length === 0} updateUrl={false} />
           <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import corrections" />
         </Box>
@@ -134,7 +137,7 @@ export function MyOverridesDialog({ open, onClose }) {
                   alignItems="flex-start"
                   sx={{ pr: 10 }}
                   secondaryAction={
-                    <Button size="small" onClick={() => handleReset(o.key)} sx={{ mt: 0.5 }}>Reset</Button>
+                    <Tooltip title="Delete correction"><IconButton color="error" size="small" onClick={() => handleReset(o.key)} aria-label="delete correction" sx={{ mt: 0.25 }}><DeleteIcon color="error" fontSize="small" /></IconButton></Tooltip>
                   }
                 >
                   <ListItemText
@@ -173,7 +176,7 @@ export function MyOverridesDialog({ open, onClose }) {
       <input ref={fileInputRef} type="file" accept=".csv,text/csv" hidden onChange={handleImportFile} />
       <input ref={jsonFileInputRef} type="file" accept=".json,application/json" hidden onChange={handleImportJsonFile} />
       <DialogActions sx={{ justifyContent: 'space-between' }}>
-        <Button color="error" disabled={overrides.length === 0} onClick={handleClearAll}>Reset all</Button>
+        <Button color="error" disabled={overrides.length === 0} onClick={handleClearAll}>Delete all</Button>
         <Button onClick={onClose}>Close</Button>
       </DialogActions>
     </Dialog>

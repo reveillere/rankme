@@ -50,7 +50,7 @@ export function CrosscheckDecisionsButton({ report, scope = { type: 'all' }, but
     <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <span>{title}</span>
-        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
           <ExportButton title={`Export cross-check decisions (${decisions.length})`} disabled={!decisions.length} updateUrl={false} onExportJson={() => downloadTextFile(filename, JSON.stringify(personalDataFile('crosscheck-decisions', decisions, scope), null, 2), 'application/json')} />
           <ImportButton title="Import cross-check decisions" onImportJson={() => input.current?.click()} />
         </Box>
@@ -63,19 +63,19 @@ export function CrosscheckDecisionsButton({ report, scope = { type: 'all' }, but
         {!decisions.length && <Typography color="text.secondary">No personal decisions in this scope.</Typography>}
         <List>{decisions.map(entry => <ListItem key={JSON.stringify([entry.dblpKey, entry.halDocid])} sx={{ gap: 2 }}>
           <Typography sx={{ flex: 1, overflowWrap: 'anywhere' }}>{entry.dblpKey} ↔ HAL {entry.halDocid}: {entry.decision === 'same' ? 'Same publication' : 'Different publications'}</Typography>
-          <Tooltip title="Delete decision"><IconButton color="error" size="small" onClick={() => remove(entry)} aria-label="delete decision"><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+          <Tooltip title="Delete decision"><IconButton color="error" size="small" onClick={() => remove(entry)} aria-label="delete decision"><DeleteIcon color="error" fontSize="small" /></IconButton></Tooltip>
         </ListItem>)}</List>
       </DialogContent>
       <DialogActions sx={{ justifyContent: 'space-between' }}>
-        <Button color="error" disabled={!decisions.length} onClick={() => setResetOpen(true)}>Reset all</Button>
+        <Button color="error" startIcon={<DeleteIcon />} disabled={!decisions.length} onClick={() => setResetOpen(true)}>Delete all</Button>
         <Button onClick={() => setOpen(false)}>Close</Button>
       </DialogActions>
       <Dialog open={resetOpen} onClose={() => setResetOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Reset all decisions?</DialogTitle>
+        <DialogTitle>Delete all decisions?</DialogTitle>
         <DialogContent><Typography>This will delete all {decisions.length} decisions in this scope from this browser.</Typography></DialogContent>
         <DialogActions>
           <Button onClick={() => setResetOpen(false)}>Cancel</Button>
-          <Button color="error" onClick={resetAll}>Reset all</Button>
+          <Button color="error" onClick={resetAll}>Delete all</Button>
         </DialogActions>
       </Dialog>
     </Dialog>

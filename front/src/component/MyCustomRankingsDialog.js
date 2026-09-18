@@ -114,10 +114,10 @@ function ProfileRow({ profile, isFirst, activeAxes, expanded, onToggleExpand, on
               {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
             </IconButton>
             <IconButton size="small" onClick={() => setRenaming(true)} aria-label="rename">
-              <EditIcon fontSize="small" />
+              <EditIcon color="primary" fontSize="small" />
             </IconButton>
             <IconButton size="small" onClick={handleDelete} aria-label="delete">
-              <DeleteIcon fontSize="small" />
+              <DeleteIcon color="error" fontSize="small" />
             </IconButton>
           </Box>
         }
@@ -326,7 +326,7 @@ export function MyCustomRankingsDialog({ open, onClose }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
         <span>My custom rankings</span>
-        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0 }}>
           <ExportButton title="Export custom rankings" onExportJson={handleExportAllJson} onExportCsv={handleExportAll} disabled={profiles.length === 0} updateUrl={false} />
           <ImportButton onImportJson={handleImportJsonClick} onImportCsv={handleImportClick} title="Import rankings" />
         </Box>
