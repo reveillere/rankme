@@ -153,31 +153,31 @@ services:
   # dashboards/admin password survive in the meantime; prometheus keeps
   # scraping/retaining everything Grafana would show either way, nothing
   # is lost by turning this back on later.
-  # grafana:
-  #   image: grafana/grafana:11.2.0
-  #   restart: always
-  #   depends_on:
-  #     - prometheus
-  #   environment:
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: always
+    depends_on:
+      - prometheus
+    environment:
   #     # Defaults to local dev; set GRAFANA_ROOT_URL=https://rankme.fr/grafana/
   #     # in the host's .env for a real deployment.
-  #     - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:8080/grafana/}
-  #     - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:8080/grafana/}
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
   #     # CHANGE THIS: set a real GF_SECURITY_ADMIN_PASSWORD in the host's
   #     # .env before running this against a real server. Left unset here on
   #     # purpose (falls back to Grafana's own default admin/admin) so a
   #     # missing .env entry is obvious on first login rather than silently
   #     # deploying with a value nobody chose.
-  #     - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-  #   volumes:
-  #     - grafana-data:/var/lib/grafana
-  #     - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-  #     - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 128M
-  #         cpus: "0.5"
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
 
 volumes:
   prometheus-data:
