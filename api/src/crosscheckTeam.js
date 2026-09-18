@@ -114,7 +114,7 @@ async function resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCros
     // personLinks-based resolution), so relying on it alone left both
     // resolved and unresolved members showing their bare pid twice
     // ("11/1262 (11/1262)") instead of a real name.
-    const [storedIdentity, dblpName] = await Promise.all([resolveHalIdentityForPid(pid), getDblpName(pid)]);
+    const [storedIdentity, dblpName] = await Promise.all([identityLinks?.byPid.has(pid) ? null : resolveHalIdentityForPid(pid), getDblpName(pid)]);
     const identity = identityLinks?.byPid.has(pid) ? { idHal: identityLinks.byPid.get(pid), name: null } : storedIdentity;
     const name = dblpName || identity.name || null;
     if (!identity.idHal) {
@@ -143,7 +143,7 @@ async function resolveDblpSourcedMember(pid, { resolveHalIdentityForPid, getCros
 // *knows* one of the two ids up front), unlike the resolved `members` array
 // above, which always carries both once a member makes it that far.
 async function resolveHalSourcedMember(idHal, { resolveDblpIdentityForIdHal, getCrossCheckReport, getDblpName }, { confSource, journalSource, identityLinks }) {
-    const storedIdentity = await resolveDblpIdentityForIdHal(idHal);
+    const storedIdentity = identityLinks?.byIdHal.has(idHal) ? null : await resolveDblpIdentityForIdHal(idHal);
     const identity = identityLinks?.byIdHal.has(idHal) ? { pid: identityLinks.byIdHal.get(idHal), name: null } : storedIdentity;
     const dblpName = identity.pid ? await getDblpName(identity.pid) : null;
     // No cheap idHal-only name lookup exists on the HAL side to mirror

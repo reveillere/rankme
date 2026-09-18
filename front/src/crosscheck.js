@@ -1,5 +1,6 @@
 import { rankingQueryParams } from './rankingSource';
-import { getClientId } from './matchOverrides';
+import { fetchStructureIdentityResolution } from './identityResolution';
+import { importLocalDecisions, listIdentityLinks } from './personalData';
 
 // Author-scope, DBLP -> HAL crosscheck (see api/src/crosscheck.js): which of
 // this DBLP author's publications have no corresponding HAL deposit. Ranking
@@ -30,7 +31,7 @@ export async function fetchTeamCrossCheck({ source, pids }, { conferenceSource, 
   const resp = await fetch(`/api/internal/crosscheck/team${rankingParams}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source, pids }),
+    body: JSON.stringify({ source, pids, identityLinks: listIdentityLinks(source === 'hal' ? { idHals: pids } : { pids }) }),
   });
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
@@ -39,14 +40,16 @@ export async function fetchTeamCrossCheck({ source, pids }, { conferenceSource, 
   return await resp.json();
 }
 
-// Structure-scope, DBLP -> HAL crosscheck (see api/src/crosscheckStructure.js):
-// unlike fetchTeamCrossCheck above, a HAL structure has a stable server-side
-// structId (identityResolution.js already resolves its whole membership by
-// name/orcid), so this is a plain GET, same shape as fetchCrossCheck's own
-// single-pid request, just keyed by structId instead of (pid, halId).
+// Load membership before sending only this structure's local links. The
+// browser POST route accepts them for this calculation without persisting them.
 export async function fetchStructureCrossCheck(structId, { conferenceSource, journalSource } = {}) {
+  const members = await fetchStructureIdentityResolution(structId);
+  const identityLinks = listIdentityLinks({ idHals: members.map(member => member.idHal) });
   const rankingParams = rankingQueryParams({ conferenceSource, journalSource });
-  const resp = await fetch(`/api/crosscheck/structure/${structId}${rankingParams}`);
+  const resp = await fetch(`/api/internal/crosscheck/structure${rankingParams}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ structId, identityLinks }),
+  });
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({}));
     throw new Error(body.message || body.error || `Structure cross-check: HTTP ${resp.status}`);
@@ -54,19 +57,7 @@ export async function fetchStructureCrossCheck(structId, { conferenceSource, jou
   return await resp.json();
 }
 
-// A maintainer confirming/rejecting one specific (dblp publication, HAL
-// candidate) pair shown under "To review" -- see api/src/crosscheckOverrides.js.
-// Best-effort like matchOverrides.js's own postToServer isn't: the caller
-// (CrossCheck.js) needs to know the write actually landed before it
-// refetches the report, or a failed request would look like a no-op click.
-export async function postCrossCheckOverride({ dblpKey, halDocid, decision }) {
-  const resp = await fetch('/api/crosscheck/override', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ dblpKey, halDocid, decision, clientId: getClientId() }),
-  });
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => ({}));
-    throw new Error(body.message || body.error || `Cross-check override: HTTP ${resp.status}`);
-  }
+// Decisions apply to this browser only; the API always returns automatic matches.
+export async function postCrossCheckOverride(entry) {
+  return importLocalDecisions([{ ...entry, halDocid: String(entry.halDocid) }]);
 }

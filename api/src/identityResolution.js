@@ -7,11 +7,9 @@ import { tokenizeName, extractOrcid, getAuthorOrcid, findAuthorByOrcid } from '.
 
 // ****************************************************************************************************
 // ****************************************************************************************************
-// Person-identity resolution: for a HAL lab (a "structure"), find which dblp
-// pid corresponds to which idHal among its members. Independent of, and a
-// prerequisite for, a future lab-wide crosscheck (crosscheck.js today only
-// matches one already-identified author's own publications) -- this module
-// stops at "who is who", it does not compare any publications.
+// Automatic person-identity resolution from public HAL/DBLP reference data.
+// Production uses no persistent identity choices. The browser overlays its
+// personal links; cross-check requests can supply them explicitly.
 //
 // The core idea, settled after measuring a real lab (LaBRI, structId 3102):
 // the NAME resolves (it's the only side with enough coverage to find
@@ -48,7 +46,7 @@ async function getDblpDb() {
 // dblpSearchCache.js's createDblpSearch. Wired to the real dependencies
 // below (fetchMemberNames, fetchExactCandidates, ...).
 
-export function createIdentityResolver({ getMemberNames, getHalOrcids, findExactCandidates, findTokenCandidates, getPersonLinks, savePersonLink }) {
+export function createIdentityResolver({ getMemberNames, getHalOrcids, findExactCandidates, findTokenCandidates, getPersonLinks = async () => new Map(), savePersonLink = async () => {} }) {
     return async function resolveStructure(structId) {
         const members = await getMemberNames(structId);
         const resultByIdHal = new Map();
@@ -247,75 +245,13 @@ async function fetchTokenCandidates(name) {
     return docs.map(toCandidate);
 }
 
-// personLinks: one document per idHal, `source` distinguishing a human's
-// manual confirmation from this pipeline's own orcid-confirmed result --
-// see createIdentityResolver above for why an existing document of either
-// source is never recomputed, and controllerRecordLink below for the only
-// path that writes 'manual'.
-let personLinksIndexEnsured = false;
-async function personLinksCollection() {
-    const client = await getClient();
-    const col = client.db('rankme').collection('personLinks');
-    if (!personLinksIndexEnsured) {
-        personLinksIndexEnsured = true;
-        col.createIndex({ idHal: 1 }, { unique: true })
-            .catch(error => console.error('[identityResolution] Error creating personLinks index', error));
-    }
-    return col;
-}
-
-async function fetchPersonLink(idHal) {
-    const col = await personLinksCollection();
-    const doc = await col.findOne({ idHal });
-    return doc ? { pid: doc.pid, source: doc.source } : null;
-}
-
-// Reverse lookup of fetchPersonLink above, keyed by dblp pid instead of
-// idHal -- used by controllerSuggestIdentity below to check whether this
-// dblp author already has a confirmed HAL identity (manual or a past
-// orcid-confirmed one) before ever considering a fresh ORCID lookup. No
-// index on `pid` (unlike idHal_s's unique index): this collection is one
-// row per idHal, so a `pid` can appear at most as many times as there are
-// idHal_s in the whole collection -- not worth a second index for a lookup
-// that only ever runs interactively, once per author page visit.
-export async function fetchPersonLinkByPid(pid) {
-    const col = await personLinksCollection();
-    const doc = await col.findOne({ pid });
-    return doc ? { idHal: doc.idHal, source: doc.source } : null;
-}
-
-async function fetchPersonLinksByIdHals(idHals) {
-    if (idHals.length === 0) return new Map();
-    const col = await personLinksCollection();
-    const docs = await col.find(
-        { idHal: { $in: idHals } },
-        { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } },
-    ).toArray();
-    return new Map(docs.map(doc => [doc.idHal, { pid: doc.pid, source: doc.source }]));
-}
-
-async function fetchPersonLinksByPids(pids) {
-    if (pids.length === 0) return new Map();
-    const col = await personLinksCollection();
-    const docs = await col.find(
-        { pid: { $in: pids } },
-        { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } },
-    ).toArray();
-    return new Map(docs.map(doc => [doc.pid, { idHal: doc.idHal, source: doc.source }]));
-}
-
-async function saveOrcidPersonLink(idHal, pid) {
-    const col = await personLinksCollection();
-    await col.updateOne({ idHal }, { $set: { idHal, pid, source: 'orcid', createdAt: new Date() } }, { upsert: true });
-}
-
+// Production resolution uses public reference data only. Personal links are
+// supplied per request or applied by the browser; legacy Mongo links are ignored.
 const resolveStructureCore = createIdentityResolver({
     getMemberNames: fetchMemberNames,
     getHalOrcids: hal.getAuthorsInfo,
     findExactCandidates: fetchExactCandidates,
     findTokenCandidates: fetchTokenCandidates,
-    getPersonLinks: fetchPersonLinksByIdHals,
-    savePersonLink: saveOrcidPersonLink,
 });
 
 // The structure dialog needs the DBLP-side display name next to a confirmed
@@ -342,24 +278,18 @@ async function resolveStructureWithDblpNames(structId) {
 // ****************************************************************************************************
 // ****************************************************************************************************
 
-const CACHE_TTL_S = 60 * 60; // 1h -- short-lived on purpose, same rationale as crosscheck.js's own
-                              // report cache: members already linked (manual or a previous orcid
-                              // confirmation) are a cheap Mongo lookup each, not an expensive
-                              // re-fetch, so there is little being saved beyond the matching work itself.
+const CACHE_TTL_S = 60 * 60; // Automatic resolution only, refreshed hourly.
 
-// Read Mongo directly: this fingerprint covers manual writes, imports, deletes
-// and automatic ORCID links, including changes made by another API process.
-// Global invalidation is intentional: personLinks is small, and this avoids
-// maintaining a reverse index of every structure containing a person.
+// Deterministic fingerprint for injected resolver/cache dependencies.
+// Production uses the automatic-only namespace below, with no Mongo links.
 export function personLinksVersion(links) {
     const rows = links.map(({ idHal, pid, source }) => JSON.stringify([idHal, pid, source])).sort();
     return createHash('sha256').update(JSON.stringify(rows)).digest('hex');
 }
 
 export async function getPersonLinksVersion() {
-    const col = await personLinksCollection();
-    const links = await col.find({}, { projection: { _id: 0, idHal: 1, pid: 1, source: 1 } }).toArray();
-    return personLinksVersion(links);
+    // New namespace prevents reusing reports derived from legacy global links.
+    return 'automatic-only-v1';
 }
 
 export function createIdentityReportGetter({ getDblpStatus, getPersonLinksVersion, resolveStructure, getCache, setCache }) {
@@ -401,20 +331,13 @@ export async function controllerResolveStructure(req, res) {
 // client-side team. HAL teams therefore get the identical name+ORCID logic.
 async function resolveHalTeamMembers(members) {
     const result = new Map();
-    const pending = [];
-    const existingByIdHal = await fetchPersonLinksByIdHals(members.map(member => member.id));
-    for (const member of members) {
-        const existing = existingByIdHal.get(member.id);
-        if (existing) result.set(member.id, { idHal: member.id, name: member.name, resolved: { pid: existing.pid, source: existing.source }, confidence: 'confirmed', candidates: [] });
-        else pending.push(member);
-    }
+    const pending = members;
     const [orcids, exact] = await Promise.all([hal.getAuthorsInfo(pending.map(m => m.id)), fetchExactCandidates(pending.map(m => m.name).filter(Boolean))]);
     for (const member of pending) {
         if (!member.name) { result.set(member.id, { idHal: member.id, name: null, resolved: null, confidence: 'not-found', candidates: [] }); continue; }
         const exactCandidates = exact.get(member.name) || [];
         const candidates = exactCandidates.length ? exactCandidates : await fetchTokenCandidates(member.name);
         const arbitration = arbitrate(candidates, exactCandidates.length ? 'exact' : 'tokens', new Set(orcids.get(member.id) || []));
-        if (arbitration.confidence === 'confirmed') await saveOrcidPersonLink(member.id, arbitration.resolved.pid);
         result.set(member.id, { idHal: member.id, name: member.name, ...arbitration });
     }
     const report = members.map(member => result.get(member.id));
@@ -426,9 +349,7 @@ async function resolveHalTeamMembers(members) {
 
 async function resolveDblpTeamMembers(members) {
     const names = await fetchDblpNames(members.map(member => member.id));
-    const existingByPid = await fetchPersonLinksByPids(members.map(member => member.id));
-    const existingInfos = await hal.getAuthorInfos([...existingByPid.values()].map(link => link.idHal));
-    const pending = members.filter(member => !existingByPid.has(member.id));
+    const pending = members;
     const orcidByPid = new Map(await Promise.all(pending.map(async member => [member.id, await getAuthorOrcid(member.id)])));
     const halByOrcid = await hal.findAuthorsByOrcid([...orcidByPid.values()]);
     const namesToSearch = pending
@@ -438,14 +359,8 @@ async function resolveDblpTeamMembers(members) {
 
     return Promise.all(members.map(async member => {
         const name = names.get(member.id) || member.name || null;
-        const existing = existingByPid.get(member.id);
-        if (existing) {
-            const halInfo = existingInfos.get(existing.idHal);
-            return { pid: member.id, name, resolved: { idHal: existing.idHal, name: halInfo?.name || null, source: existing.source }, confidence: 'confirmed', candidates: [] };
-        }
         const orcidMatch = halByOrcid.get(orcidByPid.get(member.id));
         if (orcidMatch) {
-            await saveOrcidPersonLink(orcidMatch.idHal, member.id);
             return { pid: member.id, name, resolved: { idHal: orcidMatch.idHal, name: orcidMatch.name, source: 'orcid' }, confidence: 'confirmed', candidates: [] };
         }
         const candidates = name ? (candidatesByName.get(name) || []).map(candidate => ({ idHal: candidate.id, name: candidate.author })) : [];
@@ -460,156 +375,8 @@ export async function controllerResolveTeam(req, res) {
     catch (error) { console.error('Error resolving team identities', error); res.status(400).json({ error: error.message }); }
 }
 
-// Manual confirmation, on the model of matchOverrides.js's controllerRecord:
-// always writes 'manual', regardless of any existing link or its confidence
-// -- a human confirming an identity always outranks whatever this pipeline
-// last computed automatically.
-export async function controllerRecordLink(req, res) {
-    const { idHal, pid } = req.body || {};
-    if (typeof idHal !== 'string' || !idHal.trim() || typeof pid !== 'string' || !pid.trim()) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing idHal or pid' });
-        return;
-    }
-    try {
-        const col = await personLinksCollection();
-        await col.updateOne({ idHal }, { $set: { idHal, pid, source: 'manual', createdAt: new Date() } }, { upsert: true });
-        res.status(201).json({ ok: true });
-    } catch (error) {
-        console.error('[identityResolution] Error recording manual link', error);
-        res.status(500).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
-
-// ****************************************************************************************************
-// ****************************************************************************************************
-// Direct management of personLinks, independent of the cross-check flow
-// above (controllerRecordLink is still how a single link gets created or
-// re-pointed to a different pid -- these three just list/delete/bulk-import
-// what's already on file). All three take `idHal`/`pid` values straight
-// from the client (a team's or structure's already-loaded member list), so
-// there is no structId/team to re-derive membership from here -- unlike
-// resolveStructure above, this never touches HAL or dblp at all.
-
-// Comma-separated query params, not JSON body: this is a GET, meant to be
-// callable from a plain browser navigation/curl as easily as from the panel
-// itself, and the id lists here are bounded by a team/structure's own
-// membership (at most a few hundred), nowhere near a URL length concern.
-function splitCsvParam(value) {
-    if (!value) return [];
-    return String(value).split(',').map(s => s.trim()).filter(Boolean);
-}
-
-// Pure cores below, each injected with just the one collection method it
-// needs -- same "pure core, injected I/O" style as createIdentityResolver
-// above, so they can be unit-tested against a bare in-memory fake of
-// find/deleteOne/updateOne instead of a real Mongo collection. The
-// controllers further down are the only callers, wiring in the real
-// personLinksCollection().
-
-export async function listLinksCore(col, { idHals, pids }) {
-    const or = [];
-    if (idHals.length > 0) or.push({ idHal: { $in: idHals } });
-    if (pids.length > 0) or.push({ pid: { $in: pids } });
-    return col.find({ $or: or }, { projection: { _id: 0, idHal: 1, pid: 1, source: 1, createdAt: 1 } }).toArray();
-}
-
-export async function deleteLinkCore(col, idHal) {
-    const result = await col.deleteOne({ idHal });
-    return result.deletedCount > 0;
-}
-
-// Bulk sibling of controllerRecordLink above -- same 'manual' source (a
-// file import is as much a human's explicit confirmation as one entry typed
-// into the dialog) but tolerant of a batch containing a few bad rows: an
-// import of a hand-edited or hand-exported JSON file shouldn't be all-or-
-// nothing over one typo, so invalid entries are just skipped and counted
-// rather than aborting the request.
-export async function importLinksCore(col, links) {
-    let imported = 0;
-    let skipped = 0;
-    for (const entry of links) {
-        const idHal = entry?.idHal;
-        const pid = entry?.pid;
-        if (typeof idHal !== 'string' || !idHal.trim() || typeof pid !== 'string' || !pid.trim()) {
-            skipped++;
-            continue;
-        }
-        await col.updateOne({ idHal }, { $set: { idHal, pid, source: 'manual', createdAt: new Date() } }, { upsert: true });
-        imported++;
-    }
-    return { imported, skipped };
-}
-
-export async function controllerListLinks(req, res) {
-    const idHals = splitCsvParam(req.query.idHals);
-    const pids = splitCsvParam(req.query.pids);
-    if (idHals.length === 0 && pids.length === 0) {
-        res.status(400).json({ error: 'Bad Request', message: 'At least one of idHals or pids is required' });
-        return;
-    }
-    try {
-        const docs = await listLinksCore(await personLinksCollection(), { idHals, pids });
-        res.json(docs);
-    } catch (error) {
-        console.error('[identityResolution] Error listing links', error);
-        res.status(500).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
-
-export async function controllerDeleteLink(req, res) {
-    const { idHal } = req.body || {};
-    if (typeof idHal !== 'string' || !idHal.trim()) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing idHal' });
-        return;
-    }
-    try {
-        const deleted = await deleteLinkCore(await personLinksCollection(), idHal);
-        if (!deleted) {
-            res.status(404).json({ error: 'Not Found', message: `No link for idHal ${idHal}` });
-            return;
-        }
-        res.json({ ok: true });
-    } catch (error) {
-        console.error('[identityResolution] Error deleting link', error);
-        res.status(500).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
-
-export async function controllerImportLinks(req, res) {
-    const { links } = req.body || {};
-    if (!Array.isArray(links)) {
-        res.status(400).json({ error: 'Bad Request', message: 'Missing links array' });
-        return;
-    }
-    try {
-        const { imported, skipped } = await importLinksCore(await personLinksCollection(), links);
-        res.status(201).json({ imported, skipped });
-    } catch (error) {
-        console.error('[identityResolution] Error importing links', error);
-        res.status(500).json({ error: 'Internal Server Error', message: error.message });
-    }
-}
-
-// Single-author sibling of resolveStructure above, for any flow that has a
-// bare dblp pid and no HAL structure to enumerate a membership from -- the
-// DBLP author page's "Cross-check with HAL" flow (Author.js/
-// CrossCheckDialog.js, via controllerSuggestIdentity below) and, since it
-// was extracted, crosscheckTeam.js's per-member resolution (a rankme team
-// is just a client-side list of pids, with no membership to run
-// resolveStructure's name-match pipeline over either). ORCID is the only
-// signal available for a single, out-of-context pid.
-//
-// An ORCID match found here is auto-confirmed and persisted, same policy
-// arbitrate() already applies for a whole-structure resolution: an ORCID
-// agreeing on both sides is reliable enough on its own to skip the manual
-// confirmation step (controllerRecordLink) entirely, rather than only ever
-// surfacing it as a suggestion for a human to click through.
+// Read-only ORCID suggestion; visiting an author never persists an identity.
 export async function resolveHalIdentityForPid(pid) {
-    const existing = await fetchPersonLinkByPid(pid);
-    if (existing) {
-        return { idHal: existing.idHal, source: existing.source };
-    }
-
     // getAuthorOrcid already returns the bare ORCID (see dblpLocal.js's
     // extractOrcid) -- the same bare form ref/author's own orcidId_s is
     // stored in, so no https://orcid.org/ stripping is needed here (only
@@ -618,20 +385,6 @@ export async function resolveHalIdentityForPid(pid) {
     if (orcid) {
         const match = await hal.findAuthorByOrcid(orcid);
         if (match) {
-            // saveOrcidPersonLink upserts keyed on idHal (personLinks' own
-            // unique index) -- but the existing-link check just above
-            // (fetchPersonLinkByPid) is keyed on pid, a DIFFERENT field. A
-            // manual link already on file for this exact idHal (e.g. linked
-            // to some other pid entirely) would otherwise be silently
-            // overwritten by the save below -- guard on idHal itself, the
-            // same key the write uses, right before calling it.
-            // (createIdentityResolver/resolveStructure doesn't need this
-            // extra check: its own existing-link lookup is already keyed on
-            // idHal, the same key its own savePersonLink call writes.)
-            const alreadyLinked = await fetchPersonLink(match.idHal);
-            if (!alreadyLinked) {
-                await saveOrcidPersonLink(match.idHal, pid);
-            }
             return { idHal: match.idHal, name: match.name, source: 'orcid' };
         }
     }
@@ -642,7 +395,7 @@ export async function resolveHalIdentityForPid(pid) {
 // Reverse sibling of resolveHalIdentityForPid above: same idea, opposite
 // direction -- given a HAL idHal with no dblp pid on file yet, find the
 // dblp pid whose own homepage ORCID matches this idHal's HAL ORCID. Backs
-// the future "Cross-check with DBLP" action on a HAL author page
+// the "Cross-check with DBLP" action on a HAL author page
 // (AuthorHal.js, via controllerSuggestDblpIdentity below) and
 // crosscheckTeam.js's own HAL-sourced team resolution.
 //
@@ -656,7 +409,7 @@ export async function resolveHalIdentityForPid(pid) {
 // above, so it can be unit-tested without a real Mongo/HAL behind it --
 // unlike resolveHalIdentityForPid, which has no such tests yet and is left
 // as a plain function wired straight to its real dependencies.
-export function createDblpIdentityResolver({ getPersonLink, getHalOrcid, findDblpAuthorByOrcid, savePersonLink }) {
+export function createDblpIdentityResolver({ getPersonLink = async () => null, getHalOrcid, findDblpAuthorByOrcid, savePersonLink = async () => {} }) {
     return async function resolveDblpIdentityForIdHal(idHal) {
         const existing = await getPersonLink(idHal);
         if (existing) {
@@ -667,10 +420,7 @@ export function createDblpIdentityResolver({ getPersonLink, getHalOrcid, findDbl
         if (orcid) {
             const match = await findDblpAuthorByOrcid(orcid);
             if (match) {
-                // Same auto-confirm policy as resolveHalIdentityForPid above
-                // -- and no idHal/pid key mismatch to guard against here:
-                // the existing-link check just above is already keyed on
-                // idHal, the very key savePersonLink writes.
+                // Optional injected hook; production leaves it as a no-op.
                 await savePersonLink(idHal, match.pid);
                 return { pid: match.pid, name: match.name, source: 'orcid' };
             }
@@ -681,13 +431,11 @@ export function createDblpIdentityResolver({ getPersonLink, getHalOrcid, findDbl
 }
 
 export const resolveDblpIdentityForIdHal = createDblpIdentityResolver({
-    getPersonLink: fetchPersonLink,
     // hal.getAuthorInfo's own orcid field is already bare (ref/author's
     // orcidId_s -- see hal.js's findAuthorByOrcid comment for the same
     // convention), no https://orcid.org/ prefix to strip here.
     getHalOrcid: async (idHal) => (await hal.getAuthorInfo(idHal)).orcid,
     findDblpAuthorByOrcid: findAuthorByOrcid,
-    savePersonLink: saveOrcidPersonLink,
 });
 
 export async function controllerSuggestIdentity(req, res) {
@@ -704,7 +452,7 @@ export async function controllerSuggestIdentity(req, res) {
     }
 }
 
-// Reverse sibling of controllerSuggestIdentity above, for the future
+// Reverse sibling of controllerSuggestIdentity above, for the
 // "Cross-check with DBLP" button on a HAL author page (AuthorHal.js). An
 // idHal never contains a slash (unlike a dblp pid), so a plain :idHal route
 // param works fine here -- no wildcard route needed.

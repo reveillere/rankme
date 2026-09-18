@@ -163,7 +163,24 @@ test('getStructureCrossCheckReport: caches the computed report under a key scope
 
     const report = await resolveStructureCrossCheck('struct1', { confSource: 'core', journalSource: 'sjr' });
 
-    assert.equal(setKey, 'crosscheck:structure:struct1:v42:core:sjr:links-v1');
+    assert.equal(setKey, 'crosscheck:structure:local-v1:struct1:v42:core:sjr:links-v1');
     assert.equal(setValue, report);
     assert.equal(setTtl, 60 * 60);
+});
+
+test('personal structure links are request-specific and never read or write the shared report cache', async () => {
+    const automatic = [{ idHal: 'h1', name: 'Alice', resolved: { pid: 'automatic', source: 'orcid' }, candidates: [] }];
+    const resolve = createStructureCrossChecker({
+        getIdentityResolutionReport: async () => automatic,
+        getCrossCheckReport: async pid => ({ ...fakeReport(), selectedPid: pid }),
+        getPersonLinksVersion: async () => 'automatic-only-v1',
+        getDblpStatus: async () => ({ version: 'v1' }),
+        getCache: async () => { throw new Error('personal report must not read the shared cache'); },
+        setCache: async () => { throw new Error('personal report must not write the shared cache'); },
+    });
+    for (const pid of ['browser-a', 'browser-b']) {
+        const report = await resolve('lab', { identityLinks: { byIdHal: new Map([['h1', pid]]) } });
+        assert.equal(report.members[0].pid, pid);
+    }
+    assert.equal(automatic[0].resolved.pid, 'automatic');
 });

@@ -14,12 +14,15 @@ import { exportCrossCheckByMemberMarkdown, exportCrossCheckByMemberJson } from '
 
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
-import { ExportButton } from './ExportButton';
+import { ReportButton } from './ReportButton';
 import { IdentityLinksPanel } from './IdentityLinksPanel';
 import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
+import { applyLocalDecisions, LINKS_KEY } from '../personalData';
+import { usePersonalDataVersion } from '../usePersonalDataVersion';
+import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 
 // Structure-scope sibling of CrossCheck.js/CrossCheckTeam.js (see
 // api/src/crosscheckStructure.js). Unlike a rankme "team" (client-side only,
@@ -37,11 +40,14 @@ import '../App.css';
 const yearAccessor = r => parseInt(r.publication.dblp.year, 10) || 0;
 
 export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor, yearRange }) {
-    const [report, setReport] = useState(null);
+    const [automaticReport, setReport] = useState(null);
+    const personalVersion = usePersonalDataVersion();
+    const identityVersion = usePersonalDataVersion(LINKS_KEY);
+    // Personal storage changes invalidate the derived report without refetching it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
-    // Bumped after a confirm/reject click or a manual identity link lands,
-    // to force the effect below to refetch -- same reasoning as
-    // CrossCheckTeam.js's own refreshToken.
+    // Identity edits can require a new automatic report; decisions are local.
     const [refreshToken, setRefreshToken] = useState(0);
     // A cross-check starts with the same identity-resolution dialog available
     // from the structure page. It can be revisited from the header icon.
@@ -62,11 +68,10 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [structId, conferenceSource, journalSource, refreshToken]);
+    }, [structId, conferenceSource, journalSource, refreshToken, identityVersion]);
 
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
-            .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
     };
 
@@ -133,7 +138,8 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
             )}
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <ExportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
+                <CrosscheckDecisionFileButtons report={report} scope={{ type: 'structure', id: structId }} />
+                <ReportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
             </Box>
 
             {report.members.length === 0 && report.unresolvedMembers.length === 0 && (

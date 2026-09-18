@@ -20,6 +20,8 @@ import EditIcon from '@mui/icons-material/Edit';
 
 import { getUseCommunityOverrides, setUseCommunityOverrides } from '../matchOverrides';
 import { listProfiles, axesForReference, createProfile } from '../customRankings';
+import { IdentityLinksButton } from './IdentityLinksButton';
+import { CrosscheckDecisionsButton } from './CrosscheckDecisionsButton';
 import { useFilterSettings } from '../FilterSettingsContext';
 
 const REFERENCE_LABEL = { core: 'CORE', sjr: 'SJR', ccf: 'CCF' };
@@ -300,6 +302,15 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings }) {
           When a match gets corrected the same way by several different people, everyone sees that correction
           by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
         </Typography>
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle1" gutterBottom>Personal identity links and cross-check decisions</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          Manage all choices saved in this browser. To share only one author or structure, use the controls on its page.
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <IdentityLinksButton all />
+          <CrosscheckDecisionsButton />
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Close</Button>

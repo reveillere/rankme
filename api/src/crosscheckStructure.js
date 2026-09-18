@@ -48,7 +48,7 @@ export function createStructureCrossChecker({ getIdentityResolutionReport, getCr
         // Snapshot before computation so an in-flight report cannot poison
         // the cache for a later identity edit.
         const linksVersion = await getPersonLinksVersion();
-        const key = `crosscheck:structure:${structId}:${dblpStatus.version}:${confSource}:${journalSource}:${linksVersion}`;
+        const key = `crosscheck:structure:local-v1:${structId}:${dblpStatus.version}:${confSource}:${journalSource}:${linksVersion}`;
 
         // Supplied links are request-specific and must never leak into the
         // shared structure cache.
@@ -152,7 +152,7 @@ export async function controllerCrossCheckStructure(req, res) {
         // POST-only, same as crosscheck.js's own controllerCrossCheck: the
         // GET compat route is what CrossCheckStructure.js itself uses, and
         // it already does this filtering/correction work client-side.
-        if (req.method === 'POST') {
+        if (req.method === 'POST' && req.route.path !== '/internal/crosscheck/structure') {
             const options = crossCheckPresentationOptionsFrom(req);
             const members = [];
             let totalConfirmedCount = 0;

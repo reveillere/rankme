@@ -18,14 +18,16 @@ import DownloadIcon from '@mui/icons-material/Download';
 // whatever title/filename/sortMode (or results/members) that page's own
 // export needs, so this component has no idea whether it's exporting a
 // publication list or a cross-check report.
-export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false }) {
+export function ExportButton({ onExportMarkdown, onExportJson, onExportCsv, disabled = false, updateUrl = true }) {
   const [anchorEl, setAnchorEl] = useState(null);
 
   const handleSelect = (onExport, format) => {
     setAnchorEl(null);
-    const url = new URL(window.location.href);
-    url.searchParams.set('export', format);
-    window.history.replaceState({}, '', url);
+    if (updateUrl) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('export', format);
+      window.history.replaceState({}, '', url);
+    }
     onExport();
   };
 

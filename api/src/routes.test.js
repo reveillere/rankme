@@ -98,3 +98,13 @@ test('every requireApiToken-protected route also has a rate limiter in its middl
         );
     }
 });
+
+test('browser choices have no global write or legacy read routes', () => {
+    const routes = expressRoutes();
+    for (const path of ['/identity/link', '/identity/links', '/identity/links/import', '/crosscheck/override']) {
+        assert.equal(routes.some(route => route.path === path), false, path);
+    }
+    const structure = routes.find(route => route.path === '/internal/crosscheck/structure');
+    assert.ok(structure);
+    assert.ok(structure.middlewareNames.includes('rateLimitMiddleware'));
+});

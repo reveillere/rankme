@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createIdentityResolver, arbitrate, createDblpIdentityResolver, listLinksCore, deleteLinkCore, importLinksCore } from './identityResolution.js';
+import { createIdentityResolver, arbitrate, createDblpIdentityResolver } from './identityResolution.js';
 
 // Builds a resolver over an in-memory fake of every I/O dependency --
 // same style as dblpSearchCache.test.js's fixture, so the arbitration and
@@ -143,12 +143,6 @@ test('resolveStructure: a member with no observed name is reported not-found wit
     assert.equal(result.resolved, null);
 });
 
-// ****************************************************************************************************
-// ****************************************************************************************************
-// resolveDblpIdentityForIdHal (reverse of resolveHalIdentityForPid: idHal ->
-// pid) -- same "pure core, injected I/O" fixture style as resolveStructure
-// above.
-
 function dblpResolverFixture({ existingLinks = new Map(), halOrcidByIdHal = new Map(), dblpMatchByOrcid = new Map() } = {}) {
     const savedLinks = [];
     const resolveDblpIdentityForIdHal = createDblpIdentityResolver({
@@ -210,85 +204,10 @@ test('resolveDblpIdentityForIdHal: an existing manual link short-circuits before
     assert.deepEqual(savedLinks, []);
 });
 
-// ****************************************************************************************************
-// ****************************************************************************************************
-// listLinksCore / deleteLinkCore / importLinksCore -- direct management of
-// personLinks, independent of any resolution pipeline. Exercised against a
-// bare in-memory fake of the three Mongo collection methods they each use
-// (find/toArray, deleteOne, updateOne) -- same "pure core, injected I/O"
-// style as the fixtures above, no real Mongo behind it.
-function fakeLinksCollection(initialDocs = []) {
-    let docs = initialDocs.map(d => ({ ...d }));
-    return {
-        find(query) {
-            const idHalIn = query.$or.find(c => c.idHal)?.idHal.$in || [];
-            const pidIn = query.$or.find(c => c.pid)?.pid.$in || [];
-            const matched = docs.filter(d => idHalIn.includes(d.idHal) || pidIn.includes(d.pid));
-            return { toArray: async () => matched.map(({ idHal, pid, source, createdAt }) => ({ idHal, pid, source, createdAt })) };
-        },
-        async deleteOne({ idHal }) {
-            const before = docs.length;
-            docs = docs.filter(d => d.idHal !== idHal);
-            return { deletedCount: before - docs.length };
-        },
-        async updateOne({ idHal }, { $set }) {
-            const i = docs.findIndex(d => d.idHal === idHal);
-            if (i >= 0) docs[i] = { ...docs[i], ...$set };
-            else docs.push({ ...$set });
-        },
-        _docs: () => docs,
-    };
-}
-
-test('listLinksCore: matches by idHal or pid, merged into one result set', async () => {
-    const col = fakeLinksCollection([
-        { idHal: 'idhal-1', pid: '10/1000', source: 'manual', createdAt: new Date('2024-01-01') },
-        { idHal: 'idhal-2', pid: '10/2000', source: 'orcid', createdAt: new Date('2024-01-02') },
-        { idHal: 'idhal-3', pid: '10/3000', source: 'manual', createdAt: new Date('2024-01-03') },
-    ]);
-    const result = await listLinksCore(col, { idHals: ['idhal-1'], pids: ['10/2000'] });
-    assert.deepEqual(result.map(r => r.idHal).sort(), ['idhal-1', 'idhal-2']);
-});
-
-test('listLinksCore: no match for either list returns an empty array', async () => {
-    const col = fakeLinksCollection([{ idHal: 'idhal-1', pid: '10/1000', source: 'manual', createdAt: new Date() }]);
-    const result = await listLinksCore(col, { idHals: ['idhal-nope'], pids: [] });
-    assert.deepEqual(result, []);
-});
-
-test('deleteLinkCore: removes the document keyed on idHal and reports success', async () => {
-    const col = fakeLinksCollection([{ idHal: 'idhal-1', pid: '10/1000', source: 'manual', createdAt: new Date() }]);
-    const deleted = await deleteLinkCore(col, 'idhal-1');
-    assert.equal(deleted, true);
-    assert.deepEqual(col._docs(), []);
-});
-
-test('deleteLinkCore: reports failure (not an error) when no link exists for that idHal', async () => {
-    const col = fakeLinksCollection([]);
-    const deleted = await deleteLinkCore(col, 'idhal-missing');
-    assert.equal(deleted, false);
-});
-
-test('importLinksCore: upserts every valid entry as source manual, counting imported vs skipped', async () => {
-    const col = fakeLinksCollection([{ idHal: 'idhal-1', pid: '10/9999', source: 'orcid', createdAt: new Date('2020-01-01') }]);
-    const result = await importLinksCore(col, [
-        { idHal: 'idhal-1', pid: '10/1000' }, // overwrites the existing orcid-sourced link
-        { idHal: 'idhal-2', pid: '10/2000' },
-        { idHal: '', pid: '10/3000' }, // invalid: blank idHal
-        { idHal: 'idhal-4', pid: '' }, // invalid: blank pid
-        { idHal: 'idhal-5' }, // invalid: missing pid entirely
-        null, // invalid: not even an object
-    ]);
-    assert.deepEqual(result, { imported: 2, skipped: 4 });
-    const byIdHal = Object.fromEntries(col._docs().map(d => [d.idHal, d]));
-    assert.equal(byIdHal['idhal-1'].pid, '10/1000');
-    assert.equal(byIdHal['idhal-1'].source, 'manual');
-    assert.equal(byIdHal['idhal-2'].pid, '10/2000');
-    assert.equal(byIdHal['idhal-2'].source, 'manual');
-});
-
-test('importLinksCore: an empty batch imports and skips nothing', async () => {
-    const col = fakeLinksCollection([]);
-    const result = await importLinksCore(col, []);
-    assert.deepEqual(result, { imported: 0, skipped: 0 });
+test('production-style ORCID resolver works without any persistent link store', async () => {
+    const resolve = createDblpIdentityResolver({
+        getHalOrcid: async () => 'orcid',
+        findDblpAuthorByOrcid: async () => ({ pid: 'p1', name: 'Alice' }),
+    });
+    assert.deepEqual(await resolve('h1'), { pid: 'p1', name: 'Alice', source: 'orcid' });
 });

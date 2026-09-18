@@ -14,6 +14,9 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { IdentityLinksButton } from './IdentityLinksButton';
+import { LINKS_KEY } from '../personalData';
+import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -113,21 +116,22 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   }, [id]);
 
   // Proposed DBLP identity for this idHal -- symmetric to Author.js's own
-  // suggestedHalIdentity (a previously confirmed personLinks entry if one
+  // suggestedHalIdentity (a previously confirmed local identity link if one
   // exists, else a fresh ORCID match, else null; see
   // api/src/identityResolution.js's controllerSuggestDblpIdentity). Purely a
   // suggestion shown in the cross-check dialog below -- never applied
   // without the user picking it.
+  const identityVersion = usePersonalDataVersion(LINKS_KEY);
   const [suggestedDblpIdentity, setSuggestedDblpIdentity] = useState(null);
   useEffect(() => {
     let cancelled = false;
     setSuggestedDblpIdentity(null);
-    fetchIdentitySuggestionForIdHal(id).then(info => { if (!cancelled) setSuggestedDblpIdentity(info); });
+    fetchIdentitySuggestionForIdHal(id).then(info => { if (!cancelled) setSuggestedDblpIdentity(info); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, identityVersion]);
   const [crossCheckDialogOpen, setCrossCheckDialogOpen] = useState(false);
 
-  // A personLinks-based suggestion (an already-confirmed link) never carries
+  // A local suggestion (an already-confirmed link) never carries
   // a name -- controllerSuggestDblpIdentity only ever attaches one to a
   // fresh ORCID match (see identityResolution.js's own
   // resolveDblpIdentityForIdHal). This author's own name is known -- either
@@ -292,11 +296,11 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
             ))}
         </>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<ExportButton
+        exportButton={<><IdentityLinksButton idHals={[id]} /><ExportButton
           onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.md`, sortMode })}
           onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.json`, sortMode })}
           onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-${id}.csv`, sortMode })}
-        />}
+        /></>}
       />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>

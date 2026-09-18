@@ -15,12 +15,15 @@ import { exportCrossCheckByMemberMarkdown, exportCrossCheckByMemberJson } from '
 
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
-import { ExportButton } from './ExportButton';
+import { ReportButton } from './ReportButton';
 import { IdentityLinksPanel } from './IdentityLinksPanel';
 import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
+import { applyLocalDecisions, LINKS_KEY } from '../personalData';
+import { usePersonalDataVersion } from '../usePersonalDataVersion';
+import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 
 // Team-scope sibling of CrossCheck.js (single-author DBLP -> HAL crosscheck)
 // -- see api/src/crosscheckTeam.js. The row/section rendering below is
@@ -51,11 +54,14 @@ export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive,
 }
 
 function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
-    const [report, setReport] = useState(null);
+    const [automaticReport, setReport] = useState(null);
+    const personalVersion = usePersonalDataVersion();
+    const identityVersion = usePersonalDataVersion(LINKS_KEY);
+    // Personal storage changes invalidate the derived report without refetching it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
-    // Bumped after a confirm/reject click or a manual identity link lands,
-    // to force the effect below to refetch -- same reasoning as CrossCheck.js's
-    // own refreshToken.
+    // Identity edits can require a new automatic report; decisions are local.
     const [refreshToken, setRefreshToken] = useState(0);
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
     const { conferenceSource, journalSource } = useFilterSettings();
@@ -76,11 +82,10 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [team.id, team.source, pids, conferenceSource, journalSource, refreshToken]);
+    }, [team.id, team.source, pids, conferenceSource, journalSource, refreshToken, identityVersion]);
 
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
-            .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
     };
 
@@ -135,7 +140,8 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
             )}
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <ExportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
+                <CrosscheckDecisionFileButtons report={report} scope={{ type: 'team', id: team.id, name: team.name }} />
+                <ReportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
             </Box>
 
             {report.members.length === 0 && report.unresolvedMembers.length === 0 && (

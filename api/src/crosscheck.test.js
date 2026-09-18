@@ -1,6 +1,12 @@
+import { applyLocalDecisions } from '../../front/src/personalData.js';
+
+function applyOverrides(report, byKey) {
+    return applyLocalDecisions(report, [...byKey].flatMap(([dblpKey, decisions]) => [...decisions].map(([halDocid, decision]) => ({ dblpKey, halDocid: String(halDocid), decision }))));
+}
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePubTitle, matchPublications, selectFuzzyCandidates, applyOverrides } from './crosscheck.js';
+import { normalizePubTitle, matchPublications, selectFuzzyCandidates } from './crosscheck.js';
 
 // Builds a fake dblp publication in the same shape dblpLocal.js's
 // toPublication produces (only the fields matchPublications/normalizePubTitle

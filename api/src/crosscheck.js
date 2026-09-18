@@ -5,7 +5,6 @@ import * as hal from './hal.js';
 import { extractDoi } from './crossref.js';
 import { levenshtein } from './levenshtein.js';
 import { computeDblpPublicationRank, computeHalPublicationRank, confSourceFrom, journalSourceFrom } from './authorStream.js';
-import * as crosscheckOverrides from './crosscheckOverrides.js';
 import { parseIdentityLinks, assertIdentityPairIsCompatible, IdentityLinksConflictError } from './identityLinksInput.js';
 import { crossCheckPresentationOptionsFrom, filterResultsByYear, applyCorrectionsToResults, renderCrossCheckExport } from './crosscheckPresentation.js';
 
@@ -267,11 +266,8 @@ export function matchPublications(dblpPubs, halPubs) {
     });
 }
 
-// The confidence -> status rule, shared between the automatic matching above
-// and applyOverrides below -- a maintainer's override rejecting a match (or
-// confirming one) has to demote/promote a dblp pub's status by exactly the
-// same rule the automatic matcher used in the first place, not a
-// second, possibly-drifting one.
+// Automatic match confidence. The browser applies personal decisions using
+// this same rule; crosscheck.test.js also exercises that browser implementation.
 function statusFromMatches(matches) {
     return matches.length === 0
         ? 'missing'
@@ -313,43 +309,6 @@ function toReviewHalPubsByDocid(results) {
     return byDocid;
 }
 
-// Applies any maintainer decision recorded via POST /api/crosscheck/override
-// (see crosscheckOverrides.js) on top of the automatically-matched report.
-// Deliberately run on every call, cache hit or not -- see getCrossCheckReport
-// below: the (expensive) matching+ranking result is what's cached, unchanged
-// by a decision, so a new override never has to invalidate it. Cheap either
-// way: a cross-check's own results list is at most a few dozen items, and
-// there's rarely more than a couple of recorded overrides for a given pid.
-//
-// Pure/sync (overridesByDblpKey is handed in, not fetched here) so a test
-// can exercise it directly against a hand-built Map, the same way
-// matchPublications' own tests build fake publications rather than a real
-// Mongo/HAL fixture -- getCrossCheckReport below is the only real caller,
-// and does the actual crosscheckOverrides.getOverridesByDblpKey fetch.
-export function applyOverrides(report, overridesByDblpKey) {
-    if (overridesByDblpKey.size === 0) return report;
-
-    const results = report.results.map(result => {
-        const decisions = overridesByDblpKey.get(result.publication.dblp.key);
-        if (!decisions) return result;
-
-        // 'different': this specific candidate no longer counts as a
-        // possible match for this dblp pub at all. 'same': kept, and if any
-        // survive marked that way, forces the pub to 'confirmed' regardless
-        // of what the automatic matcher thought of them (a human looked at
-        // the two publications directly) -- with only those match(es) kept
-        // as the evidence, rather than the multiplication of otherwise-
-        // unrelated fuzzy candidates automatic matching may have also found.
-        const kept = result.matches.filter(m => decisions.get(m.halPub.docid) !== 'different');
-        const confirmedByHand = kept.filter(m => decisions.get(m.halPub.docid) === 'same');
-        const matches = confirmedByHand.length > 0 ? confirmedByHand : kept;
-        const status = confirmedByHand.length > 0 ? 'confirmed' : statusFromMatches(matches);
-        return { ...result, status, matches };
-    });
-
-    return { ...report, results };
-}
-
 // Returns null (not a report) when the pid itself is unknown, so the
 // controller can 404 instead of caching/serving an empty-looking report.
 export async function getCrossCheckReport(pid, halId, { confSource, journalSource }) {
@@ -359,7 +318,7 @@ export async function getCrossCheckReport(pid, halId, { confSource, journalSourc
     // means for this author, and switching CORE/SJR<->CCF on either axis
     // changes what rank each still-missing/to-review publication gets, so a
     // cached report must not survive either. Overrides are deliberately NOT
-    // part of this key -- see applyOverrides above.
+    // part of this key: they are applied only in the browser.
     const key = `crosscheck:${pid}:${halId}:${dblpStatus.version}:${confSource}:${journalSource}`;
 
     let report = await cache.get(key);
@@ -412,9 +371,8 @@ export async function getCrossCheckReport(pid, halId, { confSource, journalSourc
         await cache.set(key, report, CACHE_TTL_S);
     }
 
-    const dblpKeys = report.results.map(r => r.publication.dblp.key);
-    const overridesByDblpKey = await crosscheckOverrides.getOverridesByDblpKey(dblpKeys);
-    return applyOverrides(report, overridesByDblpKey);
+    // Personal decisions are applied in the browser, never read from Mongo.
+    return report;
 }
 
 export async function controllerCrossCheck(req, res) {

@@ -213,3 +213,20 @@ test('getTeamCrossCheckReport (hal source): a resolved identity whose pid getCro
     assert.equal(report.unresolvedMembers[0].candidatePid, '99/9999');
     assert.equal(report.unresolvedMembers[0].candidateName, 'Ghost');
 });
+
+test('personal team links skip automatic identity lookups in both directions', async () => {
+    const resolve = createTeamCrossChecker({
+        resolveHalIdentityForPid: async () => { throw new Error('must use personal link'); },
+        resolveDblpIdentityForIdHal: async () => { throw new Error('must use personal link'); },
+        getDblpName: async () => 'Alice',
+        getCrossCheckReport: async (pid, idHal) => {
+            assert.equal(pid, 'p1'); assert.equal(idHal, 'h1');
+            return { dblpStatus: {}, halCacheNote: '', results: [] };
+        },
+    });
+    const identityLinks = { byIdHal: new Map([['h1', 'p1']]), byPid: new Map([['p1', 'h1']]) };
+    for (const source of ['hal', 'dblp']) {
+        const report = await resolve({ source, pids: [source === 'hal' ? 'h1' : 'p1'] }, { identityLinks });
+        assert.equal(report.members.length, 1);
+    }
+});

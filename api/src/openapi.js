@@ -31,10 +31,25 @@ const recordPresentationParameters = [
   { name: 'customRankings', in: 'query', schema: { type: 'string', format: 'json', example: '{"conference":{"id":"...","reference":"core","entries":{}},"journal":{"id":"...","reference":"ccf","entries":{}}}' }, description: 'JSON object {conference?, journal?}, each an optional custom-ranking profile (Settings → My custom rankings → Export JSON) to apply on that axis. A profile\'s own reference ranking (core/sjr/ccf) must be able to cover the axis it is placed under -- e.g. an sjr-referenced profile is rejected (400) under "conference". Applied to rank.effectiveValue only; never persisted server-side.' },
 ];
 
-const identityLinks = {
+const identityLinkEntries = {
   type: 'array',
-  description: 'Optional content of an exported Identity links JSON file. Used only for this request; it is not persisted. Each idHal and PID must occur at most once.',
   items: { type: 'object', required: ['idHal', 'pid'], properties: { idHal: { type: 'string', example: 'laurent-reveillere' }, pid: { type: 'string', example: '11/1262' } } },
+};
+const identityLinks = {
+  description: 'Personal links for this request only; never persisted. Accepts a legacy array or the versioned Identity links JSON export. Each idHal and PID must map to only one counterpart.',
+  oneOf: [
+    identityLinkEntries,
+    {
+      type: 'object', required: ['format', 'version', 'kind', 'entries'],
+      properties: {
+        format: { type: 'string', enum: ['rankme-personal-data'] },
+        version: { type: 'integer', enum: [1] },
+        kind: { type: 'string', enum: ['identity-links'] },
+        scope: { type: 'object', additionalProperties: true },
+        entries: identityLinkEntries,
+      },
+    },
+  ],
 };
 
 // No categories/ranks/sort here -- see crosscheckPresentation.js's own
@@ -115,7 +130,7 @@ Each rankable record's \`rank\` also carries an \`effectiveValue\` alongside the
 
 ## Cross-check options
 
-Cross-check POST requests accept \`identityLinks\`, the JSON content of an exported Identity links file. The links apply only to that request and override inferred identities. A malformed file, or a file that maps one idHal or PID to multiple counterparts, returns \`409 Conflict\` and no partial result.
+Cross-check POST requests accept \`identityLinks\`, the JSON content of an exported Identity links file. The links apply only to that request and override inferred identities. Personal cross-check decisions remain in the browser and are not applied to API responses. Legacy global identity links and cross-check decisions are no longer used. A malformed file, or a file that maps one idHal or PID to multiple counterparts, returns \`409 Conflict\` and no partial result.
 
 \`from\`/\`to\` filter \`results\` (and, for \`/crosscheck/structure\`/\`/crosscheck/team\`, every member's own \`results\`) by publication year, the same year filter every crosscheck page in the web app now has. \`useCommunityCorrections\`, \`matchOverrides\` and \`customRankings\` attach \`rank.effectiveValue\` to both a result's own \`publication.rank\` and every HAL candidate's \`rank\` in \`matches\` -- same contract and JSON shape as the record endpoints' own parameters of the same name, just applied to this endpoint's missing/to-review shape instead of a flat record list. \`export\` renders the (year-filtered, correction-applied) report as Markdown/CSV/JSON instead of the normal JSON envelope.
 

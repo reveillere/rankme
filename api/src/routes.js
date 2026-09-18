@@ -10,7 +10,6 @@ import { rateLimit } from './rateLimit.js';
 import * as authorStream from './authorStream.js';
 import * as matchOverrides from './matchOverrides.js';
 import * as crosscheck from './crosscheck.js';
-import * as crosscheckOverrides from './crosscheckOverrides.js';
 import * as crosscheckStructure from './crosscheckStructure.js';
 import * as crosscheckTeam from './crosscheckTeam.js';
 import * as identityResolution from './identityResolution.js';
@@ -70,12 +69,9 @@ router.get('/hal/structure-info/*', hal.controllerStructureInfo);
 router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
 router.post('/records/team', requireApiToken, costlyRouteLimit, controllerTeamRecords);
 
+// Read-only automatic suggestions. Personal link CRUD lives in localStorage.
 router.get('/identity/structure/:structId', costlyRouteLimit, identityResolution.controllerResolveStructure);
 router.post('/identity/team', costlyRouteLimit, identityResolution.controllerResolveTeam);
-router.post('/identity/link', identityResolution.controllerRecordLink);
-router.get('/identity/links', identityResolution.controllerListLinks);
-router.delete('/identity/link', identityResolution.controllerDeleteLink);
-router.post('/identity/links/import', identityResolution.controllerImportLinks);
 router.get('/identity/suggest/*', identityResolution.controllerSuggestIdentity);
 router.get('/identity/suggest-dblp/:idHal', identityResolution.controllerSuggestDblpIdentity);
 
@@ -95,8 +91,9 @@ router.post('/crosscheck/structure', requireApiToken, costlyRouteLimit, crossche
 // notion of a team at all) and can be long, so it travels in the body
 // rather than a query string the way a single wildcard id does above.
 router.post('/crosscheck/team', requireApiToken, costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
+// Browser calculation with request-scoped links; no shared identity writes.
+router.post('/internal/crosscheck/structure', costlyRouteLimit, crosscheckStructure.controllerCrossCheckStructure);
 router.post('/internal/crosscheck/team', costlyRouteLimit, crosscheckTeam.controllerCrossCheckTeam);
-router.post('/crosscheck/override', crosscheckOverrides.controllerRecord);
 
 // requireAdminToken added here: this triggers a full drop + rebuild of
 // every DBLP collection (see admin.js's processXML) -- CPU/memory/disk

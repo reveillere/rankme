@@ -15,9 +15,39 @@ export async function searchAuthor(query) {
     return await resp.json();
 }
 
-export async function fetchAuthor(authorPID) {
-        const resp = await fetch(`/api/dblp/author/${authorPID}`);
-        return await resp.json();
+export async function fetchAuthor(authorPID, { signal, timeoutMs = 15_000 } = {}) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const cancel = () => controller.abort();
+    if (signal?.aborted) cancel();
+    else signal?.addEventListener('abort', cancel, { once: true });
+    const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs);
+    try {
+        const resp = await fetch(`/api/dblp/author/${authorPID}`, { signal: controller.signal });
+        const body = await resp.json().catch(() => null);
+        if (!resp.ok) {
+            if (resp.status === 404) throw new Error(`No DBLP author found for PID ${authorPID}.`);
+            if (resp.status === 503 && typeof body?.error === 'string' && body.error.startsWith('DBLP local dump')) {
+                throw new Error(`${body.error}. Please try again later.`);
+            }
+            throw new Error(`The RankMe API is unavailable (HTTP ${resp.status}). Please try again.`);
+        }
+        if (typeof body?.dblpperson?.$?.name !== 'string' || !body.dblpperson.$.name.trim()) {
+            throw new Error('The RankMe API returned an invalid author response. Please try again.');
+        }
+        return body;
+    } catch (error) {
+        if (signal?.aborted) throw error;
+        if (timedOut) throw new Error('Loading this author timed out. Please try again.');
+        if (error instanceof TypeError) throw new Error('Cannot reach the RankMe API. Check your connection and try again.');
+        throw error;
+    } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
+    }
 }
 
 // { pid, orcid } -- orcid is null when this dblp author's homepage record

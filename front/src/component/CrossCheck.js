@@ -14,10 +14,14 @@ import { exportCrossCheckMarkdown, exportCrossCheckJson } from '../exportCrossCh
 
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
-import { ExportButton } from './ExportButton';
+import { ReportButton } from './ReportButton';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 
 import '../App.css';
+import { applyLocalDecisions, listIdentityLinks, LINKS_KEY } from '../personalData';
+import { usePersonalDataVersion } from '../usePersonalDataVersion';
+import { IdentityLinksButton } from './IdentityLinksButton';
+import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 
 const yearAccessor = result => parseInt(result.publication.dblp.year, 10) || 0;
 
@@ -45,12 +49,15 @@ const SECTION_BOX_SX = { maxWidth: 900, margin: '0 auto 30px' };
 // shared before this range even existed) means "don't filter" rather than
 // crashing -- see App.js's tabFromPath for how the URL carries it.
 export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor }) {
-    const [report, setReport] = useState(null);
+    const [automaticReport, setReport] = useState(null);
+    const personalVersion = usePersonalDataVersion();
+    const identityVersion = usePersonalDataVersion(LINKS_KEY);
+    const effectiveHalId = listIdentityLinks({ pids: [pid] })[0]?.idHal || halId;
+    // Personal storage changes invalidate the derived report without refetching it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
-    // Bumped after a confirm/reject click lands (see handleOverrideDecision)
-    // to force the effect below to refetch -- overrides are occasional,
-    // maintainer-only clicks, so a full report refetch is simpler than
-    // reaching into `report` to patch the one affected result optimistically.
+    // Identity edits can require a new automatic report; decisions are local.
     const [refreshToken, setRefreshToken] = useState(0);
     const { conferenceSource, journalSource } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
@@ -68,21 +75,20 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
         let cancelled = false;
         setReport(null);
         setError(null);
-        fetchCrossCheck(pid, halId, { conferenceSource, journalSource })
+        fetchCrossCheck(pid, effectiveHalId, { conferenceSource, journalSource })
             .then(data => { if (!cancelled) setReport(data); })
             .catch(err => { if (!cancelled) setError(err); });
         return () => { cancelled = true; };
-    }, [pid, halId, conferenceSource, journalSource, refreshToken]);
+    }, [pid, effectiveHalId, conferenceSource, journalSource, refreshToken, identityVersion]);
 
     // dblpKey/halDocid identify the exact pair a maintainer just clicked
-    // confirm/reject on -- see api/src/crosscheckOverrides.js. Errors are
+    // confirm/reject on. Choices are stored locally; errors are
     // surfaced the same way the initial load's own failure is (this page's
     // one `error` state), since a failed write left silent would look to
     // the maintainer like their click confirmed/rejected the pair when it
     // didn't.
     const handleOverrideDecision = (dblpKey, halDocid, decision) => {
         postCrossCheckOverride({ dblpKey, halDocid, decision })
-            .then(() => setRefreshToken(t => t + 1))
             .catch(err => setError(err));
     };
 
@@ -130,7 +136,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             <div style={{ textAlign: 'center', marginTop: '40px', marginBottom: '20px' }}>
                 <h1>DBLP → HAL cross-check</h1>
                 <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94' }}>
-                    pid: {pid} · idHal: {halId}
+                    pid: {pid} · idHal: {effectiveHalId}
                 </div>
             </div>
 
@@ -140,7 +146,9 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
             </Alert>
 
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <ExportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
+                <IdentityLinksButton pids={[pid]} onLinksChanged={() => setRefreshToken(t => t + 1)} />
+                <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
+                <ReportButton onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
             </Box>
 
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} boxSx={SECTION_BOX_SX} headingVariant="h6" />

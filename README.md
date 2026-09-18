@@ -109,3 +109,54 @@ curl -H 'Authorization: Bearer your-token' https://rankme.fr/api/dblp/author/11/
 ```
 
 The browser interface uses its internal routes and does not require an API token. Local development reads `API_TOKENS` from `.env`, falling back to `dev-api-token` when it is absent.
+
+## Personal links and cross-check decisions
+
+Identity choices and publication-pair decisions belong to the current browser:
+`rankme:identityLinks` and `rankme:crosscheckDecisions` in localStorage.
+Settings exposes **My identity links** and **My cross-check decisions** to
+review, import/export, and delete/undo personal choices.
+
+To collaborate on an author, structure, or team:
+
+1. Open its **Identity links** panel and export JSON (CSV is also supported).
+2. On its cross-check page, open **My cross-check decisions** and export JSON.
+   This is a decisions file, distinct from the existing report export.
+3. Your colleague opens the same author/structure/team, imports the links
+   first, then imports the decisions file.
+
+Exports include only the selected scope, across all years (independent of the
+report's year filter). Automatic ORCID links displayed in the links panel can
+also be exported; importing them makes them personal choices in the receiving
+browser. Imports merge with local data. Incoming choices replace the same
+identity/publication-pair entry; unrelated entries are preserved. Invalid,
+contradictory, or out-of-scope files are rejected atomically. A PID already
+assigned to another HAL identity must be unlinked before importing a conflicting
+assignment. The global Settings panels accept files spanning multiple scopes.
+
+JSON files use `{format: "rankme-personal-data", version: 1,
+kind: "identity-links" | "crosscheck-decisions", scope, entries}`.
+Legacy identity-link arrays and `idHal,pid` CSV remain importable.
+Cross-check entries contain `dblpKey`, `halDocid`, and
+`decision: "same" | "different"`.
+
+The server computes automatic matches. It accepts personal identity links for
+one calculation without persisting them or caching a personalized structure
+report. Decisions are applied in the browser, including report exports, and
+undo immediately restores the automatic result. Changes also refresh other
+open tabs on the same origin. Clearing browser storage removes these choices;
+keep exported files as backups.
+
+### Transition from global decisions
+
+The old MongoDB collections `rankme.personLinks` and
+`rankme.crosscheckOverrides` are retained but no longer read or written.
+They are not silently copied to every visitor: historical entries cannot be
+reliably attributed to an individual browser. An administrator can export
+selected old records for explicit import as personal files (links accept
+legacy arrays; decisions accept arrays of the three fields above).
+
+The old global identity CRUD routes and `POST /crosscheck/override` are
+removed. Deploy the updated front and API together. Protected API callers may
+still supply `identityLinks` as an array or the versioned export, scoped to
+their request. Community venue-match corrections remain a separate feature.

@@ -22,6 +22,9 @@ import { RankSummary } from './RankSummary';
 import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ExportButton } from './ExportButton';
+import { IdentityLinksButton } from './IdentityLinksButton';
+import { LINKS_KEY } from '../personalData';
+import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { RecordsHeader } from './RecordsHeader';
 import { ReviewFilterToggle } from './ReviewFilterToggle';
 import { CrossCheckDialog } from './CrossCheckDialog';
@@ -50,31 +53,45 @@ const Alert = React.forwardRef(function Alert(props, ref) {
 const RanksByYearChart = React.lazy(() => import('./Statistics').then(m => ({ default: m.RanksByYearChart })));
 
 export function Author({ pid, onOpenAuthor, onNameResolved, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
-  const [author, setAuthor] = useState(null);
+  const [load, setLoad] = useState({ pid, author: null, error: null });
+  const [attempt, setAttempt] = useState(0);
+  const nameResolved = useRef(onNameResolved);
+  useEffect(() => { nameResolved.current = onNameResolved; }, [onNameResolved]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    setLoad({ pid, author: null, error: null });
     const fetchData = async function () {
       try {
-        const author = await fetchAuthor(pid);
-        setAuthor(author)
+        const author = await fetchAuthor(pid, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setLoad({ pid, author, error: null });
         // A tab opened directly by pid (or reloaded from a bare /dblp/:pid
         // URL) doesn't know this author's display name yet -- patch it in
         // once dblp's own record for them resolves, same as Structure.js
         // does for a structure's name.
         const name = author?.dblpperson?.$?.name;
-        if (name) onNameResolved?.(trimLastDigits(name));
+        if (name) nameResolved.current?.(trimLastDigits(name));
       } catch (e) {
-        console.error(`Error fetching data for author ${pid}: `, e);
+        if (!controller.signal.aborted) setLoad({ pid, author: null, error: e.message });
       }
     };
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pid]);
+    // Ignore late responses when switching author, retrying, or unmounting.
+    return () => controller.abort();
+  }, [pid, attempt]);
 
-  if (author === null)
-    return <LoadingSpinner message="Fetching author from DBLP…" />;
+  if (load.pid === pid && load.error) {
+    return <MuiAlert severity="error" sx={{ maxWidth: 640, mx: 'auto', mt: 8 }}
+      action={<Button color="inherit" onClick={() => setAttempt(value => value + 1)}>Retry</Button>}>
+      {load.error}
+    </MuiAlert>;
+  }
 
-  return <AuthorShow author={author?.dblpperson?.$} pid={pid} onOpenAuthor={onOpenAuthor} isActive={isActive} initialYearRange={initialYearRange} onYearRangeChange={onYearRangeChange} initialSort={initialSort} onSortChange={onSortChange} initialExport={initialExport} />;
+  if (load.pid !== pid || load.author === null)
+    return <LoadingSpinner message="Loading author from local DBLP data…" />;
+
+  return <AuthorShow author={load.author.dblpperson.$} pid={pid} onOpenAuthor={onOpenAuthor} isActive={isActive} initialYearRange={initialYearRange} onYearRangeChange={onYearRangeChange} initialSort={initialSort} onSortChange={onSortChange} initialExport={initialExport} />;
 }
 
 
@@ -263,19 +280,20 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
   }, [pid]);
 
   // Proposed HAL identity for this pid -- a previously confirmed
-  // personLinks entry if one exists, else a fresh ORCID match, else null
+  // local identity link if one exists, else a fresh ORCID match, else null
   // (see api/src/identityResolution.js's controllerSuggestIdentity for the
   // exact order). Purely a suggestion shown in CrossCheckDialog -- never
   // applied without the user clicking it.
+  const identityVersion = usePersonalDataVersion(LINKS_KEY);
   const [suggestedHalIdentity, setSuggestedHalIdentity] = useState(null);
   useEffect(() => {
     let cancelled = false;
     setSuggestedHalIdentity(null);
-    fetchIdentitySuggestion(pid).then(info => { if (!cancelled) setSuggestedHalIdentity(info); });
+    fetchIdentitySuggestion(pid).then(info => { if (!cancelled) setSuggestedHalIdentity(info); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [pid]);
+  }, [pid, identityVersion]);
 
-  // A personLinks-based suggestion (an already-confirmed link) never carries
+  // A local suggestion (an already-confirmed link) never carries
   // a name -- controllerSuggestIdentity only ever attaches one to a fresh
   // ORCID match (see identityResolution.js's own resolveHalIdentityForPid).
   // This author's own DBLP name is already known and displayed at the top of
@@ -292,9 +310,7 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
 
   const handleCrossCheckConfirm = (halId) => {
     setCrossCheckDialogOpen(false);
-    // Fire-and-forget: every confirmed pairing (suggested or freshly
-    // searched) feeds personLinks for next time, but a failed write here
-    // must never block opening the cross-check report itself.
+    // Save this browser's confirmed identity for subsequent visits.
     postIdentityLink({ idHal: halId, pid }).catch(err => console.error('Failed to record identity link', err));
     // The currently active year range, not [minYear, maxYear] -- when the
     // filter isn't active, filterYears already equals [minYear, maxYear]
@@ -320,11 +336,11 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
             ))}
         </>}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<ExportButton
+        exportButton={<><IdentityLinksButton pids={[pid]} /><ExportButton
           onExportMarkdown={() => exportDblpPublicationsMarkdown(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.md`, sortMode })}
           onExportJson={() => exportDblpPublicationsJson(filteredRecords, { title: `DBLP records of ${trimLastDigits(author.name)}`, filename: `dblp-${pid.replace(/\//g, '-')}.json`, sortMode })}
           onExportCsv={() => exportDblpPublicationsCsv(filteredRecords, { filename: `dblp-${pid.replace(/\//g, '-')}.csv`, sortMode })}
-        />}
+        /></>}
       />
 
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '40px', margin: '30px 0 40px 0' }}>

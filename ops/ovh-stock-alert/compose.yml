@@ -1,0 +1,31 @@
+services:
+  ovh-stock-alert:
+    build: .
+    container_name: ovh-stock-alert
+    restart: unless-stopped
+    environment:
+      ALERT_TO: laurent.reveillere@gmail.com
+      GMAIL_FROM: laurent.reveillere@gmail.com
+      OVH_PLAN_CODE: vps-2027-model3
+      CHECK_INTERVAL_SECONDS: "600"
+    volumes:
+      - ovh_stock_alert_state:/state
+      - ./msmtprc:/etc/msmtprc:ro
+    secrets:
+      - gmail_app_password
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 32
+    mem_limit: 64m
+
+secrets:
+  gmail_app_password:
+    file: ./secrets/gmail_app_password.txt
+
+volumes:
+  ovh_stock_alert_state:

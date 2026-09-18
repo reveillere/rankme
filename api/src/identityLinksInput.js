@@ -14,6 +14,10 @@ export function parseIdentityLinks(input) {
   if (typeof links === 'string') {
     try { links = JSON.parse(links); } catch { throw new IdentityLinksConflictError('identityLinks must contain valid JSON'); }
   }
+  if (links?.format === 'rankme-personal-data') {
+    if (links.version !== 1 || links.kind !== 'identity-links') throw new IdentityLinksConflictError('Expected an identity-links file (version 1)');
+    links = links.entries;
+  }
   if (!Array.isArray(links)) throw new IdentityLinksConflictError('identityLinks must be an array of { idHal, pid } links');
 
   const byIdHal = new Map();
