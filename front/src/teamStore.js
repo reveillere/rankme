@@ -15,6 +15,7 @@ function write(teams) {
   } catch {
     // storage full/unavailable — teams are client-only for now, best-effort
   }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('rankme:teamchange'));
 }
 
 export function getTeams() {

@@ -9,6 +9,7 @@ import * as sjr from './sjrPortal.js';
 import * as core from './corePortal.js'
 import * as ccf from './ccfPortal.js';
 import * as metrics from './metrics.js';
+import { scheduleAccountCleanup } from './auth.js';
 
 const accessLogStream = fs.createWriteStream('./log/access.log', { flags: 'a' });
 
@@ -29,7 +30,9 @@ if (!corsOrigin) {
 }
 app.use(cors(corsOrigin ? { origin: corsOrigin.split(',').map(o => o.trim()) } : undefined));
 app.use(morgan('dev', { stream: accessLogStream }));
-app.use(express.json());
+// Default body-parser limit is 100kb -- too small for /api/sync/state,
+// which documents (and enforces) up to 10MB of synchronized browser data.
+app.use(express.json({ limit: '11mb' }));
 app.use(metrics.middleware);
 app.get('/openapi.json', (req, res) => res.json(openapiSpec));
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { customSiteTitle: 'RankMe API documentation' }));
@@ -48,6 +51,7 @@ async function start() {
   // a failed fetch with no local snapshot just leaves it empty, so this
   // can't fail startup the way the other two deliberately do.
   await ccf.load();
+  scheduleAccountCleanup();
   app.listen(port, () => {
     console.log(`Server is running ...`);
   });

@@ -19,6 +19,7 @@ services:
       # docker-compose.prod.yml).
       - ADMIN_TOKEN=dev-admin-token
       - API_TOKENS=${API_TOKENS:-dev-api-token}
+      - AUTH_SECRET=${AUTH_SECRET:-dev-auth-secret-change-me-32-characters}
     volumes:
       - ./api/src:/app/api/src
       - ./api/log:/app/api/log

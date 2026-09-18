@@ -24,6 +24,7 @@ import { RankingSourceIndicator } from './component/RankingSourceIndicator';
 import { MyOverridesDialog } from './component/MyOverridesDialog';
 import { MyCustomRankingsDialog } from './component/MyCustomRankingsDialog';
 import { HelpButton } from './component/HelpButton';
+import { AccountButton } from './component/AccountButton';
 import { recordSearchHistory } from './searchHistory';
 
 // Styles and Other
@@ -351,6 +352,7 @@ function App() {
           <Box display="flex" alignItems="center">
             <RankingSourceIndicator onOpenSettings={() => { setSettingsInitialTab(0); setSettingsDialogOpen(true); }} />
             <CategoriesFilterButton />
+            <AccountButton />
             <IconButton color="inherit" onClick={() => { setSettingsInitialTab(0); setSettingsDialogOpen(true); }} aria-label="settings">
               <SettingsIcon />
             </IconButton>

@@ -14,6 +14,7 @@ import * as crosscheckStructure from './crosscheckStructure.js';
 import * as crosscheckTeam from './crosscheckTeam.js';
 import * as identityResolution from './identityResolution.js';
 import { controllerTeamRecords } from './teamRecords.js';
+import * as auth from './auth.js';
 
 const router = express.Router();
 
@@ -25,6 +26,20 @@ const publicApiLimit = rateLimit({ windowMs: 60_000, max: 30 });
 // up and responsive. Deliberately doesn't touch DBLP/HAL/mongo/redis, so it
 // won't false-positive as unhealthy just because an upstream is degraded.
 router.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Browser-only anonymous sync accounts (a random code is the sole
+// credential -- no email/username/third-party identity ever collected) and
+// per-user localStorage synchronization. These do not use the public API
+// token, but register/login get their own tight limiter since the code is
+// a password-equivalent secret with no username to lock out.
+const authLimit = rateLimit({ windowMs: 60_000, max: 10 });
+router.post('/auth/register', authLimit, auth.controllerRegister);
+router.post('/auth/login', authLimit, auth.controllerLogin);
+router.get('/auth/me', auth.controllerMe);
+router.post('/auth/logout', auth.controllerLogout);
+router.put('/auth/label', auth.requireUser, auth.controllerUpdateLabel);
+router.get('/sync/state', auth.requireUser, auth.controllerGetState);
+router.put('/sync/state', auth.requireUser, auth.controllerPutState);
 
 // For SettingsDialog.js's ranking-source descriptions -- reads each
 // portal's own live in-process state (core.getLatestSource/

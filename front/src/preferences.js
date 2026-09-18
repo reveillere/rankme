@@ -10,7 +10,11 @@ const FIXED_KEYS = [
 ];
 const FILTER_RANKS_PREFIX = 'rankme:filterRanks:';
 
-function preferenceKeys() {
+export function isPreferenceKey(key) {
+  return FIXED_KEYS.includes(key) || Boolean(key?.startsWith(FILTER_RANKS_PREFIX));
+}
+
+export function preferenceKeys() {
   const keys = [...FIXED_KEYS];
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);

@@ -27,6 +27,9 @@ services:
       # (see api/src/index.js). The front end itself doesn't need this --
       # it's same-origin behind the reverse proxy.
       - CORS_ORIGIN=${CORS_ORIGIN:-https://rankme.fr}
+      # Optional anonymous sync accounts for browser account synchronization.
+      # Leave empty to keep the application fully local/offline.
+      - AUTH_SECRET=${AUTH_SECRET:-}
     volumes:
       - ./api/log:/app/api/log
       - api-data:/data
