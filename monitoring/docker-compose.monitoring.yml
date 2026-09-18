@@ -116,7 +116,7 @@ services:
           # full 128M grafana had, some of it left as host headroom rather
           # than fully reallocated, same reasoning as mongo's own bump
           # earlier that day.
-          memory: 192M
+          memory: 256M
           cpus: "0.3"
 
   prometheus:
@@ -143,7 +143,7 @@ services:
           # ~85-90MB, this app's own metric cardinality is low) to free RAM
           # for mongo -- see docker-compose.prod.yml's own mongo memory
           # comment.
-          memory: 192M
+          memory: 384M
           cpus: "0.5"
 
   # Disabled 2026-09-15: the VPS's RAM was too tight for it alongside
