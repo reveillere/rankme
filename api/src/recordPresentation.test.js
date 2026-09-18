@@ -214,3 +214,28 @@ test('parseCustomRankingsAxes: rejects a profile whose reference cannot cover th
 test('parseCustomRankingsAxes: absent axes default to null, not an error', () => {
     assert.deepEqual(parseCustomRankingsAxes('{}'), { conference: null, journal: null });
 });
+
+test('parseCustomRankingsAxes: accepts a single Front profile export on its eligible axis', () => {
+    const axes = parseCustomRankingsAxes(JSON.stringify([{ id: 'c1', reference: 'core', entries: {} }]));
+    assert.equal(axes.conference.id, 'c1');
+    assert.equal(axes.journal, null);
+});
+
+test('parseCustomRankingsAxes: accepts the global Preferences export and follows active custom sources', () => {
+    const axes = parseCustomRankingsAxes(JSON.stringify({
+        format: 'rankme-preferences', version: 1,
+        preferences: {
+            'rankme:conferenceSource': 'custom:c1',
+            'rankme:journalSource': 'sjr',
+            'rankme:customRankings': { c1: { id: 'c1', reference: 'core', entries: {} } },
+        },
+    }));
+    assert.equal(axes.conference.id, 'c1');
+    assert.equal(axes.journal, null);
+});
+
+test('parseCustomRankingsAxes: rejects an ambiguous all-profiles export', () => {
+    assert.throws(() => parseCustomRankingsAxes(JSON.stringify([
+        { id: 'c1', reference: 'core' }, { id: 'c2', reference: 'ccf' },
+    ])), /explicit conference\/journal selections/);
+});

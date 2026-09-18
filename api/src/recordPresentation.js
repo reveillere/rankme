@@ -70,7 +70,34 @@ export async function attachRanks(records, source, { confSource, journalSource }
 // conferenceSource/journalSource already model (two separate localStorage
 // keys, never inferred from each other). This mirrors that shape directly.
 export function parseCustomRankingsAxes(text) {
-    const parsed = JSON.parse(text);
+    let parsed = JSON.parse(text);
+    // Accept the global Preferences export produced by the web app. It
+    // contains the complete local profile store plus the two active source
+    // keys, so the API can select exactly the same profile per axis.
+    if (parsed?.format === 'rankme-preferences' && parsed.version === 1 && parsed.preferences) {
+        const preferences = parsed.preferences;
+        let profiles = preferences['rankme:customRankings'];
+        if (typeof profiles === 'string') profiles = JSON.parse(profiles);
+        if (!profiles || typeof profiles !== 'object' || Array.isArray(profiles)) throw new Error('Preferences export contains invalid custom rankings');
+        const conferenceSource = preferences['rankme:conferenceSource'];
+        const journalSource = preferences['rankme:journalSource'];
+        parsed = {
+            conference: typeof conferenceSource === 'string' && conferenceSource.startsWith('custom:') ? profiles[conferenceSource.slice('custom:'.length)] : null,
+            journal: typeof journalSource === 'string' && journalSource.startsWith('custom:') ? profiles[journalSource.slice('custom:'.length)] : null,
+        };
+    } else if (Array.isArray(parsed)) {
+        // A single-profile export is unambiguous: apply it to every axis its
+        // reference covers. Multiple profiles need explicit axis selection;
+        // reject ambiguous all-profiles exports instead of silently choosing.
+        if (parsed.length !== 1) throw new Error('An all-profiles export needs explicit conference/journal selections for the API');
+        const profile = parsed[0];
+        const axes = profile?.reference ? axesForReference(profile.reference) : [];
+        parsed = { conference: axes.includes('conference') ? profile : null, journal: axes.includes('journal') ? profile : null };
+    } else if (parsed?.id && parsed?.reference && !parsed.conference && !parsed.journal) {
+        const axes = axesForReference(parsed.reference);
+        const profile = parsed;
+        parsed = { conference: axes.includes('conference') ? profile : null, journal: axes.includes('journal') ? profile : null };
+    }
     const axes = { conference: null, journal: null };
     for (const axis of ['conference', 'journal']) {
         const profile = parsed?.[axis];
