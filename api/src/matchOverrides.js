@@ -25,8 +25,9 @@ async function collection() {
     const col = client.db('rankme').collection('matchOverrides');
     if (!auditIndexEnsured) {
         auditIndexEnsured = true;
-        // Backs the distinct-clientId corroboration check below.
-        col.createIndex({ source: 1, venueText: 1, 'newMatch.id': 1 })
+        // Backs the consensus aggregation below (match on source+venueText,
+        // sort by createdAt to find each clientId's latest vote).
+        col.createIndex({ source: 1, venueText: 1, createdAt: -1 })
             .catch((error) => console.error('[matchOverrides] Error creating audit index', error));
         // This collection is an unbounded audit log (one document per
         // correction ever submitted, by anyone) -- a TTL index keeps it from
@@ -59,19 +60,52 @@ async function sharedCollection() {
     return col;
 }
 
-// How many distinct browsers (see clientId below) need to independently
-// land on the same (source, venueText) -> candidate before it's promoted
-// from "one person's correction" to "shown to everyone by default". High
-// enough that one person can't unilaterally rewrite a shared result by
-// resubmitting (distinct() only counts each clientId once regardless of
-// how many times they submit, so that specific attack doesn't work either
-// way -- this is really about requiring broad independent agreement before
-// a correction goes live for every visitor, not about resisting any one
-// browser's volume).
-const PROMOTION_THRESHOLD = 10;
+// Promotion from "one person's correction" to "shown to everyone by
+// default" requires broad, current agreement, not just a raw count: more
+// than PROMOTION_MIN_RESPONSES distinct browsers (see clientId below) must
+// have weighed in on this (source, venueText), and whichever candidate they
+// most recently voted for must hold at least PROMOTION_RATIO of those
+// votes. Using each clientId's *latest* vote (not every submission) means
+// someone who changes their mind isn't counted for both their old and new
+// answer, and recomputing from scratch on every submission (see
+// controllerRecord below) means a candidate that no longer commands
+// consensus -- because a competing candidate has since caught up -- stops
+// being shown rather than staying promoted forever from an earlier, now
+// stale, majority.
+const PROMOTION_MIN_RESPONSES = 10;
+const PROMOTION_RATIO = 0.9;
 
 function sharedKey(source, venueText) {
     return `${source}:${venueText}`;
+}
+
+// Given every distinct clientId's most recent vote for one (source,
+// venueText), decides which candidate (if any) currently has strong enough
+// consensus to be shown to everyone. Returns null when nobody qualifies --
+// either too few respondents so far, or the votes are split enough that no
+// single candidate clears the ratio -- so the caller knows to withdraw any
+// previously-promoted entry rather than leave a stale one in place.
+export function pickConsensusCandidate(latestVotes, {
+    minResponses = PROMOTION_MIN_RESPONSES,
+    ratio = PROMOTION_RATIO,
+} = {}) {
+    const total = latestVotes.length;
+    if (total <= minResponses) return null;
+    const tally = new Map();
+    for (const vote of latestVotes) {
+        const key = vote.newMatch.id;
+        const entry = tally.get(key) ?? { count: 0, match: vote.newMatch };
+        entry.count += 1;
+        tally.set(key, entry);
+    }
+    let winner = null;
+    for (const entry of tally.values()) {
+        if (!winner || entry.count > winner.count) winner = entry;
+    }
+    if (winner.count / total >= ratio) {
+        return { candidate: winner.match, confirmedCount: winner.count };
+    }
+    return null;
 }
 
 export async function controllerRecord(req, res) {
@@ -111,19 +145,26 @@ export async function controllerRecord(req, res) {
         });
 
         if (normalizedClientId) {
-            const distinctClientIds = await col.distinct('clientId', {
-                source, venueText, 'newMatch.id': newMatch.id, clientId: { $ne: null },
-            });
-            if (distinctClientIds.length >= PROMOTION_THRESHOLD) {
-                const shared = await sharedCollection();
+            const latestVotes = await col.aggregate([
+                { $match: { source, venueText, clientId: { $ne: null } } },
+                { $sort: { createdAt: -1 } },
+                { $group: { _id: '$clientId', newMatch: { $first: '$newMatch' } } },
+            ]).toArray();
+            const decision = pickConsensusCandidate(latestVotes);
+            const shared = await sharedCollection();
+            if (decision) {
                 await shared.updateOne(
                     { _id: sharedKey(source, venueText) },
                     {
-                        $set: { source, venueText, candidate: newMatch, confirmedCount: distinctClientIds.length, updatedAt: new Date() },
+                        $set: { source, venueText, candidate: decision.candidate, confirmedCount: decision.confirmedCount, updatedAt: new Date() },
                         $setOnInsert: { promotedAt: new Date() },
                     },
                     { upsert: true },
                 );
+            } else {
+                // No qualifying consensus right now -- withdraw a previously
+                // promoted entry, if any, rather than leave it stale.
+                await shared.deleteOne({ _id: sharedKey(source, venueText) });
             }
         }
 

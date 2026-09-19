@@ -329,8 +329,9 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
           label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
-          When a match gets corrected the same way by several different people, everyone sees that correction
-          by default. Your own corrections (see &quot;My match corrections&quot;) always take priority over this.
+          When more than 10 people have corrected the same match and at least 90% of them agree (each person&apos;s
+          latest correction counts), everyone sees that correction by default. Your own corrections (see &quot;My
+          match corrections&quot;) always take priority over this.
         </Typography>
         </Paper>}
         {preferenceTab === 2 && <Paper variant="outlined" sx={{ p: 2.25 }}>
