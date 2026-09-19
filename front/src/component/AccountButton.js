@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, InputAdornment, Stack, TextField, Typography } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { getCurrentUser, loginWithCode, registerAccount, startAccountSync, syncNow, updateLabel } from '../accountSync';
@@ -16,6 +16,20 @@ export function AccountButton() {
   const [showNewCode, setShowNewCode] = useState(true);
   const [showCodeInput, setShowCodeInput] = useState(false);
   const [error, setError] = useState('');
+  const newCodeInputRef = useRef(null);
+
+  useEffect(() => {
+    // React sets the controlled value directly on the DOM node, without firing a
+    // real 'input' event — password managers (1Password, etc.) only pick up a
+    // password-type field's content from that event, so they never notice this
+    // generated code unless we dispatch one ourselves.
+    if (!newCode || !newCodeInputRef.current) return;
+    const input = newCodeInputRef.current;
+    const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeSetter.call(input, newCode);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [newCode]);
 
   const refresh = () => getCurrentUser().then(result => {
     setSignedIn(result.signedIn); setAvailable(result.available); setLabel(result.label || null);
@@ -97,6 +111,7 @@ export function AccountButton() {
               <Alert severity="warning">Save this code now — it is shown only once and there is no way to recover it if lost.</Alert>
               <TextField
                 value={newCode}
+                inputRef={newCodeInputRef}
                 inputProps={{ readOnly: true }}
                 type={showNewCode ? 'text' : 'password'}
                 name="sync-code"
