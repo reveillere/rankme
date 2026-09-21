@@ -27,9 +27,14 @@ const recordPresentationParameters = [
   { name: 'sort', in: 'query', schema: { type: 'string', enum: ['date', 'date-rank', 'rank-date'], default: 'date' }, description: 'Result ordering.' },
   { name: 'export', in: 'query', schema: { type: 'string', enum: ['md', 'csv', 'json'] }, description: 'When set, the response is the rendered export (Content-Type text/markdown, text/csv or application/json) instead of the normal JSON envelope -- a lightweight snapshot (rank/authors/title/venue/type/doi per record), not a pixel-perfect mirror of the JSON response.' },
   { name: 'useCommunityCorrections', in: 'query', schema: { type: 'boolean', default: true }, description: 'Whether community-confirmed venue-match corrections are applied to rank.effectiveValue. Default true, matching the web app. Has no effect on CCF-sourced ranks (no community-correction data exists for CCF yet).' },
-  { name: 'matchOverrides', in: 'query', schema: { type: 'string', format: 'json', example: '[{"portal":"core","rankSource":"ICORE2026","queryText":"AINA 2017","candidate":{"id":"conf-example","title":"...","value":"A"}}]' }, description: 'JSON array of personal venue-match corrections -- the exact format exported from the web app (Settings → My match corrections → Export JSON). Applied to rank.effectiveValue for this request only; never persisted server-side.' },
-  { name: 'customRankings', in: 'query', schema: { type: 'string', format: 'json', example: '{"conference":{"id":"...","reference":"core","entries":{}},"journal":{"id":"...","reference":"ccf","entries":{}}}' }, description: 'JSON object {conference?, journal?}, each an optional custom-ranking profile (Settings → My custom rankings → Export JSON) to apply on that axis. The API also accepts a single-profile Front export, or the global Preferences export; an all-profiles export with multiple profiles is rejected unless it carries explicit active axis selections. A profile\'s own reference ranking (core/sjr/ccf) must be able to cover the axis it is placed under. Applied to rank.effectiveValue only; never persisted server-side.' },
+  { name: 'matchOverrides', in: 'query', schema: { type: 'string', format: 'json', example: '[{"portal":"core","rankSource":"ICORE2026","queryText":"AINA 2017","candidate":{"id":"conf-example","title":"...","value":"A"}}]' }, description: 'JSON array of personal venue-match corrections -- the exact format exported from the web app (Settings → My match corrections → Export JSON). Applied to rank.effectiveValue for this request only; never persisted server-side. Can also be sent as a same-named request body property instead (recommended for a larger correction set, to avoid the URL length limit); the body takes precedence if both are present.' },
+  { name: 'customRankings', in: 'query', schema: { type: 'string', format: 'json', example: '{"conference":{"id":"...","reference":"core","entries":{}},"journal":{"id":"...","reference":"ccf","entries":{}}}' }, description: 'JSON object {conference?, journal?}, each an optional custom-ranking profile (Settings → My custom rankings → Export JSON) to apply on that axis. The API also accepts a single-profile Front export, or the global Preferences export; an all-profiles export with multiple profiles is rejected unless it carries explicit active axis selections. A profile\'s own reference ranking (core/sjr/ccf) must be able to cover the axis it is placed under. Applied to rank.effectiveValue only; never persisted server-side. Can also be sent as a same-named request body property instead (recommended: a custom-ranking profile easily exceeds the URL length limit as a query parameter); the body takes precedence if both are present.' },
 ];
+
+const recordCorrectionBody = {
+  matchOverrides: { type: 'string', format: 'json', example: '[{"portal":"core","rankSource":"ICORE2026","queryText":"AINA 2017","candidate":{"id":"conf-example","title":"...","value":"A"}}]', description: 'Same as the matchOverrides query parameter above, sent in the request body instead.' },
+  customRankings: { type: 'string', format: 'json', example: '{"conference":{"id":"...","reference":"core","entries":{}},"journal":{"id":"...","reference":"ccf","entries":{}}}', description: 'Same as the customRankings query parameter above, sent in the request body instead.' },
+};
 
 const identityLinkEntries = {
   type: 'array',
@@ -126,7 +131,7 @@ Examples: \`/dblp/11/1262?from=2015&to=2024&sort=date-rank\` and \`/structure/12
 
 The four record endpoints below (\`/dblp/author/{pid}\`, \`/hal/author/{idHal}\`, \`/hal/structure/{structId}\`, \`/records/team\`) rank every returned record (CORE/SJR, or CCF when \`confSource\`/\`journalSource\` says so) and apply \`from\`, \`to\`, \`categories\`, \`ranks\` and \`sort\` server-side. Setting \`export\` replaces the normal JSON response with a rendered Markdown/CSV/JSON snapshot instead (see each endpoint's \`export\` parameter).
 
-Each rankable record's \`rank\` also carries an \`effectiveValue\` alongside the raw automatic \`value\` -- the same value the web app's RankBadge would show once personal, community and custom-ranking corrections are taken into account. \`ranks\` filtering and \`rank-date\`/\`date-rank\` sorting both use \`effectiveValue\`. \`useCommunityCorrections\` (default true) toggles community-confirmed corrections; \`matchOverrides\` and \`customRankings\` let a request supply its own personal corrections/custom-ranking profiles -- see their own parameter descriptions above for the exact JSON shape. None of the three are persisted server-side; a request without them behaves exactly as if they were empty.
+Each rankable record's \`rank\` also carries an \`effectiveValue\` alongside the raw automatic \`value\` -- the same value the web app's RankBadge would show once personal, community and custom-ranking corrections are taken into account. \`ranks\` filtering and \`rank-date\`/\`date-rank\` sorting both use \`effectiveValue\`. \`useCommunityCorrections\` (default true) toggles community-confirmed corrections; \`matchOverrides\` and \`customRankings\` let a request supply its own personal corrections/custom-ranking profiles -- see their own parameter descriptions above for the exact JSON shape. None of the three are persisted server-side; a request without them behaves exactly as if they were empty. Unlike the other record parameters, \`matchOverrides\` and \`customRankings\` may be sent as a request body property instead of a query parameter (the body takes precedence when both are present) -- a sizeable correction set or custom-ranking profile can exceed typical URL/header length limits as a query string.
 
 ## Cross-check options
 
@@ -152,19 +157,24 @@ Teams are stored locally in the web application, so there is no team-record GET 
       post: protectedOperation({
         tags: ['Records'], summary: 'Get DBLP records for an author',
         parameters: [path('pid', 'DBLP person identifier (PID).', '11/1262'), ...recordPresentationParameters, ...rankingParameters],
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: recordCorrectionBody } } } },
         responses: jsonResponse('DBLP author records', dblpAuthorExample, { ...NOT_FOUND, ...DUMP_NOT_READY }),
       }),
     },
     '/hal/author/{idHal}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get HAL records for an author',
-        parameters: [path('idHal', 'HAL author identifier (idHal).', 'laurent-reveillere'), ...recordPresentationParameters, ...rankingParameters], responses: jsonResponse('HAL author records', halRecordExample),
+        parameters: [path('idHal', 'HAL author identifier (idHal).', 'laurent-reveillere'), ...recordPresentationParameters, ...rankingParameters],
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: recordCorrectionBody } } } },
+        responses: jsonResponse('HAL author records', halRecordExample),
       }),
     },
     '/hal/structure/{structId}': {
       post: protectedOperation({
         tags: ['Records'], summary: 'Get HAL records for a structure',
-        parameters: [path('structId', 'HAL structure identifier.', '12345'), ...recordPresentationParameters, ...rankingParameters], responses: jsonResponse('HAL structure records', halRecordExample),
+        parameters: [path('structId', 'HAL structure identifier.', '12345'), ...recordPresentationParameters, ...rankingParameters],
+        requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', properties: recordCorrectionBody } } } },
+        responses: jsonResponse('HAL structure records', halRecordExample),
       }),
     },
     '/records/team': {

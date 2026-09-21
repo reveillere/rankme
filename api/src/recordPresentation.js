@@ -220,10 +220,18 @@ export function sortRecords(records, source, sortMode) {
 }
 
 // Reads recordPresentationParameters off req.query, in the shape
-// filterRecords/sortRecords/renderExport above expect.
+// filterRecords/sortRecords/renderExport above expect. matchOverrides/
+// customRankings are the exception: read from req.body first, falling back
+// to req.query, same as crosscheckPresentation.js's own
+// crossCheckPresentationOptionsFrom -- query-string-only made these two
+// impossible to send once a profile/correction set grew past Node's default
+// max-http-header-size (16KB), a limit the other, much smaller parameters
+// here never approach.
 export function presentationOptionsFrom(req) {
     const from = req.query.from != null ? parseInt(req.query.from, 10) : null;
     const to = req.query.to != null ? parseInt(req.query.to, 10) : null;
+    const matchOverrides = req.body?.matchOverrides ?? req.query.matchOverrides;
+    const customRankings = req.body?.customRankings ?? req.query.customRankings;
     return {
         from: Number.isFinite(from) ? from : null,
         to: Number.isFinite(to) ? to : null,
@@ -235,8 +243,8 @@ export function presentationOptionsFrom(req) {
         // getUseCommunityOverrides -- an opt-out, not opt-in, or the
         // feature would only ever reach whoever explicitly asks for it.
         useCommunityCorrections: req.query.useCommunityCorrections !== 'false',
-        matchOverridesText: typeof req.query.matchOverrides === 'string' ? req.query.matchOverrides : null,
-        customRankingsText: typeof req.query.customRankings === 'string' ? req.query.customRankings : null,
+        matchOverridesText: typeof matchOverrides === 'string' ? matchOverrides : null,
+        customRankingsText: typeof customRankings === 'string' ? customRankings : null,
     };
 }
 

@@ -90,6 +90,18 @@ test('presentationOptionsFrom: reads matchOverrides/customRankings as opaque JSO
     assert.equal(options.useCommunityCorrections, false);
 });
 
+test('presentationOptionsFrom: reads matchOverrides/customRankings from the request body, falling back to query, body taking precedence', () => {
+    const bodyOnly = presentationOptionsFrom({ query: {}, body: { matchOverrides: '[{"portal":"core"}]', customRankings: '{"conference":{}}' } });
+    assert.equal(bodyOnly.matchOverridesText, '[{"portal":"core"}]');
+    assert.equal(bodyOnly.customRankingsText, '{"conference":{}}');
+
+    const queryFallback = presentationOptionsFrom({ query: { matchOverrides: '[{"portal":"sjr"}]' } });
+    assert.equal(queryFallback.matchOverridesText, '[{"portal":"sjr"}]');
+
+    const bodyWins = presentationOptionsFrom({ query: { customRankings: '{"journal":{}}' }, body: { customRankings: '{"conference":{}}' } });
+    assert.equal(bodyWins.customRankingsText, '{"conference":{}}');
+});
+
 test('presentationOptionsFrom: invalid/absent values fall back to safe defaults, never throw', () => {
     const req = { query: { from: 'not-a-year', sort: 'nonsense', export: 'exe' } };
     const options = presentationOptionsFrom(req);
