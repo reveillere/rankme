@@ -33,7 +33,6 @@ export function AccountButton() {
     window.addEventListener('rankme:accountchange', onAccount);
     const stop = startAccountSync();
     return () => { active = false; window.removeEventListener('rankme:accountchange', onAccount); stop(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openDialog = () => { setOpen(true); setNewCode(null); setCodeInput(''); setNewAccountLabel(''); setShowCodeInput(false); setError(''); };
