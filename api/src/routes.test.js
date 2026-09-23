@@ -99,9 +99,18 @@ test('every requireApiToken-protected route also has a rate limiter in its middl
     }
 });
 
+// /auth/register and /auth/login are the one deliberate exception: they
+// can't require an API token (that's what they issue), but still need
+// throttling against registration/brute-force abuse. They get their own
+// authLimit instance (see routes.js), backed by rateLimit.js's own
+// per-instance bucket Map -- so this doesn't share, and can't drain, the
+// public API's own quota for the same IP.
+const AUTH_RATE_LIMITED_ROUTES = new Set(['POST /auth/register', 'POST /auth/login']);
+
 test('browser-internal routes never consume the public API rate limit', () => {
     for (const route of expressRoutes()) {
         if (route.middlewareNames.includes('requireApiToken')) continue;
+        if (AUTH_RATE_LIMITED_ROUTES.has(`${route.method} ${route.path}`)) continue;
         assert.equal(
             route.middlewareNames.includes('rateLimitMiddleware'), false,
             `${route.method} ${route.path} is not a public API route but has a rate limiter`

@@ -7,9 +7,14 @@
 // deployment (see index.js/docker-compose.prod.yml); would need a shared
 // store (e.g. Redis, already available via cache.js) if the api is ever
 // scaled to multiple replicas.
-const buckets = new Map();
-
+//
+// `buckets` lives inside the factory, not at module scope: routes.js
+// creates more than one independent limiter (e.g. the public API's
+// publicApiLimit and auth's own authLimit), and a single shared Map keyed
+// only by IP would pool their counts together -- hammering /auth/register
+// would eat into the same IP's public API quota, and vice versa.
 export function rateLimit({ windowMs, max }) {
+    const buckets = new Map();
     return function rateLimitMiddleware(req, res, next) {
         const key = req.ip;
         const now = Date.now();
