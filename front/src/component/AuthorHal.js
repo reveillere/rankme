@@ -87,6 +87,22 @@ export function AuthorHal({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 }
 
 function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onNameResolved, publications: rankedPublications, progress, done, queued, queuePosition, isActive, initialYearRange, onYearRangeChange, initialSort, onSortChange, initialExport }) {
+  // `form:<form_i>` is rankme's own fallback id (see hal.js's
+  // normalizeAuthorSearchDocs), used when this author has never claimed an
+  // idHal_s on HAL. It isn't a real idHal, so it can't be used to look up a
+  // name/ORCID via idHal_s-keyed HAL queries -- showing it as "idHal: ..."
+  // would be misleading.
+  const isUnclaimedHalAccount = id.startsWith('form:');
+  // For a claimed account, `id` itself is the idHal to match against each
+  // co-author's own `idHal`. For an unclaimed one there's no idHal to match
+  // -- but hal.js's parseAuthors also carries each co-author's form_i
+  // (`form`), positionally aligned off HAL's own authIdFormPerson_s facet,
+  // so this author can still be found in their own co-author list by
+  // form_i instead.
+  const findSelfAuthor = (pubs) => {
+    const targetForm = isUnclaimedHalAccount ? id.slice(5) : null;
+    return pubs.flatMap(pub => pub.authors).find(a => targetForm ? a.form === targetForm : a.idHal === id);
+  };
   // A tab opened directly by id (or reloaded from a bare /hal/:id URL)
   // doesn't know this author's display name yet -- unlike a structure (see
   // Structure.js's structure-info lookup), HAL has no per-author name
@@ -99,7 +115,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // streamed rank update.
   useEffect(() => {
     if (authorName || !onNameResolved) return;
-    const match = rankedPublications.flatMap(pub => pub.authors).find(a => a.idHal === id);
+    const match = findSelfAuthor(rankedPublications);
     if (match?.name) onNameResolved(match.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, authorName]);
@@ -111,9 +127,12 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   useEffect(() => {
     let cancelled = false;
     setAuthorInfo(null);
+    // No idHal_s to query for an unclaimed account -- this would always
+    // come back empty, so skip the request entirely.
+    if (isUnclaimedHalAccount) return;
     fetchAuthorInfo(id).then(info => { if (!cancelled) setAuthorInfo(info); });
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, isUnclaimedHalAccount]);
 
   // Proposed DBLP identity for this idHal -- symmetric to Author.js's own
   // suggestedHalIdentity (a previously confirmed local identity link if one
@@ -150,7 +169,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // dialog is open.
   const dblpSuggestion = useMemo(() => {
     if (!suggestedDblpIdentity || suggestedDblpIdentity.name) return suggestedDblpIdentity;
-    const resolvedName = authorName || rankedPublications.flatMap(pub => pub.authors).find(a => a.idHal === id)?.name;
+    const resolvedName = authorName || findSelfAuthor(rankedPublications)?.name;
     return resolvedName ? { ...suggestedDblpIdentity, name: resolvedName } : suggestedDblpIdentity;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suggestedDblpIdentity, authorName, rankedPublications.length, id]);
@@ -284,19 +303,26 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
     <div className='App'>
       <RecordsHeader
         title={<>HAL records{authorName ? ` of ${authorName}` : ''}</>}
-        details={<>
-          idHal: {id}
-          {authorInfo && (authorInfo.orcid
-            ? <> · ORCID: <a href={authorInfo.orcid} target="_blank" rel="noreferrer">{authorInfo.orcid.replace('https://orcid.org/', '')}</a></>
-            : (
-              <span style={{ color: '#b26a00', marginLeft: '0.6em' }}>
-                <WarningAmberIcon fontSize="inherit" style={{ verticalAlign: 'text-bottom', marginRight: '0.2em' }} />
-                No ORCID linked to this HAL account
-              </span>
-            ))}
-        </>}
+        details={isUnclaimedHalAccount
+          ? (
+            <span style={{ color: '#b26a00' }}>
+              <WarningAmberIcon fontSize="inherit" style={{ verticalAlign: 'text-bottom', marginRight: '0.2em' }} />
+              This author has not claimed a HAL account (no idHal)
+            </span>
+          )
+          : (<>
+            idHal: {id}
+            {authorInfo && (authorInfo.orcid
+              ? <> · ORCID: <a href={authorInfo.orcid} target="_blank" rel="noreferrer">{authorInfo.orcid.replace('https://orcid.org/', '')}</a></>
+              : (
+                <span style={{ color: '#b26a00', marginLeft: '0.6em' }}>
+                  <WarningAmberIcon fontSize="inherit" style={{ verticalAlign: 'text-bottom', marginRight: '0.2em' }} />
+                  No ORCID linked to this HAL account
+                </span>
+              ))}
+          </>)}
         showing={publicationsShown === 0 ? 'No record found' : publicationsShown === rankedPublications.length ? `Showing all ${publicationsShown} records` : `Showing ${publicationsShown} of ${rankedPublications.length} records over ${filterYears[1] - filterYears[0] + 1} years`}
-        exportButton={<><IdentityLinksIconButton idHals={[id]} resolveName={() => authorName || rankedPublications.flatMap(pub => pub.authors).find(a => a.idHal === id)?.name} /><ReportButton
+        exportButton={<><IdentityLinksIconButton idHals={[id]} resolveName={() => authorName || findSelfAuthor(rankedPublications)?.name} /><ReportButton
           onExportMarkdown={() => exportHalPublicationsMarkdown(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.md`, sortMode })}
           onExportJson={() => exportHalPublicationsJson(filteredRecords, { title: `HAL records${authorName ? ` of ${authorName}` : ''}`, filename: `hal-${id}.json`, sortMode })}
           onExportCsv={() => exportHalPublicationsCsv(filteredRecords, { filename: `hal-${id}.csv`, sortMode })}

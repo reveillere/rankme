@@ -379,23 +379,30 @@ export async function getAuthorPublications(id) {
 
 // authIdHalFullName_fs entries look like "<idHal_s>_FacetSep_<Full Name>",
 // or "_FacetSep_<Full Name>" when the author has no claimed HAL account.
+// authIdFormPerson_s is a parallel array (same index = same author -- see
+// structureMembersOf's identical comment) carrying each author's form_i,
+// the only stable id for an unclaimed author (idHal null above). Exposed
+// here so a `form:<form_i>` author (see normalizeAuthorSearchDocs) can be
+// found by form_i in their own co-author list to resolve a display name.
 export function parseAuthors(doc) {
     const facets = doc.authIdHalFullName_fs;
     if (Array.isArray(facets) && facets.length > 0) {
         const sep = '_FacetSep_';
-        return facets.map(facet => {
+        const formPersons = doc.authIdFormPerson_s || [];
+        return facets.map((facet, i) => {
             const idx = facet.indexOf(sep);
             const idHal = idx > 0 ? facet.slice(0, idx) : null;
             const name = idx >= 0 ? facet.slice(idx + sep.length) : facet;
-            return { name, idHal };
+            return { name, idHal, form: formPersons[i] || null };
         });
     }
-    return (doc.authFullName_s || []).map(name => ({ name, idHal: null }));
+    return (doc.authFullName_s || []).map(name => ({ name, idHal: null, form: null }));
 }
 
 async function fetchAuthorPublications(id) {
-    const filter = id.startsWith('form:') ? `authIdForm_i:${id.slice(5)}` : `authIdHal_s:${id}`;
-    return fetchPublicationsByFilter(filter);
+    const isForm = id.startsWith('form:');
+    const filter = isForm ? `authIdForm_i:${id.slice(5)}` : `authIdHal_s:${id}`;
+    return fetchPublicationsByFilter(filter, isForm ? { extraFields: 'authIdFormPerson_s' } : undefined);
 }
 
 // HAL's Solr backend silently caps `rows` at 10000 regardless of what's

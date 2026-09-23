@@ -43,17 +43,28 @@ test('normalizeAuthorSearchDocs: affiliation carries emailDomain_s through, defa
 
 test('parseAuthors: reads idHal + name off the authIdHalFullName_fs facet', () => {
     const doc = { authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère'] };
-    assert.deepEqual(parseAuthors(doc), [{ name: 'Laurent Réveillère', idHal: 'laurent-reveillere' }]);
+    assert.deepEqual(parseAuthors(doc), [{ name: 'Laurent Réveillère', idHal: 'laurent-reveillere', form: null }]);
 });
 
 test('parseAuthors: a facet with no separator is just a name, no idHal', () => {
     const doc = { authIdHalFullName_fs: ['Some Unclaimed Author'] };
-    assert.deepEqual(parseAuthors(doc), [{ name: 'Some Unclaimed Author', idHal: null }]);
+    assert.deepEqual(parseAuthors(doc), [{ name: 'Some Unclaimed Author', idHal: null, form: null }]);
+});
+
+test('parseAuthors: pairs authIdFormPerson_s by index to attach form_i to each author', () => {
+    const doc = {
+        authIdHalFullName_fs: ['laurent-reveillere_FacetSep_Laurent Réveillère', '_FacetSep_Some Unclaimed Author'],
+        authIdFormPerson_s: ['12345', '641102'],
+    };
+    assert.deepEqual(parseAuthors(doc), [
+        { name: 'Laurent Réveillère', idHal: 'laurent-reveillere', form: '12345' },
+        { name: 'Some Unclaimed Author', idHal: null, form: '641102' },
+    ]);
 });
 
 test('parseAuthors: falls back to authFullName_s when there is no facet field at all', () => {
     const doc = { authFullName_s: ['Alice', 'Bob'] };
-    assert.deepEqual(parseAuthors(doc), [{ name: 'Alice', idHal: null }, { name: 'Bob', idHal: null }]);
+    assert.deepEqual(parseAuthors(doc), [{ name: 'Alice', idHal: null, form: null }, { name: 'Bob', idHal: null, form: null }]);
 });
 
 test('parseAuthors: no author fields at all yields an empty list, not a crash', () => {
