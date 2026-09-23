@@ -98,10 +98,13 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // -- but hal.js's parseAuthors also carries each co-author's form_i
   // (`form`), positionally aligned off HAL's own authIdFormPerson_s facet,
   // so this author can still be found in their own co-author list by
-  // form_i instead.
+  // form_i instead. That facet's value is "<form_i>-<suffix>", not a bare
+  // form_i (confirmed live: the same person shows up as e.g. "641102-0" on
+  // one doc and "641102-1205792" on another), so match on the form_i prefix
+  // rather than equality.
   const findSelfAuthor = (pubs) => {
     const targetForm = isUnclaimedHalAccount ? id.slice(5) : null;
-    return pubs.flatMap(pub => pub.authors).find(a => targetForm ? a.form === targetForm : a.idHal === id);
+    return pubs.flatMap(pub => pub.authors).find(a => targetForm ? a.form?.split('-')[0] === targetForm : a.idHal === id);
   };
   // A tab opened directly by id (or reloaded from a bare /hal/:id URL)
   // doesn't know this author's display name yet -- unlike a structure (see
