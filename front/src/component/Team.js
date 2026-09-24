@@ -14,7 +14,7 @@ import { useMergedRankedPublications } from '../useMergedRankedPublications';
 import { getTeam } from '../teamStore';
 import { exportDblpPublicationsMarkdown, exportHalPublicationsMarkdown, exportDblpPublicationsJson, exportHalPublicationsJson, exportDblpPublicationsCsv, exportHalPublicationsCsv } from '../exportPublications';
 import { useFilterSettings } from '../FilterSettingsContext';
-import { getHalCategory } from '../hal';
+import { getHalCategory, fetchAuthorInfos } from '../hal';
 import { customProfileIdFrom } from '../rankingSource';
 
 // Components
@@ -126,7 +126,22 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   const portalAccessor = useMemo(() => portalAccessorFor(team.source), [team.source]);
   const selfIds = useMemo(() => team.members.map(m => m.id), [team]);
   const identityMembers = useMemo(() => team.members.map(member => ({ id: member.id, name: member.label })), [team.members]);
-  const dialogMembers = useMemo(() => team.members.map(m => ({ id: m.id, label: m.label, idKind: isHal ? 'idHal' : 'pid' })), [team.members, isHal]);
+  // ORCID lookup only applies to a HAL-sourced team's members (their id is
+  // an idHal) -- a dblp team's id is a pid, which HAL's own author
+  // referential has no notion of. Fetched lazily, only once the members
+  // dialog is actually opened, the same as Structure.js's own orcidByIdHal.
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [orcidByIdHal, setOrcidByIdHal] = useState(new Map());
+  useEffect(() => {
+    if (!isHal || !membersDialogOpen || selfIds.length === 0) return;
+    let cancelled = false;
+    fetchAuthorInfos(selfIds).then(infos => {
+      if (cancelled) return;
+      setOrcidByIdHal(new Map(Object.entries(infos).map(([idHal, info]) => [idHal, info.orcid])));
+    });
+    return () => { cancelled = true; };
+  }, [isHal, membersDialogOpen, selfIds]);
+  const dialogMembers = useMemo(() => team.members.map(m => ({ id: m.id, label: m.label, idKind: isHal ? 'idHal' : 'pid', orcid: isHal ? orcidByIdHal.get(m.id) : null })), [team.members, isHal, orcidByIdHal]);
   // Client-side id->name lookup for IdentityLinksPanel.js's own display --
   // GET /api/identity/links never returns a name (see that panel's own
   // comment), but a team member's own resolved `label` (set from a search
@@ -163,7 +178,6 @@ function TeamContent({ team, publications: rankedPublications, progress, done, q
   const [reviewOnly, setReviewOnly] = useState(false);
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
   // See Author.js's identical comment: stable unless a source actually

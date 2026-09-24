@@ -9,6 +9,7 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { ExportButton } from './ExportButton';
+import { OrcidLine } from './OrcidLine';
 import { downloadTextFile } from '../exportPublications';
 
 // Shared by Team.js and Structure.js's own "view members" eye icon.
@@ -20,7 +21,10 @@ import { downloadTextFile } from '../exportPublications';
 // effect) and filling `label` from it the same way. Either way the id itself
 // is always shown with its kind prefixed (idKind), same convention as
 // Author.js/AuthorHal.js's own "pid:"/"idHal:" line and Teams.js's chip
-// rendering, so a bare id is never shown unlabeled. A HAL structure can run
+// rendering, so a bare id is never shown unlabeled. `orcid` is optional and
+// only ever set for idHal members (see Structure.js/Team.js's own
+// orcidByIdHal) -- shown as an extra " · ORCID: ..." segment when present. A
+// HAL structure can run
 // into the hundreds of members, so the list scrolls inside a bounded box
 // rather than growing the dialog past the viewport. `title` is expected to
 // already carry the member count (see Team.js/Structure.js's own callers) --
@@ -31,7 +35,7 @@ export function MemberListDialog({ open, onClose, title, members }) {
   // (the list is already in hand, built by the caller). Exports the list
   // exactly as shown: id + label when one is known.
   const exportData = () => {
-    const data = members.map(m => ({ [m.idKind]: m.id, ...(m.label && m.label !== m.id ? { label: m.label } : {}) }));
+    const data = members.map(m => ({ [m.idKind]: m.id, ...(m.label && m.label !== m.id ? { label: m.label } : {}), ...(m.orcid ? { orcid: m.orcid } : {}) }));
     return data;
   };
   const handleExportJson = () => {
@@ -46,10 +50,10 @@ export function MemberListDialog({ open, onClose, title, members }) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
-  const handleExportMarkdown = () => downloadTextFile('rankme-members.md', `# ${title}\n\n${members.map(m => `- ${m.label || m.id} (${m.idKind}: ${m.id})`).join('\n')}\n`, 'text/markdown;charset=utf-8;');
+  const handleExportMarkdown = () => downloadTextFile('rankme-members.md', `# ${title}\n\n${members.map(m => `- ${m.label || m.id} (${m.idKind}: ${m.id})${m.orcid ? ` — ORCID: ${m.orcid}` : ''}`).join('\n')}\n`, 'text/markdown;charset=utf-8;');
   const handleExportCsv = () => {
     const quote = value => `"${String(value ?? '').replaceAll('"', '""')}"`;
-    downloadTextFile('rankme-members.csv', ['name,id_kind,id', ...members.map(m => [m.label || '', m.idKind, m.id].map(quote).join(','))].join('\n'), 'text/csv;charset=utf-8;');
+    downloadTextFile('rankme-members.csv', ['name,id_kind,id,orcid', ...members.map(m => [m.label || '', m.idKind, m.id, m.orcid || ''].map(quote).join(','))].join('\n'), 'text/csv;charset=utf-8;');
   };
 
   return (
@@ -73,7 +77,7 @@ export function MemberListDialog({ open, onClose, title, members }) {
 export function MemberList({ members, onDelete }) {
   return <List dense disablePadding>{members.map((m, i) => (
     <ListItem key={`${m.id}-${i}`} disableGutters sx={{ px: 2, py: 1 }} secondaryAction={onDelete && <IconButton color="error" size="small" onClick={() => onDelete(m.id)} aria-label="remove member"><DeleteIcon color="error" fontSize="small" /></IconButton>}>
-      <Typography variant="body2">{m.label && m.label !== m.id && <strong>{m.label}</strong>}{m.label && m.label !== m.id && ' '}<span style={{ fontStyle: 'italic' }}>({m.idKind}: {m.id})</span></Typography>
+      <Typography variant="body2">{m.label && m.label !== m.id && <strong>{m.label}</strong>}{m.label && m.label !== m.id && ' '}<span style={{ fontStyle: 'italic' }}>({m.idKind}: {m.id})</span><OrcidLine orcid={m.orcid} /></Typography>
     </ListItem>
   ))}</List>;
 }

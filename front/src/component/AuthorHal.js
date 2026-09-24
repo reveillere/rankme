@@ -15,6 +15,7 @@ import { FilterButton } from './FilterButton';
 import { SortButton } from './SortButton';
 import { ReportButton } from './ReportButton';
 import { IdentityLinksIconButton } from './IdentityLinksIconButton';
+import { OrcidLine } from './OrcidLine';
 import { LINKS_KEY } from '../personalData';
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { RecordsHeader } from './RecordsHeader';
@@ -316,7 +317,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
           : (<>
             idHal: {id}
             {authorInfo && (authorInfo.orcid
-              ? <> · ORCID: <a href={authorInfo.orcid} target="_blank" rel="noreferrer">{authorInfo.orcid.replace('https://orcid.org/', '')}</a></>
+              ? <OrcidLine orcid={authorInfo.orcid} />
               : (
                 <span style={{ color: '#b26a00', marginLeft: '0.6em' }}>
                   <WarningAmberIcon fontSize="inherit" style={{ verticalAlign: 'text-bottom', marginRight: '0.2em' }} />

@@ -72,6 +72,7 @@ router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
 
 router.post('/hal/author/:idHal', requireApiToken, publicApiLimit, hal.controllerAuthor);
 router.get('/hal/author-info/*', hal.controllerAuthorInfo);
+router.post('/hal/author-infos', hal.controllerAuthorInfos);
 router.get('/hal/search/*', hal.controllerSearch);
 router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
 

@@ -27,7 +27,7 @@ import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
 import { getDisplayValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
-import { getHalCategory } from '../hal';
+import { getHalCategory, fetchAuthorInfos } from '../hal';
 import { exportHalPublicationsMarkdown, exportHalPublicationsJson, exportHalPublicationsCsv } from '../exportPublications';
 import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
 import '../App.css';
@@ -146,7 +146,21 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankedPublications.length]);
-  const dialogMembers = useMemo(() => memberIds.map(id => ({ id, idKind: 'idHal', label: memberNameById.get(id) })), [memberIds, memberNameById]);
+  // ORCIDs are fetched lazily, only once the members dialog is actually
+  // opened (a HAL structure can run into the hundreds of members, so this
+  // avoids a batch request on every page load that never gets used).
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [orcidByIdHal, setOrcidByIdHal] = useState(new Map());
+  useEffect(() => {
+    if (!membersDialogOpen || memberIds.length === 0) return;
+    let cancelled = false;
+    fetchAuthorInfos(memberIds).then(infos => {
+      if (cancelled) return;
+      setOrcidByIdHal(new Map(Object.entries(infos).map(([idHal, info]) => [idHal, info.orcid])));
+    });
+    return () => { cancelled = true; };
+  }, [membersDialogOpen, memberIds]);
+  const dialogMembers = useMemo(() => memberIds.map(id => ({ id, idKind: 'idHal', label: memberNameById.get(id), orcid: orcidByIdHal.get(id) })), [memberIds, memberNameById, orcidByIdHal]);
   // Same client-side lookup, handed to IdentityLinksPanel.js so it can show
   // names too -- see that panel's own comment for why GET /api/identity/links
   // itself never returns one.
@@ -183,7 +197,6 @@ function StructureContent({ structId, structureName, onOpenAuthor, onSearchAutho
   const [reviewOnly, setReviewOnly] = useState(false);
   const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
   // See Author.js's identical comment: stable unless a source actually

@@ -215,6 +215,24 @@ export async function getAuthorInfos(idHals) {
     return result;
 }
 
+// Batch counterpart of controllerAuthorInfo above, for member lists
+// (Structure.js/Team.js) that need ORCIDs for potentially hundreds of idHals
+// at once -- one request instead of one per member. idHals travel in the
+// body since a HAL structure's membership can be long.
+export async function controllerAuthorInfos(req, res) {
+    const { idHals } = req.body || {};
+    if (!Array.isArray(idHals)) return res.status(400).json({ error: 'Bad Request' });
+    try {
+        const infos = await getAuthorInfos(idHals);
+        const result = {};
+        for (const [idHal, info] of infos) result[idHal] = { name: info.name, orcid: info.orcids[0] || null };
+        res.json(result);
+    } catch (error) {
+        console.log('Error during HAL author-infos computation', error);
+        res.status(400).json({ error: error.message });
+    }
+}
+
 // Reverse lookup of getAuthorInfo above: given a bare ORCID (no
 // https://orcid.org/ prefix -- orcidId_s itself is stored bare, unlike
 // dblp's own url field), find the HAL identity that claims it, if any.

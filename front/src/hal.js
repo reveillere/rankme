@@ -46,6 +46,21 @@ export async function fetchAuthorInfo(idHal) {
   return await resp.json();
 }
 
+// Batch counterpart of fetchAuthorInfo, for member lists (Structure.js/
+// Team.js) that need ORCIDs for potentially hundreds of idHals in one round
+// trip. Returns idHal -> { name, orcid } -- same shape/convention as
+// fetchAuthorInfo above (orcid bare), so OrcidLine.js renders either the
+// same way.
+export async function fetchAuthorInfos(idHals) {
+  if (idHals.length === 0) return {};
+  const resp = await fetch('/api/hal/author-infos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idHals }),
+  });
+  return await resp.json();
+}
+
 // A HAL "structure" (lab, institution, team...) -- see
 // https://aurehal.archives-ouvertes.fr/structure/index -- searched the same
 // way as an author, but every publication it's ever been affiliated with
