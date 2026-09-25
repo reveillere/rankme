@@ -4,6 +4,9 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.16', items: [
+    'Added a "Feedback & ideas" link to the About dialog.',
+  ] },
   { version: '0.15', items: [
     'Added this "What’s new" changelog to the About dialog.',
   ] },

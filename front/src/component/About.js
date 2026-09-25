@@ -26,6 +26,10 @@ import { CHANGELOG } from '../changelog';
 
 export const HIDE_ON_START_KEY = 'rankme:hideAboutOnStart';
 
+// A Tally.so form (free, no rankme-side account/API calls needed since it's
+// just an outbound link) -- manage it at https://tally.so/forms/dWrv0y/edit.
+const FEEDBACK_URL = 'https://tally.so/r/dWrv0y';
+
 function About({ open, onClose }) {
   const [dontShowAgain, setDontShowAgain] = useState(() => localStorage.getItem(HIDE_ON_START_KEY) === 'true');
 
@@ -126,6 +130,9 @@ function About({ open, onClose }) {
           label={<Typography variant="body2">Don&apos;t show this again</Typography>}
           sx={{ mr: 'auto' }}
         />
+        <Link href={FEEDBACK_URL} target="_blank" rel="noreferrer" variant="body2">
+          Feedback &amp; ideas
+        </Link>
       </DialogActions>
     </Dialog>
   );
