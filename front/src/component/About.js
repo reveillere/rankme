@@ -12,10 +12,17 @@ import {
   Box,
   FormControlLabel,
   Checkbox,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  List,
+  ListItem,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import pkg from '../../package.json';
+import { CHANGELOG } from '../changelog';
 
 export const HIDE_ON_START_KEY = 'rankme:hideAboutOnStart';
 
@@ -79,6 +86,30 @@ function About({ open, onClose }) {
             point, not a definitive assessment.
           </Typography>
         </Box>
+
+        <Accordion
+          disableGutters
+          elevation={0}
+          sx={{ mt: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, '&:before': { display: 'none' } }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>What&apos;s new</Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ maxHeight: 280, overflowY: 'auto' }}>
+            {CHANGELOG.map(({ version, items }) => (
+              <Box key={version} sx={{ mb: 1.5 }}>
+                <Typography variant="subtitle2" color="text.secondary">v{version}</Typography>
+                <List dense disablePadding sx={{ listStyleType: 'disc', pl: 2.5 }}>
+                  {items.map((item, i) => (
+                    <ListItem key={i} disableGutters sx={{ display: 'list-item', py: 0.25 }}>
+                      <Typography variant="body2">{item}</Typography>
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            ))}
+          </AccordionDetails>
+        </Accordion>
 
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
           This site uses self-hosted, cookie-free analytics (page views, referrers) to understand usage. No

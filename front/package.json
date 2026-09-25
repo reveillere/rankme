@@ -1,8 +1,8 @@
 {
   "name": "rankme",
   "private": true,
-  "version": "0.14.0",
-  "versionDate": "2026-09-24",
+  "version": "0.15.0",
+  "versionDate": "2026-09-25",
   "type": "module",
   "homepage": "https://www.rankme.fr",
   "scripts": {
