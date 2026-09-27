@@ -347,7 +347,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 
       <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
-        <MatchConfidenceFilterButton />
+        <MatchConfidenceFilterButton records={rankedPublications} filterKey={matchTypeAccessor} />
         <SortButton sortMode={sortMode} setSortMode={setSortMode} />
         <Button
           variant="outlined"

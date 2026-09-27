@@ -4,6 +4,9 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.20', items: [
+    'The match-confidence filter now shows a count next to each option (e.g. "Approximate match (12)").',
+  ] },
   { version: '0.19', items: [
     'Replaced "Only show matches to review" with a full match-confidence filter (exact/approximate/ambiguous/manual/community/custom-ranking/no-match), right next to the year filter.',
     'Rank badges now show a small colored dot for match confidence instead of coloring the rank itself, with a hover tooltip explaining it.',
