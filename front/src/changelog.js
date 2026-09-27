@@ -4,6 +4,9 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.17', items: [
+    'HAL software deposits now get their own category (tag + color) instead of showing an incorrect "NaN" tag.',
+  ] },
   { version: '0.16', items: [
     'Added a "Feedback & ideas" link to the About dialog.',
   ] },

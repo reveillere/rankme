@@ -15,6 +15,7 @@ const halCategoriesRaw = {
   'PROCEEDINGS': { name: 'Proceedings', cssClass: 'proceedings' },
   'LECTURE': { name: 'Lecture', cssClass: 'informal' },
   'UNDEFINED': { name: 'Other', cssClass: 'informal' },
+  'SOFTWARE': { name: 'Software', cssClass: 'software' },
 };
 
 // letter (alongside color) is likewise borrowed from the matching dblp

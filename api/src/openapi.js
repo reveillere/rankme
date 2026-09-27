@@ -22,7 +22,7 @@ const rankingParameters = [
 const recordPresentationParameters = [
   { name: 'from', in: 'query', schema: { type: 'integer', minimum: 1800 }, description: 'First publication year to include.' },
   { name: 'to', in: 'query', schema: { type: 'integer', minimum: 1800 }, description: 'Last publication year to include.' },
-  { name: 'categories', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string', enum: ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'informal'] } }, description: 'Comma-separated selected publication categories.' },
+  { name: 'categories', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string', enum: ['article', 'inproceedings', 'proceedings', 'book', 'incollection', 'informal', 'software'] } }, description: 'Comma-separated selected publication categories.' },
   { name: 'ranks', in: 'query', style: 'form', explode: false, schema: { type: 'array', items: { type: 'string' } }, description: 'Comma-separated selected rank values, for example A*,A,Q1. A record with no computed rank is never excluded by this filter.' },
   { name: 'sort', in: 'query', schema: { type: 'string', enum: ['date', 'date-rank', 'rank-date'], default: 'date' }, description: 'Result ordering.' },
   { name: 'export', in: 'query', schema: { type: 'string', enum: ['md', 'csv', 'json'] }, description: 'When set, the response is the rendered export (Content-Type text/markdown, text/csv or application/json) instead of the normal JSON envelope -- a lightweight snapshot (rank/authors/title/venue/type/doi per record), not a pixel-perfect mirror of the JSON response.' },

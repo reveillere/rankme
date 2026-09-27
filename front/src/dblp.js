@@ -5,6 +5,7 @@ export const dblpCategories = {
     'book': { name: 'Books and Theses', letter: 'b', color: '#f8c91f' },
     'incollection': { name: 'Parts in Books or Collections', letter: 'p', color: '#ef942d' },
     'informal': { name: 'Informal and Other Publications', letter: 'i', color: '#606b70' },
+    'software': { name: 'Software', letter: 's', color: '#4caf50' },
 }
 
 

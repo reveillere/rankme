@@ -77,6 +77,7 @@ ul.publ-list>li.proceedings>div.box>img { background:#33c3ba; }
 ul.publ-list>li.book>div.box>img { background:#f8c91f; }
 ul.publ-list>li.incollection>div.box>img { background:#ef942d; }
 ul.publ-list>li.informal>div.box>img { background:#606b70; }
+ul.publ-list>li.software>div.box>img { background:#4caf50; }
 
 
 ul.publ-list>li.entry>div.nr { 

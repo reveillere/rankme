@@ -27,13 +27,14 @@ const DBLP_RANKABLE_TYPES = new Set(['inproceedings', 'article']);
 const HAL_RANKABLE_TYPES = new Set(['COMM', 'ART']);
 
 // Mirrors front/src/hal.js's halCategoriesRaw -- cssClass column only,
-// that's the shared 6-value vocabulary (see openapi.js's recordPresentationParameters
+// that's the shared 7-value vocabulary (see openapi.js's recordPresentationParameters
 // `categories` enum) `categories`/filtering match against; name/color/letter
 // there are display-only, not needed for a JSON API response.
 const HAL_CATEGORY_CSS_CLASS = {
     ART: 'article', COMM: 'inproceedings', COUV: 'incollection', OUV: 'book',
     THESE: 'book', HDR: 'book', REPORT: 'informal', POSTER: 'informal',
     PATENT: 'informal', PROCEEDINGS: 'proceedings', LECTURE: 'informal', UNDEFINED: 'informal',
+    SOFTWARE: 'software',
 };
 
 // A handful of rank computations in parallel -- same "shared HAL/CORE/SJR
