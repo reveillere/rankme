@@ -7,8 +7,10 @@ export const ranks = {
     // merging the two (see FilterSettingsContext.js's ranksForSource)
     // collapses into a single "Unranked" bucket/row instead of two
     // identical-looking ones that used to coexist under different keys
-    // ('Unranked' and 'QU').
-    'Unranked'  : { name: 'Unranked',   color: '#C0AEB4' },
+    // ('Unranked' and 'QU'). Same color as corePortal.js's own 'Unranked'
+    // too now (was a different pinkish-gray) -- one merged row should read
+    // as one neutral "no grade" color regardless of which axis it came from.
+    'Unranked'  : { name: 'Unranked',   color: '#9AA0A6' },
 };
 
 export default { ranks };

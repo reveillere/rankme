@@ -19,12 +19,12 @@ import { OrcidLine } from './OrcidLine';
 import { LINKS_KEY } from '../personalData';
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { RecordsHeader } from './RecordsHeader';
-import { ReviewFilterToggle } from './ReviewFilterToggle';
+import { MatchConfidenceFilterButton } from './MatchConfidenceFilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { HalPublications } from './HalPublications';
 import { IdentityLinkDialog } from './IdentityLinkDialog';
 import { filterPublications } from '../filterPublications';
-import { needsReview, getOverride, getSharedOverride } from '../matchOverrides';
+import { getOverride, getSharedOverride, effectiveMatchType } from '../matchOverrides';
 import { getDisplayValue, customProfileIdForPortal } from '../customRankings';
 import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
@@ -206,11 +206,9 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // own grouping/ordering below, exposed here (not buried inside
   // HalPublications) so a future sort-aware export can read it directly.
   const [sortMode, setSortMode] = useState(() => SORT_MODES.includes(initialSort) ? initialSort : DEFAULT_SORT_MODE);
-  const { filterRanks, filterCategories, ranks, conferenceSource, journalSource } = useFilterSettings();
+  const { filterRanks, filterCategories, filterMatchTypes, ranks, conferenceSource, journalSource } = useFilterSettings();
   const [filteredRecords, setFilteredRecords] = useState(rankedPublications);
   const [isFilterActive, setIsFilterActive] = useState(() => validInitialYearRange !== null);
-  const [reviewOnly, setReviewOnly] = useState(false);
-  const [reviewCount, setReviewCount] = useState(0);
   const [showCompleted, setShowCompleted] = useState(false);
   const overrideTick = useOverrideRefreshTick();
   const sharedMaps = useSharedOverridesMaps();
@@ -234,6 +232,18 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
     const override = getOverride(portal, pub.rank);
     return getDisplayValue(pub.rank, { portal, sharedMap: sharedMaps[portal], customProfileId, override, year: yearAccessor(pub) });
   };
+  // Same idea as effectiveValueAccessor above, but for the "filter by match
+  // confidence" checkboxes -- delegates to effectiveMatchType so a checkbox
+  // always matches exactly what RankBadge.js's own dot shows for that
+  // publication.
+  const matchTypeAccessor = pub => {
+    if (!pub.rank) return undefined;
+    const portal = portalAccessor(pub);
+    const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+    const override = getOverride(portal, pub.rank);
+    const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
+    return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
+  };
   // See Author.js's identical customProfileIdAccessor comment.
   const customProfileIdAccessor = pub => customProfileIdForPortal(activeCustomProfileIds, portalAccessor(pub));
 
@@ -255,15 +265,10 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   }, [sortMode]);
 
   useEffect(() => {
-    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor });
-    const toReview = records.filter(pub => {
-      const portal = portalAccessor(pub);
-      return needsReview(portal, pub.rank, getSharedOverride(pub.rank, sharedMaps[portal]));
-    });
-    setReviewCount(toReview.length);
-    setFilteredRecords(reviewOnly && toReview.length > 0 ? toReview : records);
+    const records = filterPublications(rankedPublications, { yearAccessor, filterYears, filterCategories, categoryKeyAccessor, filterRanks, effectiveValueAccessor, filterMatchTypes, matchTypeAccessor });
+    setFilteredRecords(records);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankedPublications, filterYears, filterCategories, filterRanks, reviewOnly, overrideTick, sharedMaps, activeCustomProfileIds]);
+  }, [rankedPublications, filterYears, filterCategories, filterRanks, filterMatchTypes, overrideTick, sharedMaps, activeCustomProfileIds]);
 
   // See Author.js's identical effect for why this is one-shot (hasExportedRef,
   // not state) and declared after the filteredRecords-recomputing effect
@@ -342,6 +347,7 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 
       <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
         <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+        <MatchConfidenceFilterButton />
         <SortButton sortMode={sortMode} setSortMode={setSortMode} />
         <Button
           variant="outlined"
@@ -369,7 +375,6 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
 
       <div style={{ height: '50px' }}></div>
 
-      <ReviewFilterToggle count={reviewCount} checked={reviewOnly} onChange={setReviewOnly} />
       <HalPublications selfIds={selfIds} data={filteredRecords} onOpenAuthor={onOpenAuthor} onSearchAuthor={onSearchAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} isActive={isActive} sortMode={sortMode} />
 
       <Snackbar

@@ -3,9 +3,10 @@ import { fetchSharedOverrides, getUseCommunityOverrides } from './matchOverrides
 
 // Fetches every portal's community-confirmed corrections once per page load,
 // for callers that need to know -- across a whole list, not just one badge
-// -- whether a given rank already has a community match (see needsReview
-// in matchOverrides.js, used by ReviewFilterToggle.js). fetchSharedOverrides
-// itself caches one in-flight/resolved promise per portal, so this doesn't
+// -- whether a given rank already has a community match (see
+// effectiveMatchType in matchOverrides.js, used by the "filter by match
+// confidence" list filter). fetchSharedOverrides itself caches one
+// in-flight/resolved promise per portal, so this doesn't
 // duplicate the network request RankBadge.js/Publications.js already make
 // for the same data. Returns {} while community overrides are turned off
 // or still loading -- getSharedOverride already treats a missing map entry

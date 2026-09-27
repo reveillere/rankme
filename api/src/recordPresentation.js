@@ -40,7 +40,7 @@ const HAL_CATEGORY_CSS_CLASS = {
     REPORT_DOCT: 'informal', REPORT_ETAB: 'informal', REPORT_FORM: 'informal', REPORT_GMAST: 'informal',
     REPORT_GLICE: 'informal', REPORT_FPROJ: 'informal', REPORT_RFOINT: 'informal', REPORT_COOR: 'informal',
     REPORT_RETABINT: 'informal', CREPORT: 'informal', REPACT: 'informal', SYNTHESE: 'informal',
-    NOTE: 'informal', NOTICE: 'informal', POSTER: 'informal', PRESCONF: 'inproceedings',
+    NOTE: 'informal', NOTICE: 'informal', POSTER: 'informal', PRESCONF: 'informal',
     PATENT: 'informal', PROCEEDINGS: 'proceedings', LECTURE: 'informal', BLOG: 'informal',
     TRAD: 'informal', IMG: 'informal', VIDEO: 'informal', SON: 'informal', MAP: 'informal',
     OTHER: 'informal', UNDEFINED: 'informal', SOFTWARE: 'software', ISSUE: 'informal',

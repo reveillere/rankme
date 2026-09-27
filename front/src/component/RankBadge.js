@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import Tooltip from '@mui/material/Tooltip';
 
-import { RankDetailsPopover, MATCH_STYLE } from './RankDetailsPopover';
-import { getOverride, getSharedOverride } from '../matchOverrides';
+import { RankDetailsPopover } from './RankDetailsPopover';
+import { getOverride, getSharedOverride, effectiveMatchType, MATCH_STYLE } from '../matchOverrides';
 import { getDisplayValue } from '../customRankings';
 
 // A rank badge is clickable: it opens RankDetailsPopover, which shows what
@@ -80,14 +81,16 @@ export function RankBadge({ rank, portal, year, resolvedFullName, sharedMaps, ac
   // Personal override always wins; a community one only applies when this
   // browser hasn't set its own (see RankDetailsPopover's identical rule).
   const sharedOverride = !override ? getSharedOverride(rank, sharedMap) : null;
-  const isConfirmed = override?.type === 'confirmed';
-  const effective = activeCustomProfileId
-    ? { value: getDisplayValue(rank, { portal, sharedMap, customProfileId: activeCustomProfileId, override, year }), matchType: 'custom' }
-    : override
-      ? { value: override.candidate.value, matchType: isConfirmed ? 'confirmed' : 'manual' }
-      : sharedOverride
-        ? { value: sharedOverride.candidate.value, matchType: 'shared' }
-        : { value: rank.value, matchType: rank.matchType };
+  const effective = {
+    value: activeCustomProfileId
+      ? getDisplayValue(rank, { portal, sharedMap, customProfileId: activeCustomProfileId, override, year })
+      : override
+        ? override.candidate.value
+        : sharedOverride
+          ? sharedOverride.candidate.value
+          : rank.value,
+    matchType: effectiveMatchType(rank, { customProfileId: activeCustomProfileId, override, sharedOverride }),
+  };
   const style = MATCH_STYLE[effective.matchType] || MATCH_STYLE.none;
   // "none" (Unranked/QU) already reads clearly as a label on its own, so it
   // stays in the default color; every other case -- an exact match, an
@@ -97,10 +100,25 @@ export function RankBadge({ rank, portal, year, resolvedFullName, sharedMaps, ac
 
   return (
     <>
-      <span
-        onClick={(e) => setAnchorEl(e.currentTarget)}
-        style={{ cursor: 'pointer', color: colored ? style.color : undefined }}
-      >
+      <span onClick={(e) => setAnchorEl(e.currentTarget)} style={{ cursor: 'pointer' }}>
+        {colored && (
+          // A small traffic-light-style dot carries the match-confidence
+          // color instead of the rank value's own text -- coloring the text
+          // itself (the previous design) made e.g. an exact-match "Q1"/"B"
+          // look like it was Q1/B's own rank-tier color, not a separate
+          // confidence indicator layered on top of it. Tooltip repeats what
+          // clicking through to the popover's own header already says, just
+          // reachable without opening it.
+          <Tooltip title={style.label} placement="top">
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'inline-block', width: 8, height: 8, borderRadius: '50%',
+                backgroundColor: style.color, marginRight: 4, verticalAlign: 'middle',
+              }}
+            />
+          </Tooltip>
+        )}
         {effective.value}
       </span>
       {anchorEl && (

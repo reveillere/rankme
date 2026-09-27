@@ -3,7 +3,12 @@ import { filterPublications } from './filterPublications';
 
 const yearAccessor = (pub) => pub.year;
 
-const base = { yearAccessor, filterYears: [2000, 2026], filterCategories: { article: true, book: false }, filterRanks: { A: true, B: false } };
+const base = {
+  yearAccessor, filterYears: [2000, 2026],
+  filterCategories: { article: true, book: false },
+  filterRanks: { A: true, B: false },
+  filterMatchTypes: { exact: true, fuzzy: false },
+};
 
 describe('filterPublications', () => {
   it('keeps publications inside the year range and drops the rest', () => {
@@ -26,8 +31,8 @@ describe('filterPublications', () => {
 
   it('filters by rank when a publication has one, but never drops unranked publications', () => {
     const pubs = [
-      { year: 2020, type: 'article', rank: { value: 'A' } },
-      { year: 2020, type: 'article', rank: { value: 'B' } },
+      { year: 2020, type: 'article', rank: { value: 'A', matchType: 'exact' } },
+      { year: 2020, type: 'article', rank: { value: 'B', matchType: 'exact' } },
       { year: 2020, type: 'article' }, // no rank at all, e.g. a book chapter
     ];
     const result = filterPublications(pubs, base);
@@ -35,12 +40,24 @@ describe('filterPublications', () => {
     expect(result.some(p => p.rank?.value === 'B')).toBe(false);
   });
 
-  it('applies all three filters together', () => {
+  it('filters by match confidence when a publication has a rank, but never drops unranked publications', () => {
     const pubs = [
-      { year: 2020, type: 'article', rank: { value: 'A' } }, // keep
-      { year: 1990, type: 'article', rank: { value: 'A' } }, // out of range
-      { year: 2020, type: 'book', rank: { value: 'A' } },    // wrong category
-      { year: 2020, type: 'article', rank: { value: 'B' } }, // wrong rank
+      { year: 2020, type: 'article', rank: { value: 'A', matchType: 'exact' } },
+      { year: 2020, type: 'article', rank: { value: 'A', matchType: 'fuzzy' } },
+      { year: 2020, type: 'article' }, // no rank at all, e.g. a book chapter
+    ];
+    const result = filterPublications(pubs, base);
+    expect(result).toHaveLength(2);
+    expect(result.some(p => p.rank?.matchType === 'fuzzy')).toBe(false);
+  });
+
+  it('applies every filter together', () => {
+    const pubs = [
+      { year: 2020, type: 'article', rank: { value: 'A', matchType: 'exact' } }, // keep
+      { year: 1990, type: 'article', rank: { value: 'A', matchType: 'exact' } }, // out of range
+      { year: 2020, type: 'book', rank: { value: 'A', matchType: 'exact' } },    // wrong category
+      { year: 2020, type: 'article', rank: { value: 'B', matchType: 'exact' } }, // wrong rank
+      { year: 2020, type: 'article', rank: { value: 'A', matchType: 'fuzzy' } }, // wrong match confidence
     ];
     const result = filterPublications(pubs, base);
     expect(result).toEqual([pubs[0]]);

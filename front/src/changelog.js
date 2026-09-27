@@ -4,6 +4,12 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.19', items: [
+    'Replaced "Only show matches to review" with a full match-confidence filter (exact/approximate/ambiguous/manual/community/custom-ranking/no-match), right next to the year filter.',
+    'Rank badges now show a small colored dot for match confidence instead of coloring the rank itself, with a hover tooltip explaining it.',
+    'Fixed inconsistent colors in the yearly chart: CORE\'s "Misc" and grade colors, and "Unranked" now match between conferences and journals.',
+    '"Informal and Other Publications" renamed to "Other Publications"; conference presentations with no published proceedings now belong there instead of "Conference paper".',
+  ] },
   { version: '0.18', items: [
     'Fixed more HAL document types (journal issues, dissertations, various report kinds, etc.) that could still show a broken "NaN" tag.',
     'Team/structure member names in the publication list are now clickable, like any other author.',

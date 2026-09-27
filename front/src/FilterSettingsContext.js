@@ -4,6 +4,7 @@ import * as CorePortal from './corePortal';
 import * as SjrPortal from './sjrPortal';
 import * as CcfPortal from './ccfPortal';
 import { ranksForReference, getProfile as getCustomProfile } from './customRankings';
+import { MATCH_STYLE } from './matchOverrides';
 import {
   getConferenceSource, setConferenceSource as persistConferenceSource,
   getJournalSource, setJournalSource as persistJournalSource,
@@ -17,6 +18,13 @@ import {
 // with getHalCategory(type).cssClass before checking it against
 // filterCategories.
 export const categories = dblpCategories;
+
+// The "filter by match confidence" checkbox list (MatchConfidenceFilterButton.js)
+// -- one entry per effectiveMatchType outcome (matchOverrides.js), same
+// {name, color} shape Selector.js already expects for categories/ranks.
+export const matchTypes = Object.fromEntries(
+  Object.entries(MATCH_STYLE).map(([key, { label, color }]) => [key, { name: label, color }])
+);
 
 // Each axis's own rank vocabulary (see rankingSource.js) -- computed fresh
 // from whichever source is currently live in context, not a static export,
@@ -120,6 +128,7 @@ export function FilterSettingsProvider({ children }) {
   // key under a different pair after switching either axis.
   const [filterRanks, setFilterRanks] = usePersistedSelection(`rankme:filterRanks:${conferenceSource}:${journalSource}`, ranks);
   const [filterCategories, setFilterCategories] = usePersistedSelection('rankme:filterCategories', categories);
+  const [filterMatchTypes, setFilterMatchTypes] = usePersistedSelection('rankme:filterMatchTypes', matchTypes);
 
   const setConferenceSource = (value) => {
     persistConferenceSource(value);
@@ -172,6 +181,7 @@ export function FilterSettingsProvider({ children }) {
       ranks,
       filterRanks, setFilterRanks,
       filterCategories, setFilterCategories,
+      filterMatchTypes, setFilterMatchTypes,
     }}>
       {children}
     </FilterSettingsContext.Provider>

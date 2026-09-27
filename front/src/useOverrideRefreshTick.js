@@ -8,11 +8,10 @@ import { useEffect, useState } from 'react';
 // may have just changed" reaction here). Both live in localStorage, not
 // React state, so nothing re-renders on their own when either changes --
 // include this tick in a filtering effect's dependency array so a
-// publication list (and any count derived from it, e.g.
-// ReviewFilterToggle's "N to review", or a filterRanks checkbox's actual
-// membership once a custom profile is active) updates live as the user
-// works through corrections, instead of only on the next unrelated filter
-// change or a full page reload.
+// publication list (and any count derived from it, e.g. a filterRanks or
+// filterMatchTypes checkbox's actual membership once a custom profile is
+// active) updates live as the user works through corrections, instead of
+// only on the next unrelated filter change or a full page reload.
 export function useOverrideRefreshTick() {
   const [tick, setTick] = useState(0);
   useEffect(() => {

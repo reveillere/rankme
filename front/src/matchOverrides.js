@@ -2,8 +2,8 @@ const STORAGE_KEY = 'rankme:matchOverrides';
 const CLIENT_ID_KEY = 'rankme:clientId';
 
 // getOverride (called once per publication by RankBadge.js, Publications.js's
-// Venue, and the "Only show matches to review" filter's needsReview, see
-// below) used to call read() -- a fresh localStorage.getItem + JSON.parse --
+// Venue, and effectiveMatchType's callers below) used to call read() -- a
+// fresh localStorage.getItem + JSON.parse --
 // on every single call. Harmless for one badge, but for a large author/
 // structure (LaBRI: ~10,400 publications) that's ~10,400 synchronous
 // localStorage round-trips on every list render, measured at multiple
@@ -186,26 +186,48 @@ export function getEffectiveValue(rank, sharedMap) {
   return resolveEffectiveValue(read(), rank, sharedMap);
 }
 
-// Whether a rank's automatic match still needs a human look -- used by the
-// "Only show matches to review" list filter (see ReviewFilterToggle.js).
-// Anything already 'exact', already given a personal override/confirmation
-// (both stored the same way, see setOverride/confirmMatch above), or
-// already community-confirmed (sharedOverride -- the caller looks this up
-// itself via getSharedOverride/fetchSharedOverrides, since it needs the
-// per-portal shared map either way to actually display the match) is
-// considered resolved, same priority as RankBadge.js: personal beats
-// shared, and either beats the plain automatic match.
-// 'none' (Unranked -- the venue simply isn't in the ranking source at all)
-// is excluded too: unlike 'fuzzy'/'ambiguous', there's no automatic guess
-// to second-guess -- nothing for a reviewer to actually do (they can still
-// search and set one manually via RankDetailsPopover.js, but that's a
-// deliberate addition, not something to chase down for every unranked row),
-// so it shouldn't inflate the count.
-export function needsReview(portal, rank, sharedOverride) {
-  if (!rank || rank.matchType === 'exact' || rank.matchType === 'none') return false;
-  if (sharedOverride) return false;
-  return !getOverride(portal, rank);
+// The match-confidence "traffic light" a rank badge shows (RankBadge.js) --
+// exact/fuzzy/ambiguous/none straight from the automatic match, or upgraded
+// to manual/confirmed/shared/custom once a correction applies, in the same
+// priority everywhere it matters: a custom ranking profile (once active for
+// this axis) replaces the automatic match/correction machinery entirely (see
+// customRankings.js's own decision 2); otherwise a personal
+// override/confirmation beats a community one, which beats the plain
+// automatic result. Factored out so RankBadge.js, RankDetailsPopover.js, and
+// the "filter by match confidence" list filter (filterPublications.js, via
+// each container's matchTypeAccessor) all agree on exactly the same answer
+// for a given rank instead of three independently-maintained copies of this
+// same branch.
+export function effectiveMatchType(rank, { customProfileId, override, sharedOverride } = {}) {
+  if (!rank) return undefined;
+  if (customProfileId) return 'custom';
+  if (override) return override.type === 'confirmed' ? 'confirmed' : 'manual';
+  if (sharedOverride) return 'shared';
+  return rank.matchType;
 }
+
+// Colors/labels for every effectiveMatchType outcome above, keyed the same
+// way -- shared by the badge's dot (RankBadge.js), the popover's header
+// (RankDetailsPopover.js), and the "filter by match confidence" checkbox
+// list (FilterSettingsContext.js's matchTypes/MatchConfidenceFilterButton.js).
+export const MATCH_STYLE = {
+  exact: { label: 'Exact match', color: '#2e7d32' },
+  fuzzy: { label: 'Approximate match', color: '#e07b00' },
+  ambiguous: { label: 'Ambiguous match', color: '#c62828' },
+  manual: { label: 'Manually set by you', color: '#1565c0' },
+  confirmed: { label: 'Confirmed by you', color: '#66bb6a' },
+  // A different blue than "manual" -- both are corrections rather than an
+  // automatic match, but this one nobody in this browser actually made;
+  // it's a different-enough shade to tell apart at a glance while still
+  // reading as "someone deliberately set this", not a computed result.
+  shared: { label: 'Confirmed by the community', color: '#0288d1' },
+  // Distinct from every correction color above (a custom ranking replaces
+  // the automatic match/correction machinery for this axis entirely, see
+  // customRankings.js's own decision 2 comment, rather than being one more
+  // kind of correction on top of it).
+  custom: { label: 'Custom ranking', color: '#6a1b9a' },
+  none: { label: 'No match found', color: '#757575' },
+};
 
 export function listOverrides() {
   return Object.values(read()).sort((a, b) => b.savedAt - a.savedAt);

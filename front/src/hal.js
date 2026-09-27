@@ -39,7 +39,12 @@ const halCategoriesRaw = {
   'NOTE': { name: 'Note', cssClass: 'informal' },
   'NOTICE': { name: 'Bibliographic notice', cssClass: 'informal' },
   'POSTER': { name: 'Poster', cssClass: 'informal' },
-  'PRESCONF': { name: 'Conference presentation', cssClass: 'inproceedings' },
+  // Not 'inproceedings' -- that bucket is conference/workshop *papers* only
+  // (matches a real proceedings entry); a PRESCONF is just a presentation
+  // with nothing published, so it belongs with reports/posters/etc. instead.
+  // Consistent with it not being rankable either -- see the removed
+  // isHalConferenceType (git history) this used to require.
+  'PRESCONF': { name: 'Conference presentation', cssClass: 'informal' },
   'PATENT': { name: 'Patent', cssClass: 'informal' },
   'PROCEEDINGS': { name: 'Proceedings', cssClass: 'proceedings' },
   'LECTURE': { name: 'Lecture', cssClass: 'informal' },

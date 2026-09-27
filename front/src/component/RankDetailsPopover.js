@@ -15,29 +15,10 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 import { searchCandidates } from '../rankCandidates';
-import { setOverride, clearOverride, confirmMatch, patchOverrideCandidate } from '../matchOverrides';
+import { setOverride, clearOverride, confirmMatch, patchOverrideCandidate, effectiveMatchType, MATCH_STYLE } from '../matchOverrides';
 import { ranksForReference, getProfile, getEffectiveCustomValue, setEntry, deleteEntry, entryKeyFor } from '../customRankings';
 
 const DEBOUNCE_MS = 300;
-
-export const MATCH_STYLE = {
-  exact: { label: 'Exact match', color: '#2e7d32' },
-  fuzzy: { label: 'Approximate match', color: '#e07b00' },
-  ambiguous: { label: 'Ambiguous match', color: '#c62828' },
-  manual: { label: 'Manually set by you', color: '#1565c0' },
-  confirmed: { label: 'Confirmed by you', color: '#66bb6a' },
-  // A different blue than "manual" -- both are corrections rather than an
-  // automatic match, but this one nobody in this browser actually made;
-  // it's a different-enough shade to tell apart at a glance while still
-  // reading as "someone deliberately set this", not a computed result.
-  shared: { label: 'Confirmed by the community', color: '#0288d1' },
-  // Distinct from every correction color above (a custom ranking replaces
-  // the automatic match/correction machinery for this axis entirely, see
-  // customRankings.js's own decision 2 comment, rather than being one more
-  // kind of correction on top of it).
-  custom: { label: 'Custom ranking', color: '#6a1b9a' },
-  none: { label: 'No match found', color: '#757575' },
-};
 
 // CORE grades and SJR quartiles on one shared best-to-worst scale, so a
 // historical-vs-current rank pair can be compared regardless of portal.
@@ -253,8 +234,8 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
   // customRankings.js's ranksForReference). Empty (no profile at all,
   // activeCustomProfileId falsy) never renders the chip row below anyway.
   const customPalette = customProfile ? ranksForReference(customProfile.reference) : {};
-  const effectiveMatchType = customValue ? 'custom' : isConfirmed ? 'confirmed' : isManualOverride ? 'manual' : isShared ? 'shared' : rank.matchType;
-  const style = MATCH_STYLE[effectiveMatchType] || MATCH_STYLE.none;
+  const matchType = effectiveMatchType(rank, { customProfileId: activeCustomProfileId, override, sharedOverride });
+  const style = MATCH_STYLE[matchType] || MATCH_STYLE.none;
   const isJournal = portal === 'sjr';
   const isCcf = portal === 'ccf';
   const displayedValue = customValue ? customValue.value : isManualOverride ? override.candidate.value : isShared ? sharedOverride.candidate.value : rank.value;
