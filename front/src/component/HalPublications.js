@@ -68,7 +68,12 @@ export const HalPublicationRow = React.memo(function HalPublicationRow({ item, c
               .map((a, i) => (
                 <span key={i} className="link">
                   {a.idHal && selfIds.includes(a.idHal) ? (
-                    <span className="self-author">{a.name}</span>
+                    <a href="#" className="self-author" onClick={(e) => {
+                      e.preventDefault();
+                      onOpenAuthor({ type: 'hal-author', id: `hal:${a.idHal}`, label: a.name, halId: a.idHal, authorName: a.name });
+                    }}>
+                      {a.name}
+                    </a>
                   ) : a.idHal ? (
                     <a href="#" onClick={(e) => {
                       e.preventDefault();

@@ -4,6 +4,10 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.18', items: [
+    'Fixed more HAL document types (journal issues, dissertations, various report kinds, etc.) that could still show a broken "NaN" tag.',
+    'Team/structure member names in the publication list are now clickable, like any other author.',
+  ] },
   { version: '0.17', items: [
     'HAL software deposits now get their own category (tag + color) instead of showing an incorrect "NaN" tag.',
   ] },

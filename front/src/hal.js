@@ -2,6 +2,14 @@ import { dblpCategories } from './dblp';
 
 // Colors are borrowed from the matching dblp category (via cssClass) so HAL
 // and DBLP stats charts use a consistent palette for the same kind of work.
+//
+// This list is every docType_s HAL's own search API currently returns at
+// least one document for (checked against its docType_s facet across the
+// whole corpus, ~4.6M docs, Sept. 2026) -- not just the handful this app
+// happened to encounter first. HAL adds new ones over time, so getHalCategory
+// below still has a safe fallback for a genuinely new one, but this covers
+// every kind actually in use today instead of silently falling back to a
+// generic "Other" for anything less common than an article/conference paper.
 const halCategoriesRaw = {
   'ART': { name: 'Journal article', cssClass: 'article' },
   'COMM': { name: 'Conference paper', cssClass: 'inproceedings' },
@@ -9,13 +17,42 @@ const halCategoriesRaw = {
   'OUV': { name: 'Book', cssClass: 'book' },
   'THESE': { name: 'Thesis', cssClass: 'book' },
   'HDR': { name: 'Habilitation', cssClass: 'book' },
+  'MEM': { name: 'Master’s/other dissertation', cssClass: 'book' },
+  'MEMLIC': { name: 'Bachelor’s dissertation', cssClass: 'book' },
+  'ETABTHESE': { name: 'Thesis progress report', cssClass: 'informal' },
   'REPORT': { name: 'Report', cssClass: 'informal' },
+  'REPORT_LABO': { name: 'Lab report', cssClass: 'informal' },
+  'REPORT_MAST': { name: 'Internship report (Master’s)', cssClass: 'informal' },
+  'REPORT_LICE': { name: 'Internship report (Bachelor’s)', cssClass: 'informal' },
+  'REPORT_DOCT': { name: 'Internship report (Doctoral)', cssClass: 'informal' },
+  'REPORT_ETAB': { name: 'Institutional report', cssClass: 'informal' },
+  'REPORT_FORM': { name: 'Training report', cssClass: 'informal' },
+  'REPORT_GMAST': { name: 'Internship report (Engineering Master’s)', cssClass: 'informal' },
+  'REPORT_GLICE': { name: 'Internship report (Engineering Bachelor’s)', cssClass: 'informal' },
+  'REPORT_FPROJ': { name: 'Final-year project report', cssClass: 'informal' },
+  'REPORT_RFOINT': { name: 'Internal training report', cssClass: 'informal' },
+  'REPORT_COOR': { name: 'Coordination report', cssClass: 'informal' },
+  'REPORT_RETABINT': { name: 'Internal institutional report', cssClass: 'informal' },
+  'CREPORT': { name: 'Confidential report', cssClass: 'informal' },
+  'REPACT': { name: 'Activity report', cssClass: 'informal' },
+  'SYNTHESE': { name: 'Summary report', cssClass: 'informal' },
+  'NOTE': { name: 'Note', cssClass: 'informal' },
+  'NOTICE': { name: 'Bibliographic notice', cssClass: 'informal' },
   'POSTER': { name: 'Poster', cssClass: 'informal' },
+  'PRESCONF': { name: 'Conference presentation', cssClass: 'inproceedings' },
   'PATENT': { name: 'Patent', cssClass: 'informal' },
   'PROCEEDINGS': { name: 'Proceedings', cssClass: 'proceedings' },
   'LECTURE': { name: 'Lecture', cssClass: 'informal' },
+  'BLOG': { name: 'Blog post', cssClass: 'informal' },
+  'TRAD': { name: 'Translation', cssClass: 'informal' },
+  'IMG': { name: 'Image', cssClass: 'informal' },
+  'VIDEO': { name: 'Video', cssClass: 'informal' },
+  'SON': { name: 'Audio recording', cssClass: 'informal' },
+  'MAP': { name: 'Map', cssClass: 'informal' },
+  'OTHER': { name: 'Other', cssClass: 'informal' },
   'UNDEFINED': { name: 'Other', cssClass: 'informal' },
   'SOFTWARE': { name: 'Software', cssClass: 'software' },
+  'ISSUE': { name: 'Journal issue', cssClass: 'informal' },
 };
 
 // letter (alongside color) is likewise borrowed from the matching dblp
@@ -30,8 +67,13 @@ export const halCategories = Object.fromEntries(
   ])
 );
 
+// Falls back to the 'informal' bucket -- fully formed (letter/color
+// included, not just cssClass) so a HAL docType we don't know about yet
+// (there's no closed list of these -- HAL adds new ones over time) still
+// gets a real tag/number instead of "NaN" (letter undefined) the way
+// SOFTWARE/ISSUE did before they got their own entries above.
 export function getHalCategory(type) {
-  return halCategories[type] || { name: type || 'Other', cssClass: 'informal' };
+  return halCategories[type] || { ...halCategories.UNDEFINED, name: type || 'Other' };
 }
 
 export async function searchAuthor(query) {

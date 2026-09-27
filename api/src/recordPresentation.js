@@ -29,12 +29,21 @@ const HAL_RANKABLE_TYPES = new Set(['COMM', 'ART']);
 // Mirrors front/src/hal.js's halCategoriesRaw -- cssClass column only,
 // that's the shared 7-value vocabulary (see openapi.js's recordPresentationParameters
 // `categories` enum) `categories`/filtering match against; name/color/letter
-// there are display-only, not needed for a JSON API response.
+// there are display-only, not needed for a JSON API response. Any HAL
+// docType_s not listed here (a new one HAL starts using, or a rare one this
+// list missed) falls back to 'informal' below -- see categoryOf() -- same
+// safe default as front/src/hal.js's getHalCategory fallback.
 const HAL_CATEGORY_CSS_CLASS = {
     ART: 'article', COMM: 'inproceedings', COUV: 'incollection', OUV: 'book',
-    THESE: 'book', HDR: 'book', REPORT: 'informal', POSTER: 'informal',
-    PATENT: 'informal', PROCEEDINGS: 'proceedings', LECTURE: 'informal', UNDEFINED: 'informal',
-    SOFTWARE: 'software',
+    THESE: 'book', HDR: 'book', MEM: 'book', MEMLIC: 'book', ETABTHESE: 'informal',
+    REPORT: 'informal', REPORT_LABO: 'informal', REPORT_MAST: 'informal', REPORT_LICE: 'informal',
+    REPORT_DOCT: 'informal', REPORT_ETAB: 'informal', REPORT_FORM: 'informal', REPORT_GMAST: 'informal',
+    REPORT_GLICE: 'informal', REPORT_FPROJ: 'informal', REPORT_RFOINT: 'informal', REPORT_COOR: 'informal',
+    REPORT_RETABINT: 'informal', CREPORT: 'informal', REPACT: 'informal', SYNTHESE: 'informal',
+    NOTE: 'informal', NOTICE: 'informal', POSTER: 'informal', PRESCONF: 'inproceedings',
+    PATENT: 'informal', PROCEEDINGS: 'proceedings', LECTURE: 'informal', BLOG: 'informal',
+    TRAD: 'informal', IMG: 'informal', VIDEO: 'informal', SON: 'informal', MAP: 'informal',
+    OTHER: 'informal', UNDEFINED: 'informal', SOFTWARE: 'software', ISSUE: 'informal',
 };
 
 // A handful of rank computations in parallel -- same "shared HAL/CORE/SJR

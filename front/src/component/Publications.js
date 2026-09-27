@@ -119,7 +119,12 @@ export const PublicationRow = React.memo(function PublicationRow({ item, nr, pid
                       {trimLastDigits(a._)}
                     </a>
                   ) : (
-                    <span className="self-author">{trimLastDigits(a._)}</span>
+                    <a href="#" className="self-author" onClick={(e) => {
+                      e.preventDefault();
+                      onOpenAuthor({ type: 'dblp-author', id: `dblp:${a.$.pid}`, label: trimLastDigits(a._), pid: a.$.pid });
+                    }}>
+                      {trimLastDigits(a._)}
+                    </a>
                   )}
                 </span>
               ))
