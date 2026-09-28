@@ -423,6 +423,44 @@ async function fetchAuthorPublications(id) {
     return fetchPublicationsByFilter(filter, isForm ? { extraFields: 'authIdFormPerson_s' } : undefined);
 }
 
+// Global (NOT author-scoped) lookup by DOI or arXiv id -- used by
+// crosscheck.js to tell a genuinely missing DBLP record apart from one
+// that's already deposited in HAL but never linked to this idHal (a common
+// real case: a co-author submitted it and didn't select/validate this
+// person's HAL identity in the author list -- confirmed live for several of
+// this app's own maintainer's papers). Only ever called for a 'missing'
+// result that has a DOI/arXiv id: a title-only fuzzy search with no such
+// anchor would be far too noisy globally (matchPublications' own fuzzy step
+// already handles title/year fuzziness, scoped to this person's own
+// author-filtered HAL list, where false positives are much less likely).
+//
+// linkedIdHals lets the caller tell a real "not claimed by anyone under
+// this idHal" case apart from a merely stale hal:author:<idHal> cache
+// (getAuthorPublications' own 24h TTL) that just hasn't caught up yet with
+// an idHal that WAS already linked -- see crosscheck.js's own check.
+export async function findGlobalMatch({ doi, arxivId }) {
+    const filter = doi ? `doiId_s:${solrQuoted(doi)}` : `arxivId_s:${solrQuoted(arxivId)}`;
+    const key = `hal:global-lookup:${doi ? `doi:${doi}` : `arxiv:${arxivId}`}`;
+
+    const cached = await cache.get(key);
+    if (cached !== null) return cached || null;
+
+    const fields = 'docid,halId_s,title_s,uri_s,authIdHalFullName_fs';
+    const url = `${BASE}/search/?q=${encodeURIComponent(filter)}&wt=json&rows=1&fl=${fields}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const doc = data?.response?.docs?.[0] || null;
+    const match = doc ? {
+        docid: doc.docid,
+        halId: doc.halId_s,
+        title: Array.isArray(doc.title_s) ? doc.title_s[0] : doc.title_s,
+        url: doc.uri_s || (doc.halId_s ? `https://hal.science/${doc.halId_s}` : null),
+        linkedIdHals: parseAuthors(doc).map(a => a.idHal).filter(Boolean),
+    } : null;
+    cache.set(key, match || false, 60 * 60 * 24); // 1 day, same as getAuthorPublications
+    return match;
+}
+
 // HAL's Solr backend silently caps `rows` at 10000 regardless of what's
 // requested (a large lab like LaBRI has 10000+ records, well past that), so
 // a single request can't fetch everything -- page through with `start`

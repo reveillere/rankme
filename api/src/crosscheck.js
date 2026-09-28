@@ -329,6 +329,34 @@ export async function getCrossCheckReport(pid, halId, { confSource, journalSourc
         const halPubs = await hal.getAuthorPublications(halId);
         const results = matchPublications(dblpPubs, halPubs);
 
+        // "Missing from HAL" isn't always literally true: a co-author can
+        // deposit a paper without ever selecting/validating this person's
+        // own HAL identity in its author list, in which case the paper
+        // genuinely exists in HAL but getAuthorPublications(halId) above --
+        // an author-scoped query -- never saw it. Checked via a global DOI/
+        // arXiv lookup, only for a 'missing' result that has one -- see
+        // hal.js's findGlobalMatch for why a title-only search isn't
+        // attempted here. Same "small list, plain sequential pass" reasoning
+        // as the ranking loop below.
+        for (const result of results) {
+            if (result.status !== 'missing') continue;
+            const doi = extractDoi(result.publication.dblp.ee);
+            const arxivId = doi ? null : extractArxivId(result.publication.dblp.ee);
+            if (!doi && !arxivId) continue;
+            try {
+                const match = await hal.findGlobalMatch({ doi, arxivId });
+                // linkedIdHals already including this halId means the local
+                // hal:author:<idHal> cache (getAuthorPublications' own 24h
+                // TTL) simply hasn't caught up yet with a link that DOES
+                // exist -- not a genuine "unclaimed" case, so it's left as a
+                // plain 'missing' result rather than a confusing "not yours
+                // yet" message about something already claimed.
+                if (match && !match.linkedIdHals.includes(halId)) result.unclaimedMatch = match;
+            } catch (error) {
+                console.log('Error during global HAL lookup for missing publication', result.publication.dblp?.key, error);
+            }
+        }
+
         // RankBadge (front/src/component/RankBadge.js) needs a `rank` to show
         // anything at all -- computed here, per publication, with the exact
         // same CORE/SJR/CCF logic controllerDblpAuthor streams for the plain

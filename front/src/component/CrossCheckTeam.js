@@ -16,6 +16,9 @@ import { customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { exportCrossCheckByMemberMarkdown, exportCrossCheckByMemberJson } from '../exportCrossCheck';
+import { getOverride, getSharedOverride, effectiveMatchType } from '../matchOverrides';
+import { customProfileIdForPortal } from '../customRankings';
+import { orderPublicationsForDisplay, DEFAULT_SORT_MODE } from '../rankOrder';
 
 // Components
 import { LoadingSpinner } from './LoadingSpinner';
@@ -23,6 +26,8 @@ import { ReportButton } from './ReportButton';
 import { IdentityLinksPanel } from './IdentityLinksPanel';
 import { CrossCheckIdentityHeader } from './CrossCheckIdentityHeader';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
+import { MatchConfidenceFilterButton } from './MatchConfidenceFilterButton';
+import { SortButton } from './SortButton';
 
 import '../App.css';
 import { applyLocalDecisions, removeCrosscheckDecision, LINKS_KEY } from '../personalData';
@@ -42,6 +47,9 @@ import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 // year filter (Team.js), active at the moment "Cross-check with
 // HAL"/"Cross-check with DBLP" was clicked.
 const yearAccessor = r => parseInt(r.publication.dblp.year, 10) || 0;
+
+// See CrossCheck.js's identical portalAccessor comment.
+const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 
 export function CrossCheckTeam({ teamId, onOpenAuthor, onSearchAuthor, isActive, yearRange }) {
     // getTeam reads and parses localStorage. Keep this snapshot stable for the
@@ -67,8 +75,10 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
-    const { conferenceSource, journalSource, filterCategories } = useFilterSettings();
+    const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
+    // See CrossCheck.js's identical sortMode comment.
+    const [sortMode, setSortMode] = useState(DEFAULT_SORT_MODE);
 
     const pids = useMemo(() => team.members.map(m => m.id), [team]);
     const identityMembers = useMemo(() => team.members.map(member => ({ id: member.id, name: member.label })), [team.members]);
@@ -76,6 +86,15 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
         () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
         [conferenceSource, journalSource]
     );
+    // See CrossCheck.js's identical matchTypeAccessor comment.
+    const matchTypeAccessor = pub => {
+        if (!pub.rank) return undefined;
+        const portal = portalAccessor(pub);
+        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+        const override = getOverride(portal, pub.rank);
+        const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
+        return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
+    };
 
     useEffect(() => {
         let cancelled = false;
@@ -113,16 +132,26 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     // now surfaced (with undo) in its own member's "Confirmed" section
     // instead, see TeamMemberSection below.
     const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
-    // Category filter: see CrossCheck.js's identical comment -- same global
-    // CategoriesFilterButton.js/filterCategories, publication.type is
-    // already dblp's own vocabulary.
+    // Category/match-confidence filters: see CrossCheck.js's identical
+    // comment -- same global CategoriesFilterButton.js/
+    // MatchConfidenceFilterButton.js machinery, publication.type is already
+    // dblp's own vocabulary.
     const filteredMembers = report.members.map(member => {
         const results = member.results
             .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
-            .filter(r => filterCategories[r.publication.type]);
+            .filter(r => filterCategories[r.publication.type])
+            .filter(r => !r.publication.rank || filterMatchTypes[matchTypeAccessor(r.publication)]);
         return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
     });
     const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
+    const totalRaw = report.members.reduce((sum, m) => sum + m.results.length, 0);
+    const totalFiltered = filteredMembers.reduce((sum, m) => sum + m.results.length, 0);
+    // See CrossCheck.js's identical showingText comment.
+    const showingText = totalFiltered === 0
+        ? 'No record found'
+        : totalFiltered === totalRaw
+            ? `Showing all ${totalFiltered} records`
+            : `Showing ${totalFiltered} of ${totalRaw} records${hasYearRange ? ` over ${yearRange[1] - yearRange[0] + 1} years` : ''}`;
 
     const handleExportCsv = () => exportCsv(team, filteredMembers);
     const memberLabel = member => `${member.name || member.pid} (pid: ${member.pid}, idHal: ${member.idHal})`;
@@ -150,6 +179,13 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
                 </Alert>
             )}
 
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 2 }}>{showingText}</Typography>
+
+            <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                <MatchConfidenceFilterButton records={report.members.flatMap(m => m.results)} filterKey={r => matchTypeAccessor(r.publication)} />
+                <SortButton sortMode={sortMode} setSortMode={setSortMode} />
+            </Box>
+
             <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'team', id: team.id, name: team.name }} />
                 <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
@@ -163,6 +199,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
                 <TeamMemberSection
                     key={member.pid}
                     member={member}
+                    sortMode={sortMode}
                     onOpenAuthor={onOpenAuthor}
                     onSearchAuthor={onSearchAuthor}
                     onDecide={handleOverrideDecision}
@@ -185,16 +222,24 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
 // results so a number still means "Nth item of this type among this
 // member's own publications", not something meaningless spanning several
 // different people's dblp records.
-function TeamMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds }) {
+function TeamMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds }) {
     const pids = useMemo(() => [member.pid], [member.pid]);
     // Collapsed by default, one flag per member -- see CrossCheck.js's
     // identical confirmedOpen comment.
     const [confirmedOpen, setConfirmedOpen] = useState(false);
+    // See CrossCheck.js's identical numbered/sortedNumbered comment --
+    // numbering always happens on the canonical date-desc order first, sort
+    // only changes display order afterward.
     const numbered = withRowNumbers(member.results);
-    const missingRows = numbered.filter(({ result }) => result.status === 'missing');
-    const toReviewRows = numbered.filter(({ result }) => result.status === 'to-review');
+    const sortedNumbered = sortMode === DEFAULT_SORT_MODE ? numbered : orderPublicationsForDisplay(
+        numbered, sortMode,
+        { yearOf: n => yearAccessor(n.result), rankOf: n => n.result.publication.rank }
+    ).filter(row => row.kind === 'item').map(row => row.record);
+    const missingRows = sortedNumbered.filter(({ result }) => result.status === 'missing' && !result.unclaimedMatch);
+    const unclaimedRows = sortedNumbered.filter(({ result }) => result.status === 'missing' && result.unclaimedMatch);
+    const toReviewRows = sortedNumbered.filter(({ result }) => result.status === 'to-review');
     // See CrossCheck.js's identical confirmedRows comment.
-    const confirmedRows = numbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
+    const confirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
 
     return (
         <Box sx={{ maxWidth: 900, margin: '0 auto 40px' }}>
@@ -202,6 +247,18 @@ function TeamMemberSection({ member, onOpenAuthor, onSearchAuthor, onDecide, onU
                 Publications for {member.name || member.pid} (pid: {member.pid}, idHal: {member.idHal})
             </Typography>
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
+            {unclaimedRows.length > 0 && (
+                <CrossCheckSection
+                    title="Not claimed on HAL"
+                    description="These are already deposited in HAL, but not linked to this person's HAL identity -- likely deposited by a co-author who didn't select/validate their idHAL when submitting."
+                    rows={unclaimedRows}
+                    unclaimed
+                    pids={pids}
+                    onOpenAuthor={onOpenAuthor}
+                    sharedMaps={sharedMaps}
+                    activeCustomProfileIds={activeCustomProfileIds}
+                />
+            )}
             <CrossCheckSection
                 title="To review"
                 description="These DBLP publications only found an uncertain match in HAL — check whether it's really the same paper before treating it as deposited."

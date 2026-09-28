@@ -142,7 +142,7 @@ function DblpWithMatches({ result, isLast, pids, onOpenAuthor, onSearchAuthor, s
 // its own collapsible header (a clickable "Confirmed (N)" row with an
 // expand/collapse icon -- see CrossCheck.js), which already shows the same
 // title+count this component would otherwise render a second time.
-export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', hideHeading = false }) {
+export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, unclaimed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', hideHeading = false }) {
     return (
         <Box sx={boxSx}>
             {!hideHeading && <Typography variant={headingVariant} sx={{ mb: description ? 0.5 : 1 }}>{title} ({rows.length})</Typography>}
@@ -196,6 +196,19 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
                         )}
                     />
                 ))
+            ) : unclaimed ? (
+                <ul className="publ-list">
+                    {rows.map(({ result, nr }) => (
+                        <li className={`entry ${result.publication.type}`} key={result.publication.dblp.key}>
+                            <PublicationRow item={result.publication} nr={nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
+                            <Typography variant="body2" color="text.secondary" sx={{ mt: -0.5, mb: 1.5 }}>
+                                Already on HAL as{' '}
+                                <a href={result.unclaimedMatch.url} target="_blank" rel="noreferrer">{result.unclaimedMatch.halId || result.unclaimedMatch.docid}</a>
+                                , but not linked to your HAL identity — ask a co-author to add it, or link it yourself from your own HAL account.
+                            </Typography>
+                        </li>
+                    ))}
+                </ul>
             ) : (
                 <ul className="publ-list">
                     {rows.map(({ result, nr }) => (
