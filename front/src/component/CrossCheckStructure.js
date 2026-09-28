@@ -55,7 +55,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     // A cross-check starts with the same identity-resolution dialog available
     // from the structure page. It can be revisited from the header icon.
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
-    const { conferenceSource, journalSource } = useFilterSettings();
+    const { conferenceSource, journalSource, filterCategories } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
     const activeCustomProfileIds = useMemo(
@@ -105,11 +105,13 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     // count here -- a decided-confirmed result is surfaced (with undo) in
     // its own member's "Confirmed" section instead.
     const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
+    // Category filter: see CrossCheck.js's identical comment -- same global
+    // CategoriesFilterButton.js/filterCategories, publication.type is
+    // already dblp's own vocabulary.
     const filteredMembers = report.members.map(member => {
-        const results = !hasYearRange ? member.results : member.results.filter(r => {
-            const y = yearAccessor(r);
-            return y >= yearRange[0] && y <= yearRange[1];
-        });
+        const results = member.results
+            .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
+            .filter(r => filterCategories[r.publication.type]);
         return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
     });
     const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);

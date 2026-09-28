@@ -67,7 +67,7 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     const [error, setError] = useState(null);
     // Identity edits can require a new automatic report; decisions are local.
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
-    const { conferenceSource, journalSource } = useFilterSettings();
+    const { conferenceSource, journalSource, filterCategories } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
     const pids = useMemo(() => team.members.map(m => m.id), [team]);
@@ -113,11 +113,13 @@ function CrossCheckTeamShow({ team, onOpenAuthor, onSearchAuthor, yearRange }) {
     // now surfaced (with undo) in its own member's "Confirmed" section
     // instead, see TeamMemberSection below.
     const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
+    // Category filter: see CrossCheck.js's identical comment -- same global
+    // CategoriesFilterButton.js/filterCategories, publication.type is
+    // already dblp's own vocabulary.
     const filteredMembers = report.members.map(member => {
-        const results = !hasYearRange ? member.results : member.results.filter(r => {
-            const y = yearAccessor(r);
-            return y >= yearRange[0] && y <= yearRange[1];
-        });
+        const results = member.results
+            .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
+            .filter(r => filterCategories[r.publication.type]);
         return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
     });
     const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);

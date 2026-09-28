@@ -65,7 +65,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // Collapsed by default -- a decided-confirmed row is the exception, not
     // the common case, and most reports have none at all.
     const [confirmedOpen, setConfirmedOpen] = useState(false);
-    const { conferenceSource, journalSource } = useFilterSettings();
+    const { conferenceSource, journalSource, filterCategories } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
 
     // Stable across renders unless pid itself changes -- see Publications.js's
@@ -111,10 +111,14 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this author against HAL. Please try again later.</div>;
     if (report === null) return <LoadingSpinner message="Cross-checking DBLP against HAL…" />;
 
-    const filtered = !hasYearRange ? results : results.filter(r => {
-        const y = yearAccessor(r);
-        return y >= yearRange[0] && y <= yearRange[1];
-    });
+    // Category filter is the same CategoriesFilterButton.js/filterCategories
+    // that Author.js/AuthorHal.js already apply to their own publication
+    // lists (global AppBar button, see App.js) -- publication.type here is
+    // already dblp's own vocabulary (dblpCategories' keys), so no accessor
+    // translation is needed the way HAL's raw type codes would.
+    const filtered = results
+        .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
+        .filter(r => filterCategories[r.publication.type]);
     // Numbered once across the whole (year-)filtered list -- not per
     // section -- so e.g. "[j1]" means the same thing it would on the
     // regular author page (oldest journal article in the current view),
