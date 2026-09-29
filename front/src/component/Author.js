@@ -317,12 +317,13 @@ function AuthorContent({ author, pid, publications: rankedPublications, progress
     setCrossCheckDialogOpen(false);
     // Save this browser's confirmed identity for subsequent visits.
     postIdentityLink({ idHal: halId, pid }).catch(err => console.error('Failed to record identity link', err));
-    // The currently active year range, not [minYear, maxYear] -- when the
-    // filter isn't active, filterYears already equals [minYear, maxYear]
-    // (see handleFilterActiveChange), so this covers that case too without
-    // a separate branch. The cross-check page has no year control of its
-    // own any more; it just inherits whatever range was showing here.
-    onOpenAuthor({ type: 'crosscheck-author', id: `crosscheck:${pid}:${halId}`, pid, halId, label: pid, yearRange: filterYears });
+    // Only seed a range when this page's own filter is actually active --
+    // CrossCheck.js has its own independent year filter now (same as this
+    // page), so passing filterYears unconditionally (it always equals
+    // [minYear, maxYear] when the filter is off, see
+    // handleFilterActiveChange) would wrongly make the opened tab look
+    // pre-filtered, and put a needless ?from=&to= in its URL.
+    onOpenAuthor({ type: 'crosscheck-author', id: `crosscheck:${pid}:${halId}`, pid, halId, label: pid, yearRange: isFilterActive ? filterYears : undefined });
   };
 
   return (

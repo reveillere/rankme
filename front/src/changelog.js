@@ -4,6 +4,18 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.23', items: [
+    'Cross-check pages now show the author/team/structure name in their header, with a contextual help (?) button, and gained their own live year filter -- matching the author pages\' layout and controls.',
+    'Fixed a cross-check URL always carrying a "?from=&to=" year range, even with no filter active.',
+    'Open tabs now show a small dblp/HAL icon, so different tab types are easier to tell apart at a glance.',
+  ] },
+  { version: '0.22', items: [
+    'Cross-check pages (author/team/structure) now show a "Showing X of Y records" summary, and gained the same sort and match-confidence filter as the author pages.',
+    'Added a "Not claimed on HAL" section: a DBLP record that looks missing but is already deposited under a different/unlinked HAL identity (found via DOI/arXiv id) is now called out separately, with what to do about it.',
+  ] },
+  { version: '0.21', items: [
+    'The Publication categories filter now also applies to cross-check pages (author/team/structure), not just the author pages.',
+  ] },
   { version: '0.20', items: [
     'The match-confidence filter now shows a count next to each option (e.g. "Approximate match (12)").',
   ] },

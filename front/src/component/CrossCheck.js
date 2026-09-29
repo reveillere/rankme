@@ -11,6 +11,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // DBLP/HAL
 import { fetchCrossCheck, postCrossCheckOverride } from '../crosscheck';
+import { fetchAuthorInfo } from '../dblp';
 import { customProfileIdFrom } from '../rankingSource';
 import { useFilterSettings } from '../FilterSettingsContext';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
@@ -20,7 +21,10 @@ import { customProfileIdForPortal } from '../customRankings';
 import { orderPublicationsForDisplay, DEFAULT_SORT_MODE } from '../rankOrder';
 
 // Components
+import DateRangeSlider from './DateRangeSlider';
+import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
+import { RecordsHeader } from './RecordsHeader';
 import { ReportButton } from './ReportButton';
 import { CrossCheckSection, withRowNumbers, csvEscape } from './CrossCheckSection';
 import { MatchConfidenceFilterButton } from './MatchConfidenceFilterButton';
@@ -31,6 +35,7 @@ import { applyLocalDecisions, listIdentityLinks, removeCrosscheckDecision, LINKS
 import { usePersonalDataVersion } from '../usePersonalDataVersion';
 import { IdentityLinksIconButton } from './IdentityLinksIconButton';
 import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
+import { trimLastDigits } from '../utils';
 
 const yearAccessor = result => parseInt(result.publication.dblp.year, 10) || 0;
 
@@ -48,22 +53,38 @@ const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 // stable across renders, same reasoning as NO_SELF_IDS there.
 const SECTION_BOX_SX = { maxWidth: 900, margin: '0 auto 30px' };
 
+// RecordsHeader's own default help content ("Cross-check compares the
+// current source with its matching HAL/DBLP identity...") is circular on
+// the cross-check page itself -- this page's own sections explain what it
+// actually shows instead.
+const CROSSCHECK_HELP_SECTIONS = [
+  { title: 'Missing from HAL', description: 'A DBLP record with no matching HAL deposit at all for this HAL identity.' },
+  { title: 'Not claimed on HAL', description: 'Already deposited in HAL (found by DOI/arXiv id), but not linked to this HAL identity -- usually because a co-author submitted it without selecting/validating this idHAL.' },
+  { title: 'To review', description: 'An uncertain match was found in HAL -- confirm or reject whether it is really the same paper.' },
+  { title: 'Confirmed', description: 'A strong/exact automatic match, or one already confirmed manually.' },
+  { title: 'Export formats', description: 'Export always contains the records currently shown. Markdown is readable as a report, JSON preserves structured data, CSV opens in spreadsheet software, and the separate cross-check decisions file can be shared with collaborators.' },
+];
+
 // DBLP -> HAL crosscheck report for one (pid, halId) pair -- see
 // api/src/crosscheck.js for the matching itself. Opened as its own tab from
 // Author.js's "Cross-check with HAL" button (or a shared/reloaded
 // /crosscheck/dblp/:pid/hal/:halId URL, see App.js's tabFromPath).
 //
-// yearRange comes from the DBLP author page's own year filter, active at
-// the moment the user clicked "Cross-check with HAL" (see Author.js's
-// handleCrossCheckConfirm) -- this page deliberately has no year control of
-// its own any more (it used to have an independent DateRangeSlider
-// defaulting to the last 10 years, which the maintainer found confusing:
-// two different "last N years" filters on two pages showing the same
-// author's publications, with no reason to ever disagree). Absent/invalid
-// (e.g. a /crosscheck/... URL reloaded without its ?from=&to= query, or
-// shared before this range even existed) means "don't filter" rather than
-// crashing -- see App.js's tabFromPath for how the URL carries it.
-export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor }) {
+// initialYearRange/onYearRangeChange: same contract as Author.js's own (see
+// its identical props) -- App.js threads this tab's ?from=&to= down and
+// back up the same way it already does for dblp-author/hal-author/team/
+// hal-structure. Used to be a one-shot yearRange prop inherited from
+// whichever page's own filter was showing when "Cross-check with HAL" was
+// clicked, with no control of its own here at all -- removed on purpose at
+// the time (two independent "last N years" filters on two pages showing the
+// same author, with no reason to ever disagree, read as confusing) but
+// reinstated as a live control of its own, matching every other record page.
+//
+// Split into this thin fetch/loading wrapper and CrossCheckShow below,
+// mirroring Author.js's own Author()/AuthorShow() split -- CrossCheckShow's
+// own minYear/maxYear (derived from `results`) must never see a placeholder
+// empty list, so it only ever mounts once `report` is already loaded.
+export function CrossCheck({ pid, halId, initialYearRange, onYearRangeChange, onOpenAuthor, onSearchAuthor }) {
     const [automaticReport, setReport] = useState(null);
     const personalVersion = usePersonalDataVersion();
     const identityVersion = usePersonalDataVersion(LINKS_KEY);
@@ -72,38 +93,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const report = useMemo(() => automaticReport && applyLocalDecisions(automaticReport), [automaticReport, personalVersion]);
     const [error, setError] = useState(null);
-    // Identity edits can require a new automatic report; decisions are local.
-    // Collapsed by default -- a decided-confirmed row is the exception, not
-    // the common case, and most reports have none at all.
-    const [confirmedOpen, setConfirmedOpen] = useState(false);
-    const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
-    const sharedMaps = useSharedOverridesMaps();
-    // Local, not persisted via useFilterSettings -- see SortButton.js's own
-    // comment: only sortMode/setSortMode itself lives per-page, same as
-    // Author.js/AuthorHal.js/Team.js/Structure.js each keeping their own.
-    const [sortMode, setSortMode] = useState(DEFAULT_SORT_MODE);
-
-    // Stable across renders unless pid itself changes -- see Publications.js's
-    // PublicationRow, whose React.memo this would otherwise defeat for every
-    // row on every render (same reasoning as Publications()'s own `pids`).
-    const pids = useMemo(() => [pid], [pid]);
-    const activeCustomProfileIds = useMemo(
-        () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
-        [conferenceSource, journalSource]
-    );
-    // Same idea as Author.js's own matchTypeAccessor -- delegates to
-    // effectiveMatchType so the match-confidence checkboxes always mean
-    // exactly what RankBadge.js's own dot shows for a missing/to-review
-    // publication's rank (the only ones that ever carry one here, see
-    // api/src/crosscheck.js's needsRank).
-    const matchTypeAccessor = pub => {
-        if (!pub.rank) return undefined;
-        const portal = portalAccessor(pub);
-        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
-        const override = getOverride(portal, pub.rank);
-        const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
-        return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
-    };
+    const { conferenceSource, journalSource } = useFilterSettings();
 
     useEffect(() => {
         let cancelled = false;
@@ -132,12 +122,105 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // already relies on, no separate fetch needed.
     const handleUndo = (dblpKey, halDocid) => removeCrosscheckDecision({ dblpKey, halDocid });
 
-    const results = report?.results;
-
-    const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
-
     if (error) return <div style={{ textAlign: 'center', marginTop: '80px' }}>Failed to cross-check this author against HAL. Please try again later.</div>;
     if (report === null) return <LoadingSpinner message="Cross-checking DBLP against HAL…" />;
+
+    return <CrossCheckShow
+        report={report}
+        pid={pid}
+        effectiveHalId={effectiveHalId}
+        initialYearRange={initialYearRange}
+        onYearRangeChange={onYearRangeChange}
+        onOpenAuthor={onOpenAuthor}
+        onSearchAuthor={onSearchAuthor}
+        onOverrideDecision={handleOverrideDecision}
+        onUndo={handleUndo}
+    />;
+}
+
+function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearRangeChange, onOpenAuthor, onSearchAuthor, onOverrideDecision, onUndo }) {
+    // Identity edits can require a new automatic report; decisions are local.
+    // Collapsed by default -- a decided-confirmed row is the exception, not
+    // the common case, and most reports have none at all.
+    const [confirmedOpen, setConfirmedOpen] = useState(false);
+    const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
+    const sharedMaps = useSharedOverridesMaps();
+    // Local, not persisted via useFilterSettings -- see SortButton.js's own
+    // comment: only sortMode/setSortMode itself lives per-page, same as
+    // Author.js/AuthorHal.js/Team.js/Structure.js each keeping their own.
+    const [sortMode, setSortMode] = useState(DEFAULT_SORT_MODE);
+    const results = report.results;
+
+    // Same minYear/maxYear derivation as Author.js's own (its identical
+    // comment applies here too) -- safe against an empty list only as a
+    // defensive fallback: this component never actually mounts with one,
+    // see CrossCheck()'s own report===null gate above.
+    const [minYear, maxYear] = useMemo(() => {
+        if (results.length === 0) return [0, 0];
+        return [Math.min(...results.map(yearAccessor)), Math.max(...results.map(yearAccessor))];
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [results.length]);
+    // Same validInitialYearRange/filterYears/isFilterActive trio as
+    // Author.js's own (identical comment) -- initialYearRange comes from the
+    // tab's own ?from=&to= (App.js's tabFromPath), applied only at mount.
+    const validInitialYearRange = Array.isArray(initialYearRange) && initialYearRange.length === 2
+        && Number.isFinite(initialYearRange[0]) && Number.isFinite(initialYearRange[1]) && initialYearRange[0] <= initialYearRange[1]
+        ? [Math.max(minYear, Math.min(initialYearRange[0], maxYear)), Math.max(minYear, Math.min(initialYearRange[1], maxYear))]
+        : null;
+    const [filterYears, setFilterYears] = useState(() => validInitialYearRange || [minYear, maxYear]);
+    const [isFilterActive, setIsFilterActive] = useState(() => validInitialYearRange !== null);
+
+    // Hiding the filter also clears it -- same as Author.js's identical
+    // handleFilterActiveChange.
+    const handleFilterActiveChange = (active) => {
+        setIsFilterActive(active);
+        if (!active) setFilterYears([minYear, maxYear]);
+    };
+
+    // Mirrors the change back up to App.js -- see this file's own
+    // initialYearRange/onYearRangeChange comment above, and Author.js's
+    // identical effect.
+    useEffect(() => {
+        onYearRangeChange?.(isFilterActive ? filterYears : undefined);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterYears, isFilterActive]);
+
+    // Stable across renders unless pid itself changes -- see Publications.js's
+    // PublicationRow, whose React.memo this would otherwise defeat for every
+    // row on every render (same reasoning as Publications()'s own `pids`).
+    const pids = useMemo(() => [pid], [pid]);
+    const activeCustomProfileIds = useMemo(
+        () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+        [conferenceSource, journalSource]
+    );
+    // Same idea as Author.js's own matchTypeAccessor -- delegates to
+    // effectiveMatchType so the match-confidence checkboxes always mean
+    // exactly what RankBadge.js's own dot shows for a missing/to-review
+    // publication's rank (the only ones that ever carry one here, see
+    // api/src/crosscheck.js's needsRank).
+    const matchTypeAccessor = pub => {
+        if (!pub.rank) return undefined;
+        const portal = portalAccessor(pub);
+        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+        const override = getOverride(portal, pub.rank);
+        const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
+        return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
+    };
+
+    // This person's own dblp display name, for the header below -- a tab
+    // opened directly by pid (or reloaded from a bare URL) has no name of
+    // its own to show otherwise. api/src/dblp.js's controllerAuthorInfo
+    // resolves it off the same www/homepages record getAuthorNames already
+    // reads; null (not a crash) while loading or for an unresolvable name,
+    // falling back to the bare pid in the title below.
+    const [authorName, setAuthorName] = useState(null);
+    useEffect(() => {
+        let cancelled = false;
+        setAuthorName(null);
+        fetchAuthorInfo(pid).then(info => { if (!cancelled) setAuthorName(info.name); }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [pid]);
+    const displayName = authorName ? trimLastDigits(authorName) : pid;
 
     // Category/match-confidence filters are the same CategoriesFilterButton.js/
     // MatchConfidenceFilterButton.js machinery Author.js/AuthorHal.js already
@@ -146,9 +229,12 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // translation is needed the way HAL's raw type codes would. A row
     // lacking a rank at all (every 'confirmed' automatic/decided row -- see
     // api/src/crosscheck.js's needsRank) always passes the match-confidence
-    // filter, same null-safe rule as filterPublications.js's own.
+    // filter, same null-safe rule as filterPublications.js's own. filterYears
+    // is unconditionally applied (same as Author.js's own filterPublications
+    // call) -- when the filter is inactive it already equals [minYear,
+    // maxYear], a no-op range, rather than a separate hasYearRange branch.
     const filtered = results
-        .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
+        .filter(r => yearAccessor(r) >= filterYears[0] && yearAccessor(r) <= filterYears[1])
         .filter(r => filterCategories[r.publication.type])
         .filter(r => !r.publication.rank || filterMatchTypes[matchTypeAccessor(r.publication)]);
     // Numbered once across the whole (year-)filtered list -- not per
@@ -167,10 +253,10 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // 'date' (the default) keeps the canonical order as-is; otherwise reuse
     // rankOrder.js's own orderPublicationsForDisplay -- the exact same
     // function Publications.js/HalPublications.js use -- just discarding its
-    // 'group' markers, since CrossCheckSection.js's three named sections
-    // (Missing/To review/Confirmed) already provide the only grouping this
-    // page shows; year/rank-tier subheadings inside one of those would be
-    // redundant clutter for what's usually a handful of rows.
+    // 'group' markers, since CrossCheckSection.js's named sections (Missing/
+    // Not claimed/To review/Confirmed) already provide the only grouping
+    // this page shows; year/rank-tier subheadings inside one of those would
+    // be redundant clutter for what's usually a handful of rows.
     const sortedNumbered = sortMode === DEFAULT_SORT_MODE ? numbered : orderPublicationsForDisplay(
         numbered, sortMode,
         { yearOf: n => yearAccessor(n.result), rankOf: n => n.result.publication.rank }
@@ -190,20 +276,12 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
     // can be hundreds of those, and there is nothing to undo.
     const confirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
     const automaticConfirmedCount = filtered.length - missingRows.length - unclaimedRows.length - toReviewRows.length - confirmedRows.length;
-    // Same 3-branch wording as RecordsHeader's own `showing` prop on the
-    // plain publication-list pages (Author.js/AuthorHal.js/Team.js/
-    // Structure.js) -- this page renders its own header rather than
-    // RecordsHeader (see below), so the text is inlined instead. Years are
-    // only mentioned when yearRange is actually set: unlike those pages,
-    // this one has no year control of its own (see this file's own
-    // yearRange comment above), so an absent range means "no year filter is
-    // in effect" rather than "0 years", which `[1] - [0] + 1` would wrongly
-    // compute for an undefined range.
+    // Same 3-branch wording as Author.js's own RecordsHeader `showing` text.
     const showingText = filtered.length === 0
         ? 'No record found'
         : filtered.length === results.length
             ? `Showing all ${filtered.length} records`
-            : `Showing ${filtered.length} of ${results.length} records${hasYearRange ? ` over ${yearRange[1] - yearRange[0] + 1} years` : ''}`;
+            : `Showing ${filtered.length} of ${results.length} records over ${filterYears[1] - filterYears[0] + 1} years`;
 
     const importedAtLabel = report.dblpStatus.importedAt
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -211,41 +289,44 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
 
     const handleExportCsv = () => exportCsv(pid, filtered);
     const handleExportMarkdown = () => exportCrossCheckMarkdown({
-        title: `DBLP → HAL cross-check for ${pid}`,
+        title: `DBLP → HAL cross-check for ${displayName}`,
         filename: `crosscheck-${pid.replace(/\//g, '-')}.md`,
         results: filtered,
     });
     const handleExportJson = () => exportCrossCheckJson({
-        title: `DBLP → HAL cross-check for ${pid}`,
+        title: `DBLP → HAL cross-check for ${displayName}`,
         filename: `crosscheck-${pid.replace(/\//g, '-')}.json`,
         results: filtered,
     });
 
     return (
         <div className='App' style={{ padding: '0 40px' }}>
-            <div style={{ textAlign: 'center', marginTop: '40px', marginBottom: '20px' }}>
-                <h1>DBLP → HAL cross-check</h1>
-                <div style={{ fontStyle: 'italic', fontSize: 'small', color: '#8a8f94' }}>
-                    pid: {pid} · idHal: {effectiveHalId}
-                </div>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>{showingText}</Typography>
-            </div>
+            <RecordsHeader
+                title={<>DBLP → HAL cross-check for {displayName}</>}
+                details={<>pid: {pid} · idHal: {effectiveHalId}</>}
+                showing={showingText}
+                helpTitle="Cross-check help"
+                helpSections={CROSSCHECK_HELP_SECTIONS}
+                exportButton={<>
+                    <IdentityLinksIconButton pids={[pid]} />
+                    <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
+                    <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
+                </>}
+            />
 
-            <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '0 auto 20px' }}>
+            <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '20px auto 20px' }}>
                 {importedAtLabel && <>DBLP dump from {importedAtLabel}. </>}
                 {report.halCacheNote}
             </Alert>
 
-            <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+            <div style={{ margin: '0 0 20px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
                 <MatchConfidenceFilterButton records={results} filterKey={r => matchTypeAccessor(r.publication)} />
                 <SortButton sortMode={sortMode} setSortMode={setSortMode} />
-            </Box>
+            </div>
+            {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
 
-            <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
-                <IdentityLinksIconButton pids={[pid]} />
-                <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
-                <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
-            </Box>
+            <div style={{ height: '20px' }} />
 
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} boxSx={SECTION_BOX_SX} headingVariant="h6" />
             {unclaimedRows.length > 0 && (
@@ -270,7 +351,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
                 pids={pids}
                 onOpenAuthor={onOpenAuthor}
                 onSearchAuthor={onSearchAuthor}
-                onDecide={handleOverrideDecision}
+                onDecide={onOverrideDecision}
                 sharedMaps={sharedMaps}
                 activeCustomProfileIds={activeCustomProfileIds}
                 boxSx={SECTION_BOX_SX}
@@ -298,7 +379,7 @@ export function CrossCheck({ pid, halId, yearRange, onOpenAuthor, onSearchAuthor
                             pids={pids}
                             onOpenAuthor={onOpenAuthor}
                             onSearchAuthor={onSearchAuthor}
-                            onUndo={handleUndo}
+                            onUndo={onUndo}
                             sharedMaps={sharedMaps}
                             activeCustomProfileIds={activeCustomProfileIds}
                             boxSx={{}}

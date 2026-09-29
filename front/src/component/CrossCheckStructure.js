@@ -20,6 +20,8 @@ import { customProfileIdForPortal } from '../customRankings';
 import { orderPublicationsForDisplay, DEFAULT_SORT_MODE } from '../rankOrder';
 
 // Components
+import DateRangeSlider from './DateRangeSlider';
+import { FilterButton } from './FilterButton';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ReportButton } from './ReportButton';
 import { IdentityLinksPanel } from './IdentityLinksPanel';
@@ -41,17 +43,20 @@ import { CrosscheckDecisionFileButtons } from './CrosscheckDecisionsButton';
 // attaches a real `name` to every member, resolved or not) -- so this takes
 // structId directly as a prop instead of reading a client-side store, and
 // its network call is a plain GET keyed by structId, no member list to send.
-
-// yearRange: see CrossCheck.js's identical comment -- the structure page's
-// own year filter (Structure.js), active at the moment "Cross-check with
-// HAL" was clicked. Applied per-member (see filteredMembers below) rather
-// than to a single flat list, since each member carries their own results.
 const yearAccessor = r => parseInt(r.publication.dblp.year, 10) || 0;
 
 // See CrossCheck.js's identical portalAccessor comment.
 const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 
-export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor, yearRange }) {
+// initialYearRange/onYearRangeChange: see CrossCheck.js's identical comment
+// -- threaded straight through to CrossCheckStructureContent below.
+//
+// Split into this thin fetch/loading wrapper and CrossCheckStructureContent
+// below, mirroring CrossCheck.js's own CrossCheck()/CrossCheckShow() split
+// -- CrossCheckStructureContent's own minYear/maxYear (derived from every
+// member's results) must never see a placeholder empty report, so it only
+// ever mounts once `report` is already loaded.
+export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onSearchAuthor, initialYearRange, onYearRangeChange }) {
     const [automaticReport, setReport] = useState(null);
     const personalVersion = usePersonalDataVersion();
     const identityVersion = usePersonalDataVersion(LINKS_KEY);
@@ -63,24 +68,7 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
     // A cross-check starts with the same identity-resolution dialog available
     // from the structure page. It can be revisited from the header icon.
     const [identityPanelOpen, setIdentityPanelOpen] = useState(true);
-    const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
-    const sharedMaps = useSharedOverridesMaps();
-    // See CrossCheck.js's identical sortMode comment.
-    const [sortMode, setSortMode] = useState(DEFAULT_SORT_MODE);
-
-    const activeCustomProfileIds = useMemo(
-        () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
-        [conferenceSource, journalSource]
-    );
-    // See CrossCheck.js's identical matchTypeAccessor comment.
-    const matchTypeAccessor = pub => {
-        if (!pub.rank) return undefined;
-        const portal = portalAccessor(pub);
-        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
-        const override = getOverride(portal, pub.rank);
-        const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
-        return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
-    };
+    const { conferenceSource, journalSource } = useFilterSettings();
 
     useEffect(() => {
         let cancelled = false;
@@ -110,40 +98,95 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
         <LoadingSpinner message="Cross-checking structure members against HAL…" />
     </>;
 
+    return <CrossCheckStructureContent
+        structId={structId}
+        structureName={structureName}
+        report={report}
+        identityPanelOpen={identityPanelOpen}
+        setIdentityPanelOpen={setIdentityPanelOpen}
+        initialYearRange={initialYearRange}
+        onYearRangeChange={onYearRangeChange}
+        onOpenAuthor={onOpenAuthor}
+        onSearchAuthor={onSearchAuthor}
+        onOverrideDecision={handleOverrideDecision}
+        onUndo={handleUndo}
+    />;
+}
+
+function CrossCheckStructureContent({ structId, structureName, report, identityPanelOpen, setIdentityPanelOpen, initialYearRange, onYearRangeChange, onOpenAuthor, onSearchAuthor, onOverrideDecision, onUndo }) {
+    const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
+    const sharedMaps = useSharedOverridesMaps();
+    // See CrossCheck.js's identical sortMode comment.
+    const [sortMode, setSortMode] = useState(DEFAULT_SORT_MODE);
+
+    const activeCustomProfileIds = useMemo(
+        () => ({ conference: customProfileIdFrom(conferenceSource), journal: customProfileIdFrom(journalSource) }),
+        [conferenceSource, journalSource]
+    );
+    // See CrossCheck.js's identical matchTypeAccessor comment.
+    const matchTypeAccessor = pub => {
+        if (!pub.rank) return undefined;
+        const portal = portalAccessor(pub);
+        const customProfileId = customProfileIdForPortal(activeCustomProfileIds, portal);
+        const override = getOverride(portal, pub.rank);
+        const sharedOverride = !override ? getSharedOverride(pub.rank, sharedMaps[portal]) : null;
+        return effectiveMatchType(pub.rank, { customProfileId, override, sharedOverride });
+    };
+
+    const allResults = useMemo(() => report.members.flatMap(m => m.results), [report]);
+    // See CrossCheck.js's identical minYear/maxYear comment.
+    const [minYear, maxYear] = useMemo(() => {
+        if (allResults.length === 0) return [0, 0];
+        return [Math.min(...allResults.map(yearAccessor)), Math.max(...allResults.map(yearAccessor))];
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allResults.length]);
+    // See CrossCheck.js's identical validInitialYearRange/filterYears/
+    // isFilterActive trio.
+    const validInitialYearRange = Array.isArray(initialYearRange) && initialYearRange.length === 2
+        && Number.isFinite(initialYearRange[0]) && Number.isFinite(initialYearRange[1]) && initialYearRange[0] <= initialYearRange[1]
+        ? [Math.max(minYear, Math.min(initialYearRange[0], maxYear)), Math.max(minYear, Math.min(initialYearRange[1], maxYear))]
+        : null;
+    const [filterYears, setFilterYears] = useState(() => validInitialYearRange || [minYear, maxYear]);
+    const [isFilterActive, setIsFilterActive] = useState(() => validInitialYearRange !== null);
+
+    const handleFilterActiveChange = (active) => {
+        setIsFilterActive(active);
+        if (!active) setFilterYears([minYear, maxYear]);
+    };
+
+    useEffect(() => {
+        onYearRangeChange?.(isFilterActive ? filterYears : undefined);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterYears, isFilterActive]);
+
     const importedAtLabel = report.dblpStatus?.importedAt
         ? new Date(report.dblpStatus.importedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         : null;
 
-    // See CrossCheck.js's own hasYearRange/filtered -- same "absent/invalid
-    // means don't filter" rule. member.results includes 'confirmed' entries
-    // too (only missing/to-review/decided-confirmed are ever rendered, see
+    // Category/match-confidence/year filters: see CrossCheck.js's identical
+    // comment. member.results includes 'confirmed' entries too (only
+    // missing/to-review/decided-confirmed are ever rendered, see
     // StructureMemberSection below), so confirmedCount is recomputed from
     // the same filtered set rather than left as the server's unfiltered
     // count -- otherwise "N confirmed, not shown" would count publications
     // the current year range doesn't even include. Only the automatic ones
     // count here -- a decided-confirmed result is surfaced (with undo) in
     // its own member's "Confirmed" section instead.
-    const hasYearRange = Array.isArray(yearRange) && yearRange.length === 2 && Number.isFinite(yearRange[0]) && Number.isFinite(yearRange[1]);
-    // Category/match-confidence filters: see CrossCheck.js's identical
-    // comment -- same global CategoriesFilterButton.js/
-    // MatchConfidenceFilterButton.js machinery, publication.type is already
-    // dblp's own vocabulary.
     const filteredMembers = report.members.map(member => {
         const results = member.results
-            .filter(r => !hasYearRange || (yearAccessor(r) >= yearRange[0] && yearAccessor(r) <= yearRange[1]))
+            .filter(r => yearAccessor(r) >= filterYears[0] && yearAccessor(r) <= filterYears[1])
             .filter(r => filterCategories[r.publication.type])
             .filter(r => !r.publication.rank || filterMatchTypes[matchTypeAccessor(r.publication)]);
         return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
     });
     const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
-    const totalRaw = report.members.reduce((sum, m) => sum + m.results.length, 0);
     const totalFiltered = filteredMembers.reduce((sum, m) => sum + m.results.length, 0);
     // See CrossCheck.js's identical showingText comment.
     const showingText = totalFiltered === 0
         ? 'No record found'
-        : totalFiltered === totalRaw
+        : totalFiltered === allResults.length
             ? `Showing all ${totalFiltered} records`
-            : `Showing ${totalFiltered} of ${totalRaw} records${hasYearRange ? ` over ${yearRange[1] - yearRange[0] + 1} years` : ''}`;
+            : `Showing ${totalFiltered} of ${allResults.length} records over ${filterYears[1] - filterYears[0] + 1} years`;
 
     const handleExportCsv = () => exportCsv(structId, filteredMembers);
     const title = structureName || structId;
@@ -176,17 +219,20 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
                 </Alert>
             )}
 
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mb: 2 }}>{showingText}</Typography>
-
-            <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
-                <MatchConfidenceFilterButton records={report.members.flatMap(m => m.results)} filterKey={r => matchTypeAccessor(r.publication)} />
-                <SortButton sortMode={sortMode} setSortMode={setSortMode} />
-            </Box>
-
-            <Box sx={{ textAlign: 'center', marginBottom: '30px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
+            <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <Typography variant="body2" color="text.secondary">{showingText}</Typography>
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'structure', id: structId }} />
                 <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
             </Box>
+
+            <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px' }}>
+                <FilterButton isFilterActive={isFilterActive} setIsFilterActive={handleFilterActiveChange} />
+                <MatchConfidenceFilterButton records={allResults} filterKey={r => matchTypeAccessor(r.publication)} />
+                <SortButton sortMode={sortMode} setSortMode={setSortMode} />
+            </Box>
+            {isFilterActive && <DateRangeSlider minYear={minYear} maxYear={maxYear} range={filterYears} setRange={setFilterYears} />}
+
+            <div style={{ height: '20px' }} />
 
             {report.members.length === 0 && report.unresolvedMembers.length === 0 && (
                 <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>No members in this structure</Typography>
@@ -199,8 +245,8 @@ export function CrossCheckStructure({ structId, structureName, onOpenAuthor, onS
                     sortMode={sortMode}
                     onOpenAuthor={onOpenAuthor}
                     onSearchAuthor={onSearchAuthor}
-                    onDecide={handleOverrideDecision}
-                    onUndo={handleUndo}
+                    onDecide={onOverrideDecision}
+                    onUndo={onUndo}
                     sharedMaps={sharedMaps}
                     activeCustomProfileIds={activeCustomProfileIds}
                 />

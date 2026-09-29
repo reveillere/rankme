@@ -55,8 +55,13 @@ export async function controllerAuthor(req, res) {
 export async function controllerAuthorInfo(req, res) {
     const pid = req.params[0];
     try {
-        const orcid = await dblpLocal.getAuthorOrcid(pid);
-        res.json({ pid, orcid: orcid ? `https://orcid.org/${orcid}` : null });
+        // name: this pid's own display name (first name variant on its
+        // www/homepages record, see dblpLocal.getAuthorNames) -- added for
+        // CrossCheck.js's own header ("DBLP → HAL cross-check for <name>"),
+        // which otherwise only ever has the bare pid to show. null (not a
+        // crash) for an unknown pid, same as orcid below.
+        const [orcid, names] = await Promise.all([dblpLocal.getAuthorOrcid(pid), dblpLocal.getAuthorNames(pid)]);
+        res.json({ pid, orcid: orcid ? `https://orcid.org/${orcid}` : null, name: names?.[0] || null });
     } catch (error) {
         console.log('Error during author-info computation', error);
         res.status(400).json({ error: error.message });

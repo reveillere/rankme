@@ -300,12 +300,12 @@ function AuthorHalContent({ id, authorName, onOpenAuthor, onSearchAuthor, onName
   // Symmetric to Author.js's own handleCrossCheckConfirm: opens the very
   // same 'crosscheck-author' tab type (CrossCheck.js doesn't care which side
   // -- DBLP or HAL -- initiated the (pid, halId) resolution), just reached
-  // from the opposite direction. The currently active year range, same
-  // reasoning as Author.js's own call.
+  // from the opposite direction. Only seeds a range when this page's own
+  // filter is active -- see Author.js's identical comment.
   const handleCrossCheckConfirm = (pid) => {
     setCrossCheckDialogOpen(false);
     postIdentityLink({ idHal: id, pid }).catch(err => console.error('Failed to record identity link', err));
-    onOpenAuthor({ type: 'crosscheck-author', id: `crosscheck:${pid}:${id}`, pid, halId: id, label: pid, yearRange: filterYears });
+    onOpenAuthor({ type: 'crosscheck-author', id: `crosscheck:${pid}:${id}`, pid, halId: id, label: pid, yearRange: isFilterActive ? filterYears : undefined });
   };
 
   return (
