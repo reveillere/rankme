@@ -187,13 +187,17 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
                         onSearchAuthor={onSearchAuthor}
                         sharedMaps={sharedMaps}
                         activeCustomProfileIds={activeCustomProfileIds}
-                        renderActions={m => (
+                        // onUndo is absent for an automatic confirmation (no
+                        // local decision behind it -- see CrossCheck.js's own
+                        // "Confirmed automatically" section -- there's
+                        // nothing to undo), unlike a decided one.
+                        renderActions={onUndo ? m => (
                             <Tooltip title="Undo, back to review">
                                 <IconButton size="small" onClick={() => onUndo(result.publication.dblp.key, m.halPub.docid)}>
                                     <UndoIcon fontSize="small" />
                                 </IconButton>
                             </Tooltip>
-                        )}
+                        ) : () => null}
                     />
                 ))
             ) : unclaimed ? (

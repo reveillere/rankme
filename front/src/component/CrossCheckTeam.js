@@ -178,18 +178,17 @@ function CrossCheckTeamContent({ team, report, targetLabel, identityMembers, ide
     // Category/match-confidence/year filters: see CrossCheck.js's identical
     // comment -- same global CategoriesFilterButton.js/
     // MatchConfidenceFilterButton.js machinery, publication.type is already
-    // dblp's own vocabulary. confirmedCount is recomputed from the same
-    // filtered set so "N confirmed, not shown" matches the current range --
-    // a decided-confirmed result is surfaced (with undo) in its own member's
-    // "Confirmed" section instead, see TeamMemberSection below.
+    // dblp's own vocabulary. An automatically-confirmed result is now
+    // surfaced (collapsed by default, no undo) in its own member's
+    // "Confirmed automatically" section, same as a decided one's "Confirmed"
+    // section -- see TeamMemberSection below.
     const filteredMembers = report.members.map(member => {
         const results = member.results
             .filter(r => yearAccessor(r) >= filterYears[0] && yearAccessor(r) <= filterYears[1])
             .filter(r => filterCategories[r.publication.type])
             .filter(r => !r.publication.rank || filterMatchTypes[matchTypeAccessor(r.publication)]);
-        return { ...member, results, confirmedCount: results.filter(r => r.status === 'confirmed' && !r.decided).length };
+        return { ...member, results };
     });
-    const totalConfirmedCount = filteredMembers.reduce((sum, m) => sum + m.confirmedCount, 0);
     const totalFiltered = filteredMembers.reduce((sum, m) => sum + m.results.length, 0);
     // See CrossCheck.js's identical showingText comment.
     const showingText = totalFiltered === 0
@@ -256,10 +255,6 @@ function CrossCheckTeamContent({ team, report, targetLabel, identityMembers, ide
                     activeCustomProfileIds={activeCustomProfileIds}
                 />
             ))}
-
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {totalConfirmedCount} confirmed automatically, not shown
-            </Typography>
         </div>
     );
 }
@@ -275,6 +270,8 @@ function TeamMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onD
     // Collapsed by default, one flag per member -- see CrossCheck.js's
     // identical confirmedOpen comment.
     const [confirmedOpen, setConfirmedOpen] = useState(false);
+    // See CrossCheck.js's identical automaticConfirmedOpen comment.
+    const [automaticConfirmedOpen, setAutomaticConfirmedOpen] = useState(false);
     // See CrossCheck.js's identical numbered/sortedNumbered comment --
     // numbering always happens on the canonical date-desc order first, sort
     // only changes display order afterward.
@@ -288,6 +285,8 @@ function TeamMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onD
     const toReviewRows = sortedNumbered.filter(({ result }) => result.status === 'to-review');
     // See CrossCheck.js's identical confirmedRows comment.
     const confirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
+    // See CrossCheck.js's identical automaticConfirmedRows comment.
+    const automaticConfirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && !result.decided);
 
     return (
         <Box sx={{ maxWidth: 900, margin: '0 auto 40px' }}>
@@ -341,6 +340,33 @@ function TeamMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onD
                             onOpenAuthor={onOpenAuthor}
                             onSearchAuthor={onSearchAuthor}
                             onUndo={onUndo}
+                            sharedMaps={sharedMaps}
+                            activeCustomProfileIds={activeCustomProfileIds}
+                        />
+                    </Collapse>
+                </Box>
+            )}
+            {automaticConfirmedRows.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                    <Typography
+                        variant="subtitle2"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: automaticConfirmedOpen ? 1 : 0 }}
+                        onClick={() => setAutomaticConfirmedOpen(o => !o)}
+                    >
+                        <IconButton size="small" sx={{ p: 0 }}>
+                            {automaticConfirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                        </IconButton>
+                        Confirmed automatically ({automaticConfirmedRows.length})
+                    </Typography>
+                    <Collapse in={automaticConfirmedOpen} unmountOnExit>
+                        <CrossCheckSection
+                            title="Confirmed automatically"
+                            rows={automaticConfirmedRows}
+                            confirmed
+                            hideHeading
+                            pids={pids}
+                            onOpenAuthor={onOpenAuthor}
+                            onSearchAuthor={onSearchAuthor}
                             sharedMaps={sharedMaps}
                             activeCustomProfileIds={activeCustomProfileIds}
                         />

@@ -143,6 +143,9 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
     // Collapsed by default -- a decided-confirmed row is the exception, not
     // the common case, and most reports have none at all.
     const [confirmedOpen, setConfirmedOpen] = useState(false);
+    // Collapsed by default, same reasoning as confirmedOpen above -- there
+    // can be hundreds of these (see automaticConfirmedRows' own comment).
+    const [automaticConfirmedOpen, setAutomaticConfirmedOpen] = useState(false);
     const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
     // Local, not persisted via useFilterSettings -- see SortButton.js's own
@@ -275,7 +278,12 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
     // strong title+year match, no local decision behind it -- is not: there
     // can be hundreds of those, and there is nothing to undo.
     const confirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
-    const automaticConfirmedCount = filtered.length - missingRows.length - unclaimedRows.length - toReviewRows.length - confirmedRows.length;
+    // Shown in its own collapsed-by-default section below (CrossCheckSection's
+    // confirmed mode with no onUndo -- nothing to undo for a pure automatic
+    // match) -- there can be hundreds of these for a prolific author, which
+    // is exactly why this section stays collapsed (and its Collapse below
+    // uses unmountOnExit) rather than always rendered.
+    const automaticConfirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && !result.decided);
     // Same 3-branch wording as Author.js's own RecordsHeader `showing` text.
     const showingText = filtered.length === 0
         ? 'No record found'
@@ -307,11 +315,11 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
                 showing={showingText}
                 helpTitle="Cross-check help"
                 helpSections={CROSSCHECK_HELP_SECTIONS}
-                exportButton={<>
+                exportButton={<Box sx={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <IdentityLinksIconButton pids={[pid]} />
                     <CrosscheckDecisionFileButtons report={report} scope={{ type: 'author', pid, idHal: effectiveHalId }} />
                     <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} />
-                </>}
+                </Box>}
             />
 
             <Alert severity="info" sx={{ width: 640, maxWidth: '100%', margin: '20px auto 20px' }}>
@@ -388,9 +396,34 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
                 </Box>
             )}
 
-            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 2, mb: 4 }}>
-                {automaticConfirmedCount} confirmed automatically, not shown
-            </Typography>
+            {automaticConfirmedRows.length > 0 && (
+                <Box sx={{ ...SECTION_BOX_SX, mb: 4 }}>
+                    <Typography
+                        variant="h6"
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: automaticConfirmedOpen ? 1 : 0 }}
+                        onClick={() => setAutomaticConfirmedOpen(o => !o)}
+                    >
+                        <IconButton size="small" sx={{ p: 0 }}>
+                            {automaticConfirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                        </IconButton>
+                        Confirmed automatically ({automaticConfirmedRows.length})
+                    </Typography>
+                    <Collapse in={automaticConfirmedOpen} unmountOnExit>
+                        <CrossCheckSection
+                            title="Confirmed automatically"
+                            rows={automaticConfirmedRows}
+                            confirmed
+                            hideHeading
+                            pids={pids}
+                            onOpenAuthor={onOpenAuthor}
+                            onSearchAuthor={onSearchAuthor}
+                            sharedMaps={sharedMaps}
+                            activeCustomProfileIds={activeCustomProfileIds}
+                            boxSx={{}}
+                        />
+                    </Collapse>
+                </Box>
+            )}
         </div>
     );
 }

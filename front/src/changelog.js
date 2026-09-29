@@ -4,6 +4,10 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.24', items: [
+    'Fixed cramped icon spacing on the cross-check page\'s header row.',
+    'Automatically-confirmed cross-check matches now have their own collapsed-by-default section (view them without downloading a report), instead of just a count.',
+  ] },
   { version: '0.23', items: [
     'Cross-check pages now show the author/team/structure name in their header, with a contextual help (?) button, and gained their own live year filter -- matching the author pages\' layout and controls.',
     'Fixed a cross-check URL always carrying a "?from=&to=" year range, even with no filter active.',
