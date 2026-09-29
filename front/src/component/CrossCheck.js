@@ -337,20 +337,18 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
             <div style={{ height: '20px' }} />
 
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} boxSx={SECTION_BOX_SX} headingVariant="h6" />
-            {unclaimedRows.length > 0 && (
-                <CrossCheckSection
-                    title="Not claimed on HAL"
-                    description="These are already deposited in HAL, but not linked to your HAL identity -- likely deposited by a co-author who didn't select/validate your idHAL when submitting."
-                    rows={unclaimedRows}
-                    unclaimed
-                    pids={pids}
-                    onOpenAuthor={onOpenAuthor}
-                    sharedMaps={sharedMaps}
-                    activeCustomProfileIds={activeCustomProfileIds}
-                    boxSx={SECTION_BOX_SX}
-                    headingVariant="h6"
-                />
-            )}
+            <CrossCheckSection
+                title="Not claimed on HAL"
+                description="These are already deposited in HAL, but not linked to your HAL identity -- likely deposited by a co-author who didn't select/validate your idHAL when submitting."
+                rows={unclaimedRows}
+                unclaimed
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+                boxSx={SECTION_BOX_SX}
+                headingVariant="h6"
+            />
             <CrossCheckSection
                 title="To review"
                 description="These DBLP publications only found an uncertain match in HAL — check whether it's really the same paper before treating it as deposited."

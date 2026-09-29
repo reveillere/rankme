@@ -151,23 +151,29 @@ function DblpWithMatches({ result, isLast, pids, onOpenAuthor, onSearchAuthor, s
 // only; every other kind starts open. unmountOnExit on the Collapse below
 // matters most for those two -- there can be hundreds of automatically-
 // confirmed rows for a prolific author, not worth paying to render while
-// collapsed. A section with zero rows is never rendered at all, rather than
-// showing an empty "(0)" row or a "None" placeholder.
+// collapsed.
+//
+// A section with zero rows still renders its own "Title (0)" header
+// (greyed out, not clickable -- nothing to expand into) rather than
+// disappearing entirely: a maintainer scanning the page can then see at a
+// glance which categories genuinely have nothing (still listed, just
+// dimmed) vs. which ones were never computed for this report at all.
 export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, unclaimed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', defaultOpen = true }) {
     const [open, setOpen] = useState(defaultOpen);
-    if (rows.length === 0) return null;
+    const empty = rows.length === 0;
     return (
         <Box sx={boxSx}>
             <Typography
                 variant={headingVariant}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: description ? 0.5 : (open ? 1 : 0) }}
-                onClick={() => setOpen(o => !o)}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: empty ? 'default' : 'pointer', opacity: empty ? 0.5 : 1, mb: !empty && description ? 0.5 : (!empty && open ? 1 : 0) }}
+                onClick={empty ? undefined : () => setOpen(o => !o)}
             >
-                <IconButton size="small" sx={{ p: 0 }}>
+                <IconButton size="small" sx={{ p: 0 }} disabled={empty} tabIndex={-1}>
                     {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                 </IconButton>
                 {title} ({rows.length})
             </Typography>
+            {empty ? null : <>
             {description && (
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{description}</Typography>
             )}
@@ -244,6 +250,7 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
                 </ul>
             )}
             </Collapse>
+            </>}
         </Box>
     );
 }

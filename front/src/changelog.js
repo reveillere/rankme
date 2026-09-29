@@ -4,6 +4,9 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.27', items: [
+    'Empty cross-check sections are shown again (greyed out, e.g. "Not claimed on HAL (0)") instead of disappearing entirely, so it\'s clear at a glance which categories genuinely have nothing.',
+  ] },
   { version: '0.26', items: [
     'Fixed a collapsed cross-check section (e.g. "Confirmed by you") drifting to the center of the page instead of staying left-aligned like the others.',
   ] },

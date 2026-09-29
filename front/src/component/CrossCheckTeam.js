@@ -288,18 +288,16 @@ function TeamMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onD
                 Publications for {member.name || member.pid} (pid: {member.pid}, idHal: {member.idHal})
             </Typography>
             <CrossCheckSection title="Missing from HAL" rows={missingRows} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
-            {unclaimedRows.length > 0 && (
-                <CrossCheckSection
-                    title="Not claimed on HAL"
-                    description="These are already deposited in HAL, but not linked to this person's HAL identity -- likely deposited by a co-author who didn't select/validate their idHAL when submitting."
-                    rows={unclaimedRows}
-                    unclaimed
-                    pids={pids}
-                    onOpenAuthor={onOpenAuthor}
-                    sharedMaps={sharedMaps}
-                    activeCustomProfileIds={activeCustomProfileIds}
-                />
-            )}
+            <CrossCheckSection
+                title="Not claimed on HAL"
+                description="These are already deposited in HAL, but not linked to this person's HAL identity -- likely deposited by a co-author who didn't select/validate their idHAL when submitting."
+                rows={unclaimedRows}
+                unclaimed
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+            />
             <CrossCheckSection
                 title="To review"
                 description="These DBLP publications only found an uncertain match in HAL — check whether it's really the same paper before treating it as deposited."
