@@ -4,10 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Collapse from '@mui/material/Collapse';
-import IconButton from '@mui/material/IconButton';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // DBLP/HAL
 import { fetchStructureCrossCheck, postCrossCheckOverride } from '../crosscheck';
@@ -255,11 +251,6 @@ function CrossCheckStructureContent({ structId, structureName, report, identityP
 // numbering rule.
 function StructureMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds }) {
     const pids = useMemo(() => [member.pid], [member.pid]);
-    // Collapsed by default, one flag per member -- see CrossCheck.js's
-    // identical confirmedOpen comment.
-    const [confirmedOpen, setConfirmedOpen] = useState(false);
-    // See CrossCheck.js's identical automaticConfirmedOpen comment.
-    const [automaticConfirmedOpen, setAutomaticConfirmedOpen] = useState(false);
     // See CrossCheck.js's identical numbered/sortedNumbered comment.
     const numbered = withRowNumbers(member.results);
     const sortedNumbered = sortMode === DEFAULT_SORT_MODE ? numbered : orderPublicationsForDisplay(
@@ -304,61 +295,29 @@ function StructureMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor
                 sharedMaps={sharedMaps}
                 activeCustomProfileIds={activeCustomProfileIds}
             />
-            {confirmedRows.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                    <Typography
-                        variant="subtitle2"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: confirmedOpen ? 1 : 0 }}
-                        onClick={() => setConfirmedOpen(o => !o)}
-                    >
-                        <IconButton size="small" sx={{ p: 0 }}>
-                            {confirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                        </IconButton>
-                        Confirmed ({confirmedRows.length})
-                    </Typography>
-                    <Collapse in={confirmedOpen}>
-                        <CrossCheckSection
-                            title="Confirmed"
-                            rows={confirmedRows}
-                            confirmed
-                            hideHeading
-                            pids={pids}
-                            onOpenAuthor={onOpenAuthor}
-                            onSearchAuthor={onSearchAuthor}
-                            onUndo={onUndo}
-                            sharedMaps={sharedMaps}
-                            activeCustomProfileIds={activeCustomProfileIds}
-                        />
-                    </Collapse>
-                </Box>
-            )}
-            {automaticConfirmedRows.length > 0 && (
-                <Box sx={{ mb: 2 }}>
-                    <Typography
-                        variant="subtitle2"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: automaticConfirmedOpen ? 1 : 0 }}
-                        onClick={() => setAutomaticConfirmedOpen(o => !o)}
-                    >
-                        <IconButton size="small" sx={{ p: 0 }}>
-                            {automaticConfirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                        </IconButton>
-                        Confirmed automatically ({automaticConfirmedRows.length})
-                    </Typography>
-                    <Collapse in={automaticConfirmedOpen} unmountOnExit>
-                        <CrossCheckSection
-                            title="Confirmed automatically"
-                            rows={automaticConfirmedRows}
-                            confirmed
-                            hideHeading
-                            pids={pids}
-                            onOpenAuthor={onOpenAuthor}
-                            onSearchAuthor={onSearchAuthor}
-                            sharedMaps={sharedMaps}
-                            activeCustomProfileIds={activeCustomProfileIds}
-                        />
-                    </Collapse>
-                </Box>
-            )}
+            <CrossCheckSection
+                title="Confirmed by you"
+                rows={confirmedRows}
+                confirmed
+                defaultOpen={false}
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                onSearchAuthor={onSearchAuthor}
+                onUndo={onUndo}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+            />
+            <CrossCheckSection
+                title="Confirmed automatically"
+                rows={automaticConfirmedRows}
+                confirmed
+                defaultOpen={false}
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                onSearchAuthor={onSearchAuthor}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+            />
         </Box>
     );
 }

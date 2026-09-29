@@ -4,6 +4,10 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.25', items: [
+    'Every cross-check section (Missing from HAL, Not claimed on HAL, To review, Confirmed by you, Confirmed automatically) is now collapsible, consistently styled, and only shown when it actually has something in it.',
+    '"Confirmed" renamed to "Confirmed by you", to distinguish it from the new "Confirmed automatically" section next to it.',
+  ] },
   { version: '0.24', items: [
     'Fixed cramped icon spacing on the cross-check page\'s header row.',
     'Automatically-confirmed cross-check matches now have their own collapsed-by-default section (view them without downloading a report), instead of just a count.',

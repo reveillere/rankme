@@ -2,12 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 // Material-UI Components
 import Alert from '@mui/material/Alert';
-import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
-import Collapse from '@mui/material/Collapse';
-import IconButton from '@mui/material/IconButton';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 // DBLP/HAL
 import { fetchCrossCheck, postCrossCheckOverride } from '../crosscheck';
@@ -139,13 +134,6 @@ export function CrossCheck({ pid, halId, initialYearRange, onYearRangeChange, on
 }
 
 function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearRangeChange, onOpenAuthor, onSearchAuthor, onOverrideDecision, onUndo }) {
-    // Identity edits can require a new automatic report; decisions are local.
-    // Collapsed by default -- a decided-confirmed row is the exception, not
-    // the common case, and most reports have none at all.
-    const [confirmedOpen, setConfirmedOpen] = useState(false);
-    // Collapsed by default, same reasoning as confirmedOpen above -- there
-    // can be hundreds of these (see automaticConfirmedRows' own comment).
-    const [automaticConfirmedOpen, setAutomaticConfirmedOpen] = useState(false);
     const { conferenceSource, journalSource, filterCategories, filterMatchTypes } = useFilterSettings();
     const sharedMaps = useSharedOverridesMaps();
     // Local, not persisted via useFilterSettings -- see SortButton.js's own
@@ -278,11 +266,10 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
     // strong title+year match, no local decision behind it -- is not: there
     // can be hundreds of those, and there is nothing to undo.
     const confirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && result.decided);
-    // Shown in its own collapsed-by-default section below (CrossCheckSection's
-    // confirmed mode with no onUndo -- nothing to undo for a pure automatic
-    // match) -- there can be hundreds of these for a prolific author, which
-    // is exactly why this section stays collapsed (and its Collapse below
-    // uses unmountOnExit) rather than always rendered.
+    // Shown in its own "Confirmed automatically" section below
+    // (CrossCheckSection's confirmed mode with no onUndo -- nothing to undo
+    // for a pure automatic match), collapsed by default -- there can be
+    // hundreds of these for a prolific author.
     const automaticConfirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && !result.decided);
     // Same 3-branch wording as Author.js's own RecordsHeader `showing` text.
     const showingText = filtered.length === 0
@@ -366,64 +353,33 @@ function CrossCheckShow({ report, pid, effectiveHalId, initialYearRange, onYearR
                 headingVariant="h6"
             />
 
-            {confirmedRows.length > 0 && (
-                <Box sx={SECTION_BOX_SX}>
-                    <Typography
-                        variant="h6"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: confirmedOpen ? 1 : 0 }}
-                        onClick={() => setConfirmedOpen(o => !o)}
-                    >
-                        <IconButton size="small" sx={{ p: 0 }}>
-                            {confirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                        </IconButton>
-                        Confirmed ({confirmedRows.length})
-                    </Typography>
-                    <Collapse in={confirmedOpen}>
-                        <CrossCheckSection
-                            title="Confirmed"
-                            rows={confirmedRows}
-                            confirmed
-                            hideHeading
-                            pids={pids}
-                            onOpenAuthor={onOpenAuthor}
-                            onSearchAuthor={onSearchAuthor}
-                            onUndo={onUndo}
-                            sharedMaps={sharedMaps}
-                            activeCustomProfileIds={activeCustomProfileIds}
-                            boxSx={{}}
-                        />
-                    </Collapse>
-                </Box>
-            )}
-
-            {automaticConfirmedRows.length > 0 && (
-                <Box sx={{ ...SECTION_BOX_SX, mb: 4 }}>
-                    <Typography
-                        variant="h6"
-                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: automaticConfirmedOpen ? 1 : 0 }}
-                        onClick={() => setAutomaticConfirmedOpen(o => !o)}
-                    >
-                        <IconButton size="small" sx={{ p: 0 }}>
-                            {automaticConfirmedOpen ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-                        </IconButton>
-                        Confirmed automatically ({automaticConfirmedRows.length})
-                    </Typography>
-                    <Collapse in={automaticConfirmedOpen} unmountOnExit>
-                        <CrossCheckSection
-                            title="Confirmed automatically"
-                            rows={automaticConfirmedRows}
-                            confirmed
-                            hideHeading
-                            pids={pids}
-                            onOpenAuthor={onOpenAuthor}
-                            onSearchAuthor={onSearchAuthor}
-                            sharedMaps={sharedMaps}
-                            activeCustomProfileIds={activeCustomProfileIds}
-                            boxSx={{}}
-                        />
-                    </Collapse>
-                </Box>
-            )}
+            <CrossCheckSection
+                title="Confirmed by you"
+                rows={confirmedRows}
+                confirmed
+                defaultOpen={false}
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                onSearchAuthor={onSearchAuthor}
+                onUndo={onUndo}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+                boxSx={SECTION_BOX_SX}
+                headingVariant="h6"
+            />
+            <CrossCheckSection
+                title="Confirmed automatically"
+                rows={automaticConfirmedRows}
+                confirmed
+                defaultOpen={false}
+                pids={pids}
+                onOpenAuthor={onOpenAuthor}
+                onSearchAuthor={onSearchAuthor}
+                sharedMaps={sharedMaps}
+                activeCustomProfileIds={activeCustomProfileIds}
+                boxSx={SECTION_BOX_SX}
+                headingVariant="h6"
+            />
         </div>
     );
 }

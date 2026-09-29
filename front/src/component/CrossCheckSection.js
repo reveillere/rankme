@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
+import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import UndoIcon from '@mui/icons-material/Undo';
@@ -134,24 +138,41 @@ function DblpWithMatches({ result, isLast, pids, onOpenAuthor, onSearchAuthor, s
 // X" heading above it) -- everything else about the section is identical
 // between all three, only how it's introduced differs.
 //
-// showCandidates ("To review") and confirmed ("Confirmed") are mutually
-// exclusive DBLP-row/HAL-row layouts (see DblpWithMatches above); a plain
-// flat list is used for everything else (Missing from HAL).
+// showCandidates ("To review") and confirmed ("Confirmed by you"/"Confirmed
+// automatically") are mutually exclusive DBLP-row/HAL-row layouts (see
+// DblpWithMatches above); a plain flat list is used for everything else
+// (Missing from HAL/Not claimed on HAL).
 //
-// hideHeading: the "Confirmed" section on each page wraps this component in
-// its own collapsible header (a clickable "Confirmed (N)" row with an
-// expand/collapse icon -- see CrossCheck.js), which already shows the same
-// title+count this component would otherwise render a second time.
-export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, unclaimed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', hideHeading = false }) {
+// Every section is collapsible (its own chevron+title+count, same look
+// regardless of kind -- "Confirmed automatically" used to be a bespoke
+// wrapper hand-rolled once per page around a hideHeading'd instance of this
+// component; folded in here instead so every section is visually "at the
+// same level"). defaultOpen=false is passed for the two Confirmed variants
+// only; every other kind starts open. unmountOnExit on the Collapse below
+// matters most for those two -- there can be hundreds of automatically-
+// confirmed rows for a prolific author, not worth paying to render while
+// collapsed. A section with zero rows is never rendered at all, rather than
+// showing an empty "(0)" row or a "None" placeholder.
+export function CrossCheckSection({ title, description, rows, showCandidates, confirmed, unclaimed, pids, onOpenAuthor, onSearchAuthor, onDecide, onUndo, sharedMaps, activeCustomProfileIds, boxSx = { mb: 2 }, headingVariant = 'subtitle2', defaultOpen = true }) {
+    const [open, setOpen] = useState(defaultOpen);
+    if (rows.length === 0) return null;
     return (
         <Box sx={boxSx}>
-            {!hideHeading && <Typography variant={headingVariant} sx={{ mb: description ? 0.5 : 1 }}>{title} ({rows.length})</Typography>}
+            <Typography
+                variant={headingVariant}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer', mb: description ? 0.5 : (open ? 1 : 0) }}
+                onClick={() => setOpen(o => !o)}
+            >
+                <IconButton size="small" sx={{ p: 0 }}>
+                    {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                </IconButton>
+                {title} ({rows.length})
+            </Typography>
             {description && (
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{description}</Typography>
             )}
-            {rows.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">None</Typography>
-            ) : showCandidates ? (
+            <Collapse in={open} unmountOnExit>
+            {showCandidates ? (
                 rows.map(({ result }, i) => (
                     <DblpWithMatches
                         key={result.publication.dblp.key}
@@ -222,6 +243,7 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
                     ))}
                 </ul>
             )}
+            </Collapse>
         </Box>
     );
 }
