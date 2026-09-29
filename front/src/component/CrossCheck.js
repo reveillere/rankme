@@ -46,7 +46,20 @@ const portalAccessor = pub => pub.type === 'inproceedings' ? 'core' : 'sjr';
 // it needs its own top-level width/margin -- see CrossCheckSection.js's own
 // boxSx/headingVariant comment. Module-level so it stays referentially
 // stable across renders, same reasoning as NO_SELF_IDS there.
-const SECTION_BOX_SX = { maxWidth: 900, margin: '0 auto 30px' };
+//
+// width: '100%' is load-bearing, not decorative -- '.App' (App.css) is a
+// flex column with align-items:center, so a direct flex-item child with
+// only a maxWidth (no explicit width) shrinks-to-fit its own content
+// instead of filling up to that maxWidth. A section's header row is
+// left-aligned (justify-content defaults to flex-start), so as long as the
+// section is OPEN (its wide row content forces the box wide) this went
+// unnoticed -- but a section collapsed by default (Confirmed by you/
+// automatically) has nothing but its own short header text to size against,
+// so it shrinks to that text's width and then gets centered by '.App'
+// instead of sitting flush left like every other (open) section -- exactly
+// the "pas aligné" the maintainer saw live. width:'100%' pins the box to
+// the full flex-item width every time, open or collapsed.
+const SECTION_BOX_SX = { maxWidth: 900, width: '100%', margin: '0 auto 30px' };
 
 // RecordsHeader's own default help content ("Cross-check compares the
 // current source with its matching HAL/DBLP identity...") is circular on

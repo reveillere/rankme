@@ -4,6 +4,9 @@
 // the version bump commits in front/package.json's git history for the full
 // technical log. Newest first.
 export const CHANGELOG = [
+  { version: '0.26', items: [
+    'Fixed a collapsed cross-check section (e.g. "Confirmed by you") drifting to the center of the page instead of staying left-aligned like the others.',
+  ] },
   { version: '0.25', items: [
     'Every cross-check section (Missing from HAL, Not claimed on HAL, To review, Confirmed by you, Confirmed automatically) is now collapsible, consistently styled, and only shown when it actually has something in it.',
     '"Confirmed" renamed to "Confirmed by you", to distinguish it from the new "Confirmed automatically" section next to it.',

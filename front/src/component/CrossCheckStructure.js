@@ -265,8 +265,11 @@ function StructureMemberSection({ member, sortMode, onOpenAuthor, onSearchAuthor
     // See CrossCheck.js's identical automaticConfirmedRows comment.
     const automaticConfirmedRows = sortedNumbered.filter(({ result }) => result.status === 'confirmed' && !result.decided);
 
+    // width: '100%' is load-bearing -- see CrossCheck.js's identical
+    // SECTION_BOX_SX comment (same '.App' flex-column shrink-to-fit issue,
+    // this box being a direct flex-item child of it too).
     return (
-        <Box sx={{ maxWidth: 900, margin: '0 auto 40px' }}>
+        <Box sx={{ maxWidth: 900, width: '100%', margin: '0 auto 40px' }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
                 Publications for {member.name || member.idHal} (idHal: {member.idHal}, pid: {member.pid})
             </Typography>
