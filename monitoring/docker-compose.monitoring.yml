@@ -101,8 +101,16 @@ services:
     # before this flag, Prometheus marked the target down. --docker_only
     # limits collection to actual containers, which is the only thing this
     # dashboard cares about anyway.
+    #
+    # --enable_metrics: the dashboard only uses memory + cpu. Skipping the
+    # disk collector in particular matters -- its per-container `du` over
+    # the overlay rootfs filled this cgroup with ~180MB of dentry/inode
+    # slab (counted against the limit), behind an OOM kill on 2026-10-01
+    # while anon memory was only ~30MB.
     command:
       - '--docker_only=true'
+      - '--enable_metrics=cpu,memory'
+      - '--housekeeping_interval=30s'
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -112,10 +120,7 @@ services:
       resources:
         limits:
           # Bumped from 128M on 2026-09-15 (observed close to 100% of it in
-          # practice) using RAM freed by disabling grafana below -- not the
-          # full 128M grafana had, some of it left as host headroom rather
-          # than fully reallocated, same reasoning as mongo's own bump
-          # earlier that day.
+          # practice).
           memory: 256M
           cpus: "0.3"
 
@@ -146,13 +151,6 @@ services:
           memory: 384M
           cpus: "0.5"
 
-  # Disabled 2026-09-15: the VPS's RAM was too tight for it alongside
-  # cadvisor (see cadvisor's own bump above, using the RAM this frees) --
-  # re-enable by uncommenting once there's more headroom (a bigger VPS, or
-  # trimming something else). grafana-data (below) is left declared so its
-  # dashboards/admin password survive in the meantime; prometheus keeps
-  # scraping/retaining everything Grafana would show either way, nothing
-  # is lost by turning this back on later.
   grafana:
     image: grafana/grafana:11.2.0
     restart: always
