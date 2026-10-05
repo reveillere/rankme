@@ -174,7 +174,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 128M
+          # Bumped from 128M on 2026-10-05: the 240MB grafana binary plus
+          # its working set did not fit, so the kernel kept evicting and
+          # re-reading its pages (~215MB/s of disk reads for 45h), which
+          # made SQLite writes time out ("database is locked") and the UI hang.
+          memory: 256M
           cpus: "0.5"
 
 volumes:
