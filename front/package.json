@@ -1,7 +1,7 @@
 {
   "name": "rankme",
   "private": true,
-  "version": "0.29.0",
+  "version": "0.30.0",
   "versionDate": "2026-09-29",
   "type": "module",
   "homepage": "https://www.rankme.fr",
@@ -22,7 +22,7 @@
     "react-chartjs-2": "^5.2.0",
     "react-datepicker": "^4.17.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.16.0",
+    "react-router-dom": "^7.18.4",
     "react-virtuoso": "^4.18.13"
   },
   "devDependencies": {
