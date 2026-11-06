@@ -1,18 +1,23 @@
-import { defineConfig, transformWithEsbuild } from 'vite';
+import { defineConfig, transformWithOxc } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   base: '/',
   plugins: [
     {
+      // The app keeps JSX in plain .js files, and Vite only parses JSX in
+      // .jsx/.tsx. Compile the JSX in src/**/*.js first; the React plugin
+      // then adds Fast Refresh on top in dev.
       name: 'treat-js-files-as-jsx',
+      enforce: 'pre',
       async transform(code, id) {
-        if (!id.match(/src\/.*\.js$/)) return null;
-
-        return transformWithEsbuild(code, id, {
-          loader: 'jsx',
-          jsx: 'automatic',
+        if (!/\/src\/.*\.js$/.test(id.split('?')[0])) return null;
+        const result = await transformWithOxc(code, id, {
+          lang: 'jsx',
+          jsx: { runtime: 'automatic', development: this.environment?.mode === 'dev' },
+          sourcemap: true,
         });
+        return { code: result.code, map: result.map };
       },
     },
     react(),
@@ -51,8 +56,10 @@ export default defineConfig({
       '@mui/material/TextField', '@mui/material/ToggleButton', '@mui/material/ToggleButtonGroup',
       '@mui/material/Tooltip', '@mui/material/Typography',
     ],
-    esbuildOptions: {
-      loader: {
+    // Dependency scanning reads the app's .js files too, so they need the
+    // same JSX treatment there.
+    rolldownOptions: {
+      moduleTypes: {
         '.js': 'jsx',
       },
     },
