@@ -92,7 +92,7 @@ export function CrosscheckDecisionFileButtons({ report, scope }) {
   usePersonalDataVersion();
   const keys = report ? reportPublicationKeys(report) : undefined;
   let decisions = [];
-  try { decisions = listCrosscheckDecisions(keys); } catch (error) { /* Settings exposes storage errors in detail. */ }
+  try { decisions = listCrosscheckDecisions(keys); } catch { /* Settings exposes storage errors in detail. */ }
   const filename = `rankme-crosscheck-decisions-${scope.type}-${String(scope.id || scope.pid || 'all').replace(/[^a-zA-Z0-9_-]/g, '-')}.json`;
   const importFile = async event => {
     const file = event.target.files[0];
