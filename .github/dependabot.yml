@@ -5,6 +5,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # 0.5+ needs eslint 9/10 (flat config); we are still on eslint 8.
+      # Remove once the front lint setup is migrated to eslint 9.
+      - dependency-name: eslint-plugin-react-refresh
+        versions: [">=0.5.0"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
