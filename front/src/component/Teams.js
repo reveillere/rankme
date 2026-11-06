@@ -368,6 +368,9 @@ export default function Teams({ onOpenAuthor }) {
                   <ListItemText
                     primary={team.name}
                     secondary={<Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25 }}><span>{team.members.length} members</span><Chip label={SOURCES[team.source]?.label || team.source} size="small" sx={{ bgcolor: 'grey.100', color: 'text.secondary' }} /></Box>}
+                    // The Chip renders a <div>, which is invalid inside the
+                    // default <p> secondary text.
+                    slotProps={{ secondary: { component: 'div' } }}
                   />
                 </ListItemButton>
               </ListItem>
