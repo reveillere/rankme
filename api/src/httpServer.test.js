@@ -99,3 +99,37 @@ test('rateLimit middleware returns 429 with a Retry-After header once the config
         server.close();
     }
 });
+
+// Express 5 hands a `*rest` wildcard over as an array of segments;
+// withRestParam (routes.js) joins it back into the single string every
+// controller reads as req.params[0]. A dblp pid carries a slash, and names
+// arrive URL-encoded, so both must come through intact.
+test('wildcard routes give controllers the whole remaining path as req.params[0]', async () => {
+    const { withRestParam } = await import('./routes.js');
+    const seen = [];
+    const app = express();
+    app.get('/dblp/author/*rest', withRestParam((req, res) => { seen.push(req.params[0]); res.json({ ok: true }); }));
+    const { server, baseUrl } = await listen(app);
+    try {
+        for (const [path, expected] of [
+            ['/dblp/author/11/1262', '11/1262'],
+            ['/dblp/author/h/JohnDoe', 'h/JohnDoe'],
+            ['/dblp/author/Jos%C3%A9%20Dupont', 'José Dupont'],
+            ['/dblp/author/a%2Fb', 'a/b'],
+        ]) {
+            const resp = await fetch(`${baseUrl}${path}`);
+            assert.equal(resp.status, 200, path);
+            assert.equal(seen.pop(), expected, path);
+        }
+    } finally {
+        server.close();
+    }
+});
+
+test('every wildcard route in routes.js goes through withRestParam', () => {
+    for (const layer of router.stack) {
+        if (!layer.route || !layer.route.path.includes('*')) continue;
+        const names = layer.route.stack.map(l => l.name);
+        assert.ok(names.includes('restParam'), `${layer.route.path} reads a wildcard but is not wrapped in withRestParam`);
+    }
+});

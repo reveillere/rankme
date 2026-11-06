@@ -18,6 +18,18 @@ import * as auth from './auth.js';
 
 const router = express.Router();
 
+// Express 5 names wildcards (`*rest`) and hands them over as an array of
+// path segments. Controllers read the whole remainder as req.params[0]
+// (a dblp pid such as "11/1262" contains a slash), as Express 4 gave it, so
+// this joins the segments back into that one string.
+export function withRestParam(handler) {
+    return function restParam(req, res, next) {
+        const rest = req.params.rest;
+        req.params[0] = Array.isArray(rest) ? rest.join('/') : (rest ?? '');
+        return handler(req, res, next);
+    };
+}
+
 // Only the documented, token-protected public API is rate-limited.
 // Browser-internal identity and cross-check routes do not consume this quota.
 const publicApiLimit = rateLimit({ windowMs: 60_000, max: 30 });
@@ -60,32 +72,32 @@ router.get('/ranking-editions', async (req, res) => {
 router.get('/dblp/status', admin.controllerDblpStatus);
 // Browser-internal compatibility routes. They are deliberately omitted from
 // OpenAPI; the documented API uses the protected POST endpoints below.
-router.get('/dblp/author/*', dblp.controllerAuthor);
+router.get('/dblp/author/*rest', withRestParam(dblp.controllerAuthor));
 // Public records endpoints are limited too: since recordPresentation.js started ranking/correcting every
 // record on this path (see respondWithRecords), the POST branch is no
 // longer the cheap "just the display name" lookup the GET compat route
 // above still is.
-router.post('/dblp/author/*', requireApiToken, publicApiLimit, dblp.controllerAuthor);
-router.get('/dblp/author-info/*', dblp.controllerAuthorInfo);
-router.get('/dblp/search/*', dblp.controllerSearch);
-router.get('/dblp/author-stream/*', authorStream.controllerDblpAuthor);
+router.post('/dblp/author/*rest', requireApiToken, publicApiLimit, withRestParam(dblp.controllerAuthor));
+router.get('/dblp/author-info/*rest', withRestParam(dblp.controllerAuthorInfo));
+router.get('/dblp/search/*rest', withRestParam(dblp.controllerSearch));
+router.get('/dblp/author-stream/*rest', withRestParam(authorStream.controllerDblpAuthor));
 
 router.post('/hal/author/:idHal', requireApiToken, publicApiLimit, hal.controllerAuthor);
-router.get('/hal/author-info/*', hal.controllerAuthorInfo);
+router.get('/hal/author-info/*rest', withRestParam(hal.controllerAuthorInfo));
 router.post('/hal/author-infos', hal.controllerAuthorInfos);
-router.get('/hal/search/*', hal.controllerSearch);
-router.get('/hal/author-stream/*', authorStream.controllerHalAuthor);
+router.get('/hal/search/*rest', withRestParam(hal.controllerSearch));
+router.get('/hal/author-stream/*rest', withRestParam(authorStream.controllerHalAuthor));
 
 router.post('/hal/structure/:structId', requireApiToken, publicApiLimit, hal.controllerStructurePublications);
-router.get('/hal/structure-search/*', hal.controllerSearchStructure);
-router.get('/hal/structure-info/*', hal.controllerStructureInfo);
-router.get('/hal/structure-stream/*', authorStream.controllerHalStructure);
+router.get('/hal/structure-search/*rest', withRestParam(hal.controllerSearchStructure));
+router.get('/hal/structure-info/*rest', withRestParam(hal.controllerStructureInfo));
+router.get('/hal/structure-stream/*rest', withRestParam(authorStream.controllerHalStructure));
 router.post('/records/team', requireApiToken, publicApiLimit, controllerTeamRecords);
 
 // Read-only automatic suggestions. Personal link CRUD lives in localStorage.
 router.get('/identity/structure/:structId', identityResolution.controllerResolveStructure);
 router.post('/identity/team', identityResolution.controllerResolveTeam);
-router.get('/identity/suggest/*', identityResolution.controllerSuggestIdentity);
+router.get('/identity/suggest/*rest', withRestParam(identityResolution.controllerSuggestIdentity));
 router.get('/identity/suggest-dblp/:idHal', identityResolution.controllerSuggestDblpIdentity);
 
 router.get('/rank/core/candidates', core.controllerCandidates);
@@ -95,7 +107,7 @@ router.get('/rank/ccf/candidates', ccf.controllerCandidates);
 router.post('/match-overrides', matchOverrides.controllerRecord);
 router.get('/match-overrides/shared/:portal', matchOverrides.controllerSharedList);
 
-router.get('/crosscheck/author/*', crosscheck.controllerCrossCheck);
+router.get('/crosscheck/author/*rest', withRestParam(crosscheck.controllerCrossCheck));
 router.post('/crosscheck/author', requireApiToken, publicApiLimit, crosscheck.controllerCrossCheck);
 router.get('/crosscheck/structure/:structId', crosscheckStructure.controllerCrossCheckStructure);
 router.post('/crosscheck/structure', requireApiToken, publicApiLimit, crosscheckStructure.controllerCrossCheckStructure);

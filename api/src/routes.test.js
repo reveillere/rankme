@@ -15,7 +15,7 @@ import { openapiSpec } from './openapi.js';
 // {param} syntax and Express's :param/wildcard syntax so the two path
 // styles can be compared segment-by-segment.
 function normalizePath(path) {
-    return path.split('/').map(seg => (seg.startsWith(':') || seg.startsWith('{') || seg === '*') ? '{}' : seg).join('/');
+    return path.split('/').map(seg => (seg.startsWith(':') || seg.startsWith('{') || seg.startsWith('*')) ? '{}' : seg).join('/');
 }
 
 function expressRoutes() {
