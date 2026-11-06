@@ -148,3 +148,7 @@ yarn-error.log*
 
 api/logs/
 reverse-proxy/logs/
+
+# Playwright
+/front/test-results/
+/front/playwright-report/

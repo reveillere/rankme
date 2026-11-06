@@ -58,6 +58,11 @@ export default defineConfig({
     },
   },
   
+  // Unit tests only; the Playwright suite in e2e/ runs separately (npm run e2e).
+  test: {
+    include: ['src/**/*.test.js'],
+  },
+
   server: {
     watch: {
       usePolling: true,
