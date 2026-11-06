@@ -33,6 +33,14 @@ import './App.css';
 import './utils.js';
 
 
+// MUI's Tabs passes its own props (fullWidth, indicator, textColor, ...)
+// to every child, including this separator, which would forward them to
+// the DOM and make React warn. Drop them here.
+// eslint-disable-next-line no-unused-vars
+function TabsDivider({ fullWidth, indicator, selected, selectionFollowsFocus, textColor, value, onChange, ...rest }) {
+  return <Divider orientation="vertical" flexItem sx={{ my: 1.5, mx: 0.5 }} {...rest} />;
+}
+
 const SEARCH_TAB_ID = 'search';
 const TEAMS_TAB_ID = 'teams';
 const STRUCTURES_TAB_ID = 'structures';
@@ -320,7 +328,11 @@ function App() {
     <div>
       <AppBar position="sticky" style={{ backgroundColor: '#123456', height: '64px', top: 0, zIndex: 1201 }}>
         <Toolbar style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Box display="flex" alignItems="center">
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center"
+            }}>
             <Button color="inherit" onClick={handleAboutOpen} style={{ textTransform: 'none' }}>
               <Typography variant="h6">
                 About
@@ -343,7 +355,11 @@ function App() {
               ]}
             />
           </Box>
-          <Box display="flex" alignItems="center">
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center"
+            }}>
             <RankingSourceIndicator onOpenSettings={() => { setSettingsInitialTab(0); setSettingsDialogOpen(true); }} />
             <CategoriesFilterButton />
             <AccountButton />
@@ -392,7 +408,7 @@ function App() {
           />
         ))}
 
-        <Divider orientation="vertical" flexItem sx={{ my: 1.5, mx: 0.5 }} />
+        <TabsDivider />
 
         {dynamicVisibleTabs.map(tab => (
           <Tab

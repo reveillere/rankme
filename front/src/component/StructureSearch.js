@@ -16,7 +16,7 @@ import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import HistoryIcon from '@mui/icons-material/History';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 
 import '../App.css';
 import { searchStructure } from '../hal';
@@ -100,7 +100,14 @@ export default function StructureSearch({ onOpenStructure }) {
   return (
     <div className='App'>
       <h1>Search a structure on HAL</h1>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 500, mx: 'auto' }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mb: 3,
+          maxWidth: 500,
+          mx: 'auto'
+        }}>
         A lab, institution, team, or other organization registered in HAL
         (see <a href="https://aurehal.archives-ouvertes.fr/structure/index" target="_blank" rel="noreferrer">the HAL structure directory</a>).
         Every publication ever affiliated with it is pulled directly, so there&apos;s no member list to maintain.

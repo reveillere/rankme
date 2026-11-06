@@ -82,68 +82,80 @@ export function AccountButton() {
   };
 
   if (!available) return null;
-  return <>
-    <Button color="inherit" size="small" onClick={openDialog} sx={{ textTransform: 'none', ml: 1 }}>
-      {signedIn ? (label || 'Synced') : 'Sync'}
-    </Button>
-    <Dialog open={open} onClose={closeDialog} maxWidth="xs" fullWidth>
-      <DialogTitle>Account synchronization</DialogTitle>
-      <DialogContent>
-        {newCode ? (
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Alert severity="warning">Save this code now — it is shown only once and there is no way to recover it if lost.</Alert>
-            <TextField value={newCode} inputProps={{ readOnly: true }} fullWidth />
-            <Button onClick={() => navigator.clipboard?.writeText(newCode)}>Copy code</Button>
-            <Typography variant="body2" color="text.secondary">Accounts with no activity for 30 days are automatically deleted.</Typography>
-          </Stack>
-        ) : signedIn ? (
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="body2">Your RankMe preferences, teams and personal corrections are synchronized via an anonymous code. No email, username or third-party identity is ever collected.</Typography>
-            <Typography variant="body2" color="text.secondary">Accounts with no activity for 30 days are automatically deleted — sign in from time to time to keep this one alive.</Typography>
-            <TextField label="Account name (optional)" placeholder="e.g. work laptop" value={labelInput} onChange={e => setLabelInput(e.target.value)} fullWidth />
-            <Button onClick={saveLabel} disabled={busy || labelInput.trim() === (label || '')}>Save name</Button>
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
-        ) : (
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="body2">Create an anonymous sync account (a random code, no email or username) to synchronize your preferences across devices, or sign in with an existing code.</Typography>
-            <Typography variant="body2" color="text.secondary">Accounts with no activity for 30 days are automatically deleted.</Typography>
-            <TextField label="Account name (optional)" placeholder="e.g. work laptop" value={newAccountLabel} onChange={e => setNewAccountLabel(e.target.value)} fullWidth />
-            <Button variant="contained" onClick={register} disabled={busy}>Create a sync account</Button>
-            <Typography variant="body2" sx={{ mt: 1 }}>Or sign in with an existing code:</Typography>
-            <form onSubmit={e => { e.preventDefault(); signIn(); }}>
-              <Stack spacing={2}>
-                <TextField
-                  label="Sync code"
-                  value={codeInput}
-                  onChange={e => setCodeInput(e.target.value)}
-                  type={showCodeInput ? 'text' : 'password'}
-                  name="sync-code"
-                  id="sync-code-login"
-                  autoComplete="current-password"
-                  fullWidth
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton onClick={() => setShowCodeInput(v => !v)} edge="end" size="small">
-                          {showCodeInput ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                        </IconButton>
-                      </InputAdornment>
-                    )
-                  }}
-                />
-                <Button type="submit" disabled={busy || !codeInput.trim()}>Sign in</Button>
-              </Stack>
-            </form>
-            {error && <Alert severity="error">{error}</Alert>}
-          </Stack>
-        )}
-      </DialogContent>
-      <DialogActions>
-        {signedIn && !newCode && <Button onClick={synchronize} disabled={busy}>{busy ? 'Synchronizing…' : 'Synchronize now'}</Button>}
-        {signedIn && !newCode && <Button onClick={signOut} color="error">Sign out</Button>}
-        <Button onClick={closeDialog}>Close</Button>
-      </DialogActions>
-    </Dialog>
-  </>;
+  return (
+    <>
+      <Button color="inherit" size="small" onClick={openDialog} sx={{ textTransform: 'none', ml: 1 }}>
+        {signedIn ? (label || 'Synced') : 'Sync'}
+      </Button>
+      <Dialog open={open} onClose={closeDialog} maxWidth="xs" fullWidth>
+        <DialogTitle>Account synchronization</DialogTitle>
+        <DialogContent>
+          {newCode ? (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Alert severity="warning">Save this code now — it is shown only once and there is no way to recover it if lost.</Alert>
+              <TextField value={newCode} fullWidth slotProps={{
+                htmlInput: { readOnly: true }
+              }} />
+              <Button onClick={() => navigator.clipboard?.writeText(newCode)}>Copy code</Button>
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Accounts with no activity for 30 days are automatically deleted.</Typography>
+            </Stack>
+          ) : signedIn ? (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2">Your RankMe preferences, teams and personal corrections are synchronized via an anonymous code. No email, username or third-party identity is ever collected.</Typography>
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Accounts with no activity for 30 days are automatically deleted — sign in from time to time to keep this one alive.</Typography>
+              <TextField label="Account name (optional)" placeholder="e.g. work laptop" value={labelInput} onChange={e => setLabelInput(e.target.value)} fullWidth />
+              <Button onClick={saveLabel} disabled={busy || labelInput.trim() === (label || '')}>Save name</Button>
+              {error && <Alert severity="error">{error}</Alert>}
+            </Stack>
+          ) : (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2">Create an anonymous sync account (a random code, no email or username) to synchronize your preferences across devices, or sign in with an existing code.</Typography>
+              <Typography variant="body2" sx={{
+                color: "text.secondary"
+              }}>Accounts with no activity for 30 days are automatically deleted.</Typography>
+              <TextField label="Account name (optional)" placeholder="e.g. work laptop" value={newAccountLabel} onChange={e => setNewAccountLabel(e.target.value)} fullWidth />
+              <Button variant="contained" onClick={register} disabled={busy}>Create a sync account</Button>
+              <Typography variant="body2" sx={{ mt: 1 }}>Or sign in with an existing code:</Typography>
+              <form onSubmit={e => { e.preventDefault(); signIn(); }}>
+                <Stack spacing={2}>
+                  <TextField
+                    label="Sync code"
+                    value={codeInput}
+                    onChange={e => setCodeInput(e.target.value)}
+                    type={showCodeInput ? 'text' : 'password'}
+                    name="sync-code"
+                    id="sync-code-login"
+                    autoComplete="current-password"
+                    fullWidth
+                    slotProps={{
+                      input: {
+                        endAdornment: (
+                          <InputAdornment position="end">
+                            <IconButton onClick={() => setShowCodeInput(v => !v)} edge="end" size="small">
+                              {showCodeInput ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      }
+                    }}
+                  />
+                  <Button type="submit" disabled={busy || !codeInput.trim()}>Sign in</Button>
+                </Stack>
+              </form>
+              {error && <Alert severity="error">{error}</Alert>}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {signedIn && !newCode && <Button onClick={synchronize} disabled={busy}>{busy ? 'Synchronizing…' : 'Synchronize now'}</Button>}
+          {signedIn && !newCode && <Button onClick={signOut} color="error">Sign out</Button>}
+          <Button onClick={closeDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
 }

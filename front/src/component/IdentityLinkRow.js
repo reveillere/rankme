@@ -1,7 +1,7 @@
 import { Box, Button, IconButton, ListItem, Tooltip, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LinkIcon from '@mui/icons-material/Link';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
 
 // Shared by authors, teams, structures and the complete personal-links list.
 export function IdentityLinkRow({ member, source, onSelect, onConfirm, onDelete }) {

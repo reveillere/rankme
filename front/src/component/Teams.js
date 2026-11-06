@@ -406,13 +406,24 @@ export default function Teams({ onOpenAuthor }) {
             size="small"
           />
           {editingId ? (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                display: 'block',
+                mt: 1
+              }}>
               The source cannot be changed after the team is created.
             </Typography>
           ) : creationSetup && (
             <>
               <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>Source :</Typography>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    mr: 1
+                  }}>Source :</Typography>
                 {Object.entries(SOURCES).map(([key, { label }]) => (
                   <FormControlLabel
                     key={key}
@@ -530,7 +541,9 @@ export default function Teams({ onOpenAuthor }) {
         <Box component="section" sx={{ mt: 3 }}>
           <Typography variant="subtitle2" gutterBottom>Members ({members.length})</Typography>
           {members.length > 0 && <MemberList members={members.map(member => ({ ...member, idKind: source === 'hal' ? 'idHal' : 'pid' }))} onDelete={removeMember} />}
-          {members.length === 0 && <Typography variant="body2" color="text.secondary">No members yet.</Typography>}
+          {members.length === 0 && <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>No members yet.</Typography>}
         </Box>
 
         <Box sx={{ display: 'flex', gap: 1, mt: 3 }}>
@@ -544,7 +557,13 @@ export default function Teams({ onOpenAuthor }) {
           )}
         </Box>
         {members.length === 1 && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          <Typography
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              display: 'block',
+              mt: 1
+            }}>
             Add at least one more member to save a team.
           </Typography>
         )}

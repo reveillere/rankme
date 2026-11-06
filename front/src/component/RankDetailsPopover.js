@@ -52,15 +52,24 @@ function CandidateListItem({ value, rawValue, title, acronym, onClick }) {
       <Typography
         component="span"
         variant="body2"
-        color="text.secondary"
-        sx={{ minWidth: 40, flexShrink: 0, fontWeight: 700 }}
-      >
+        sx={{
+          color: "text.secondary",
+          minWidth: 40,
+          flexShrink: 0,
+          fontWeight: 700
+        }}>
         {value}
       </Typography>
       <Typography component="span" variant="body2" sx={{ wordBreak: 'break-word' }}>
         {title}{acronym ? ` (${acronym})` : ''}
         {rawValue && (
-          <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+          <Typography
+            component="span"
+            variant="caption"
+            sx={{
+              color: "text.secondary",
+              ml: 0.5
+            }}>
             — {rawValue}
           </Typography>
         )}
@@ -75,7 +84,13 @@ function CandidateListItem({ value, rawValue, title, acronym, onClick }) {
 function LabeledRow({ label, children }) {
   return (
     <Box sx={{ display: 'flex', mb: 0.5 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ minWidth: 132, flexShrink: 0 }}>{label}</Typography>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          minWidth: 132,
+          flexShrink: 0
+        }}>{label}</Typography>
       <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>{children}</Typography>
     </Box>
   );
@@ -287,8 +302,12 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
 
         <Typography variant="body2" sx={{ mb: 0.5 }}>
           Rank: <strong>{displayedValue}</strong>
-          {displayedRawValue && <Typography component="span" variant="body2" color="text.secondary"> ({displayedRawValue})</Typography>}
-          <Typography component="span" variant="body2" color="text.secondary"> (edition {rank.source})</Typography>
+          {displayedRawValue && <Typography component="span" variant="body2" sx={{
+            color: "text.secondary"
+          }}> ({displayedRawValue})</Typography>}
+          <Typography component="span" variant="body2" sx={{
+            color: "text.secondary"
+          }}> (edition {rank.source})</Typography>
         </Typography>
 
         {rank.queryText && <LabeledRow label="Original text:">&quot;{rank.queryText}&quot;</LabeledRow>}
@@ -330,7 +349,13 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
                 otherwise be told to also cover. */}
             {!applyToAllEditions && availableYears.length > 0 && (
               <Box sx={{ mt: 0.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                    display: 'block',
+                    mb: 0.5
+                  }}>
                   Also apply to these years (in addition to {year}):
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -364,7 +389,9 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
                   an empty <strong> for a title that was never set. */}
               <strong>{override.candidate.title || override.candidate.value}</strong>{override.candidate.acronym ? ` (${override.candidate.acronym})` : ''}
             </LabeledRow>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}${rank.rawValue ? ` (${rank.rawValue})` : ''}` : `no match (${rank.value})`}
             </Typography>
             <Box sx={{ mt: 1 }}>
@@ -376,7 +403,9 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
             <LabeledRow label="Matched:">
               <strong>{rank.matchedTitle}</strong>{rank.matchedAcronym ? ` (${rank.matchedAcronym})` : ''}
             </LabeledRow>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               You confirmed this match is correct.
             </Typography>
             <Box sx={{ mt: 1 }}>
@@ -388,11 +417,19 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
             <LabeledRow label="Community match:">
               <strong>{sharedOverride.candidate.title}</strong>{sharedOverride.candidate.acronym ? ` (${sharedOverride.candidate.acronym})` : ''}
             </LabeledRow>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>
               Confirmed by {sharedOverride.confirmedCount} other {sharedOverride.confirmedCount === 1 ? 'person' : 'people'} who corrected this same text.
               Automatic match was: {rank.matchedTitle ? `"${rank.matchedTitle}" — ${rank.value}${rank.rawValue ? ` (${rank.rawValue})` : ''}` : `no match (${rank.value})`}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                display: 'block',
+                mt: 0.5
+              }}>
               Search below to set your own correction instead, or turn community corrections off in Settings.
             </Typography>
           </Box>
@@ -416,7 +453,9 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
               <strong>{rank.matchedTitle}</strong>{rank.matchedAcronym ? ` (${rank.matchedAcronym})` : ''}
             </LabeledRow>
             {rank.distance != null && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" sx={{
+                color: "text.secondary"
+              }}>
                 Title word distance: {rank.distance}
               </Typography>
             )}
@@ -446,9 +485,10 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
           if (!current.currentValue) return null;
           const trend = trendOf(displayedValue, current.currentValue);
           return (
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              Rank in the latest edition ({current.currentSource}): <strong>{current.currentValue}</strong>
-              {current.currentRawValue && <Typography component="span" variant="body2" color="text.secondary"> ({current.currentRawValue})</Typography>}
+            <Typography variant="body2" sx={{ mb: 1 }}>Rank in the latest edition ({current.currentSource}): <strong>{current.currentValue}</strong>
+              {current.currentRawValue && <Typography component="span" variant="body2" sx={{
+                color: "text.secondary"
+              }}> ({current.currentRawValue})</Typography>}
               {trend === 'up' && <ArrowUpwardIcon fontSize="inherit" sx={{ color: '#2e7d32', verticalAlign: 'middle', ml: 0.3 }} />}
               {trend === 'down' && <ArrowDownwardIcon fontSize="inherit" sx={{ color: '#c62828', verticalAlign: 'middle', ml: 0.3 }} />}
               {current.currentValue === displayedValue && (
@@ -481,7 +521,12 @@ export function RankDetailsPopover({ anchorEl, onClose, portal, year, rank, over
         {!searching && query.trim().length >= 2 && (
           <List dense sx={{ maxHeight: 220, overflowY: 'auto', mt: 0.5 }}>
             {results.length === 0
-              ? <Typography variant="body2" color="text.secondary" sx={{ px: 1 }}>No match</Typography>
+              ? <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                px: 1
+              }}>No match</Typography>
               : results.map(c => (
                 <CandidateListItem key={c.id} value={c.value} rawValue={c.rawValue} title={c.title} acronym={c.acronym} onClick={() => pickCandidate(c)} />
               ))}

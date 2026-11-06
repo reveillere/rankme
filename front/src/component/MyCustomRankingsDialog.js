@@ -58,7 +58,6 @@ function EntryRow({ profileId, entry, onChanged }) {
             {entry.title || entry.queryText || 'Unknown venue'}{entry.acronym ? ` (${entry.acronym})` : ''}
           </Typography>
         }
-        secondaryTypographyProps={{ component: 'div' }}
         secondary={
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
             {editions.map(([edition, value]) => (
@@ -71,6 +70,9 @@ function EntryRow({ profileId, entry, onChanged }) {
             ))}
           </Box>
         }
+        slotProps={{
+          secondary: { component: 'div' }
+        }}
       />
     </ListItem>
   );
@@ -158,7 +160,9 @@ function ProfileRow({ profile, isFirst, activeAxes, expanded, onToggleExpand, on
       {expanded && (
         <List dense disablePadding>
           {Object.values(profile.entries).length === 0
-            ? <ListItem sx={{ pl: 4 }}><Typography variant="body2" color="text.secondary">No entries yet -- assign a letter from a publication&apos;s rank badge.</Typography></ListItem>
+            ? <ListItem sx={{ pl: 4 }}><Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>No entries yet -- assign a letter from a publication&apos;s rank badge.</Typography></ListItem>
             : Object.values(profile.entries).map(entry => (
               <EntryRow key={entry.key} profileId={profile.id} entry={entry} onChanged={onChanged} />
             ))}
@@ -332,7 +336,12 @@ export function MyCustomRankingsDialog({ open, onClose }) {
         </Box>
       </DialogTitle>
       <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 1
+          }}>
           Your own named ranking profiles (letters you&apos;ve assigned by hand), kept in this browser only. Select
           one as the active Conference or Journal source from Preferences.
         </Typography>
@@ -389,7 +398,9 @@ export function MyCustomRankingsDialog({ open, onClose }) {
               value, and it's also what gates which axis(es) the profile can
               later be selected on (axesForReference). */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">Based on:</Typography>
+            <Typography variant="caption" sx={{
+              color: "text.secondary"
+            }}>Based on:</Typography>
             <RadioGroup row value={newReference} onChange={e => setNewReference(e.target.value)}>
               <FormControlLabel value="core" control={<Radio size="small" />} label={<Typography variant="body2">CORE</Typography>} />
               <FormControlLabel value="sjr" control={<Radio size="small" />} label={<Typography variant="body2">SJR</Typography>} />

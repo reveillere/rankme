@@ -22,8 +22,12 @@ export function IdentityLinksIconButton({ open: openProp, onOpen, onClose, ...pr
   const open = controlled ? openProp : internalOpen;
   const handleOpen = () => (controlled ? onOpen() : setInternalOpen(true));
   const handleClose = () => (controlled ? onClose() : setInternalOpen(false));
-  return <>
-    <Tooltip title="Manage identity links"><IconButton size="small" onClick={handleOpen}><LinkIcon fontSize="inherit" /></IconButton></Tooltip>
-    <IdentityLinksPanel {...props} open={open} onClose={handleClose} />
-  </>;
+  return (
+    <>
+      <Tooltip title="Manage identity links"><IconButton size="small" onClick={handleOpen}><LinkIcon sx={{
+        fontSize: "inherit"
+      }} /></IconButton></Tooltip>
+      <IdentityLinksPanel {...props} open={open} onClose={handleClose} />
+    </>
+  );
 }

@@ -166,7 +166,12 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
             <DialogTitle>{title}</DialogTitle>
             <DialogContent>
                 {description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{description}</Typography>
+                    <Typography
+                        variant="body2"
+                        sx={{
+                            color: "text.secondary",
+                            mb: 2
+                        }}>{description}</Typography>
                 )}
                 <Paper component="form" onSubmit={e => e.preventDefault()} sx={{ p: '2px 4px', display: 'flex', alignItems: 'center', mb: 1 }}>
                     <IconButton sx={{ p: '10px' }} aria-label="menu">
@@ -185,11 +190,19 @@ export function IdentityLinkDialog({ open, onClose, onConfirm, direction, title,
                     {status === 'pending' && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1, py: 1.5 }}>
                             <CircularProgress size={20} />
-                            <Typography variant="body2" color="text.secondary">Searching…</Typography>
+                            <Typography variant="body2" sx={{
+                                color: "text.secondary"
+                            }}>Searching…</Typography>
                         </Box>
                     )}
                     {status === 'resolved' && results.length === 0 && (
-                        <Typography variant="body2" color="text.secondary" sx={{ px: 1, py: 1.5 }}>No result!</Typography>
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                color: "text.secondary",
+                                px: 1,
+                                py: 1.5
+                            }}>No result!</Typography>
                     )}
                     {status === 'resolved' && results.length > 0 && (
                         <List dense disablePadding>

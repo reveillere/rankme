@@ -95,10 +95,14 @@ function CustomAxisSection({ source, onSourceChange, profiles, creationReference
     const referenceList = creationReferences.map(ref => REFERENCE_LABEL[ref]).join(' or ');
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, ml: 4, mt: 0.5, mb: 1.5 }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: "text.secondary"
+        }}>
           Define your own ranking by starting from {referenceList} and overriding specific venues by hand.
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{
+          color: "text.secondary"
+        }}>
           {profiles.length === 0 ? 'No custom ranking exists yet for this axis -- create one:' : 'New custom ranking:'}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -275,7 +279,9 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
         <Tabs value={preferenceTab} onChange={(_, value) => setPreferenceTab(value)} variant="fullWidth" sx={{ mb: 2 }}>
           <Tab icon={<LeaderboardIcon fontSize="small" />} iconPosition="start" label="Rankings" />
           <Tab icon={<RuleIcon fontSize="small" />} iconPosition="start" label="Match corrections" />
-          <Tab icon={<LinkIcon fontSize="small" />} iconPosition="start" label="Identity links" />
+          <Tab icon={<LinkIcon sx={{
+            fontSize: "small"
+          }} />} iconPosition="start" label="Identity links" />
         </Tabs>
         {preferenceTab === 0 && <>
         <Paper variant="outlined" sx={{ p: 2.25, mb: 2 }}>
@@ -328,7 +334,14 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
           control={<Checkbox checked={useCommunityOverrides} onChange={handleCommunityOverridesChange} size="small" />}
           label={<Typography variant="body2">Use community-confirmed corrections</Typography>}
         />
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: -0.5 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            display: 'block',
+            ml: 4,
+            mt: -0.5
+          }}>
           When more than 10 people have corrected the same match and at least 90% of them agree (each person&apos;s
           latest correction counts), everyone sees that correction by default. Your own corrections (see &quot;My
           match corrections&quot;) always take priority over this.
@@ -336,7 +349,12 @@ export function SettingsDialog({ open, onClose, onManageCustomRankings, onManage
         </Paper>}
         {preferenceTab === 2 && <Paper variant="outlined" sx={{ p: 2.25 }}>
         <Typography variant="h6" sx={{ mb: 1.25 }}>Personal identity links and cross-check decisions</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 1
+          }}>
           Manage all choices saved in this browser. To share only one author or structure, use the controls on its page.
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25 }}>
