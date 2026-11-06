@@ -101,56 +101,65 @@ export function IdentityLinksPanel({ open, onClose, idHals = [], pids = [], reso
     } catch (err) { setError(err.message); }
   };
 
-  return <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
-      {all ? 'My identity links' : 'Identity links for this ' + scopeInfo.type}
-      <Box sx={{ display: 'flex', gap: 0.75 }}>
-        <ExportButton updateUrl={false} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={!links?.length} />
-        <ImportButton title="Import identity links" disabled={resolution === null} onImportJson={() => importFileInputRef.current?.click()} onImportCsv={() => importCsvFileInputRef.current?.click()} />
-      </Box>
-    </DialogTitle>
-    <DialogContent dividers>
-      <Typography variant="body2" sx={{ mb: 2 }}>Your choices are saved in this browser only. Export JSON or CSV to share the links for this selection. Import merges the file into your local links; it never changes another visitor’s choices.</Typography>
-      <Typography variant="caption" display="block" sx={{ mb: 2 }}>ORCID suggestions are automatic. Export includes the displayed links; importing them saves them as personal choices. Deleting a personal choice restores automatic suggestions.</Typography>
-      {error && <Alert severity="error" sx={{ mb: 2 }} action={resolution === null ? <Button color="inherit" size="small" onClick={() => setLoadAttempt(attempt => attempt + 1)}>Retry</Button> : undefined}>{error}</Alert>}
-      {notice && <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert>}
-      <input ref={importFileInputRef} type="file" accept=".json,application/json" hidden onChange={event => handleImportFile(event, 'json')} />
-      <input ref={importCsvFileInputRef} type="file" accept=".csv,text/csv" hidden onChange={event => handleImportFile(event, 'csv')} />
-      {resolution === null ? !error && <CircularProgress size={28} /> : <>
-        <List dense disablePadding>{resolution.map(member => <IdentityLinkRow
-          key={member.idHal || member.pid}
-          member={member}
-          source={source}
-          onSelect={setLinkingMember}
-          onConfirm={handleConfirmCandidate}
-          onDelete={handleDelete}
-        />)}</List>
-        {!resolution.length && !error && <Typography color="text.secondary">No saved identity links in this selection.</Typography>}
-        {all && <Button variant="outlined" sx={{ mt: 2 }} onClick={() => setLinkingMember({})}>Add identity link</Button>}
-      </>}
-    </DialogContent>
-    <DialogActions sx={{ justifyContent: 'space-between' }}>
-      <Button color="error" disabled={!personalLinkCount} onClick={() => setClearOpen(true)}>Delete all</Button>
-      <Button onClick={onViewResults || onClose}>{onViewResults ? 'View results' : 'Close'}</Button>
-    </DialogActions>
-    <Dialog open={clearOpen} onClose={() => setClearOpen(false)} maxWidth="xs" fullWidth>
-      <DialogTitle>Delete all personal identity links?</DialogTitle>
-      <DialogContent>
-        <Typography>This will delete {personalLinkCount} personal {personalLinkCount === 1 ? 'link' : 'links'} {all ? 'saved in this browser' : `for this ${scopeInfo.type}`}. Automatic suggestions will remain available.</Typography>
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+        {all ? 'My identity links' : 'Identity links for this ' + scopeInfo.type}
+        <Box sx={{ display: 'flex', gap: 0.75 }}>
+          <ExportButton updateUrl={false} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={!links?.length} />
+          <ImportButton title="Import identity links" disabled={resolution === null} onImportJson={() => importFileInputRef.current?.click()} onImportCsv={() => importCsvFileInputRef.current?.click()} />
+        </Box>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" sx={{ mb: 2 }}>Your choices are saved in this browser only. Export JSON or CSV to share the links for this selection. Import merges the file into your local links; it never changes another visitor’s choices.</Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            display: "block",
+            mb: 2
+          }}>ORCID suggestions are automatic. Export includes the displayed links; importing them saves them as personal choices. Deleting a personal choice restores automatic suggestions.</Typography>
+        {error && <Alert severity="error" sx={{ mb: 2 }} action={resolution === null ? <Button color="inherit" size="small" onClick={() => setLoadAttempt(attempt => attempt + 1)}>Retry</Button> : undefined}>{error}</Alert>}
+        {notice && <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert>}
+        <input ref={importFileInputRef} type="file" accept=".json,application/json" hidden onChange={event => handleImportFile(event, 'json')} />
+        <input ref={importCsvFileInputRef} type="file" accept=".csv,text/csv" hidden onChange={event => handleImportFile(event, 'csv')} />
+        {resolution === null ? !error && <CircularProgress size={28} /> : <>
+          <List dense disablePadding>{resolution.map(member => <IdentityLinkRow
+            key={member.idHal || member.pid}
+            member={member}
+            source={source}
+            onSelect={setLinkingMember}
+            onConfirm={handleConfirmCandidate}
+            onDelete={handleDelete}
+          />)}</List>
+          {!resolution.length && !error && <Typography sx={{
+            color: "text.secondary"
+          }}>No saved identity links in this selection.</Typography>}
+          {all && <Button variant="outlined" sx={{ mt: 2 }} onClick={() => setLinkingMember({})}>Add identity link</Button>}
+        </>}
       </DialogContent>
-      <DialogActions>
-        <Button onClick={() => setClearOpen(false)}>Cancel</Button>
-        <Button color="error" disabled={!personalLinkCount} onClick={handleClear}>Delete all</Button>
+      <DialogActions sx={{ justifyContent: 'space-between' }}>
+        <Button color="error" disabled={!personalLinkCount} onClick={() => setClearOpen(true)}>Delete all</Button>
+        <Button onClick={onViewResults || onClose}>{onViewResults ? 'View results' : 'Close'}</Button>
       </DialogActions>
+      <Dialog open={clearOpen} onClose={() => setClearOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete all personal identity links?</DialogTitle>
+        <DialogContent>
+          <Typography>This will delete {personalLinkCount} personal {personalLinkCount === 1 ? 'link' : 'links'} {all ? 'saved in this browser' : `for this ${scopeInfo.type}`}. Automatic suggestions will remain available.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClearOpen(false)}>Cancel</Button>
+          <Button color="error" disabled={!personalLinkCount} onClick={handleClear}>Delete all</Button>
+        </DialogActions>
+      </Dialog>
+      <IdentityLinkDialog
+        open={linkingMember !== null}
+        onClose={() => setLinkingMember(null)}
+        onConfirm={handleManualLink}
+        direction={selectingMember ? 'dblp' : source === 'dblp' ? 'hal' : 'dblp'}
+        title="Link identity"
+        description={selectingMember ? 'Find the author on DBLP, then select their HAL identity.' : linkingMember && `Find ${linkingMember.name || linkingMember.idHal || linkingMember.pid}'s identity.`}
+        suggestion={linkingSuggestion}
+      />
     </Dialog>
-    <IdentityLinkDialog
-      open={linkingMember !== null}
-      onClose={() => setLinkingMember(null)}
-      onConfirm={handleManualLink}
-      direction={selectingMember ? 'dblp' : source === 'dblp' ? 'hal' : 'dblp'}
-      title="Link identity"
-      description={selectingMember ? 'Find the author on DBLP, then select their HAL identity.' : linkingMember && `Find ${linkingMember.name || linkingMember.idHal || linkingMember.pid}'s identity.`}
-      suggestion={linkingSuggestion}
-    />
-  </Dialog>;
+  );
 }

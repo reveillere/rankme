@@ -116,7 +116,9 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
                     type='number'
                     fullWidth
                     onChange={handleInputChange}
-                    inputProps={{ min: "1", max: maxYear - minYear + 1 }}
+                    slotProps={{
+                        htmlInput: { min: "1", max: maxYear - minYear + 1 }
+                    }}
                 />
             </Box>
             <Box sx={{ width: '100%' }}>
@@ -145,7 +147,6 @@ export default function DateRangeSlider({ minYear, maxYear, range, setRange }) {
                     Reset
                 </IconButton>
             </Box>
-
 
         </Box>
     );

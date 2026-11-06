@@ -42,7 +42,12 @@ function About({ open, onClose }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'baseline', gap: 1, fontWeight: 800 }}>
         rankme
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 400 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            fontWeight: 400
+          }}>
           {/* versionDate is bumped by hand alongside version in
               package.json at commit time -- not a build timestamp, so it
               reflects when this version was released, not when it happened
@@ -102,7 +107,9 @@ function About({ open, onClose }) {
           <AccordionDetails sx={{ maxHeight: 280, overflowY: 'auto' }}>
             {CHANGELOG.map(({ version, items }) => (
               <Box key={version} sx={{ mb: 1.5 }}>
-                <Typography variant="subtitle2" color="text.secondary">v{version}</Typography>
+                <Typography variant="subtitle2" sx={{
+                  color: "text.secondary"
+                }}>v{version}</Typography>
                 <List dense disablePadding sx={{ listStyleType: 'disc', pl: 2.5 }}>
                   {items.map((item, i) => (
                     <ListItem key={i} disableGutters sx={{ display: 'list-item', py: 0.25 }}>
@@ -115,12 +122,25 @@ function About({ open, onClose }) {
           </AccordionDetails>
         </Accordion>
 
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            display: 'block',
+            mt: 2
+          }}>
           This site uses self-hosted, cookie-free analytics (page views, referrers) to understand usage. No
           personal data or IP address is stored.
         </Typography>
 
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, textAlign: 'center' }}>
+        <Typography
+          variant="caption"
+          sx={{
+            color: "text.secondary",
+            display: 'block',
+            mt: 2,
+            textAlign: 'center'
+          }}>
           Proudly built by one human manager and a small team of tireless AI developers — no coffee breaks, occasional hallucinations.
         </Typography>
       </DialogContent>

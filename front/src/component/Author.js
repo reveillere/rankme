@@ -40,7 +40,6 @@ import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
 
 // Utilities and Styles
 import { trimLastDigits } from '../utils';
-import 'react-datepicker/dist/react-datepicker.css';
 import '../App.css';
 
 const Alert = React.forwardRef(function Alert(props, ref) {

@@ -111,7 +111,12 @@ export function MyOverridesDialog({ open, onClose }) {
         </Box>
       </DialogTitle>
       <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mb: 1
+          }}>
           Corrections you&apos;ve made to CORE/SJR/CCF matches, kept in this browser only.
         </Typography>
 
@@ -151,7 +156,6 @@ export function MyOverridesDialog({ open, onClose }) {
                         {o.candidate.title || o.candidate.value}{o.candidate.acronym ? ` (${o.candidate.acronym})` : ''} — {o.candidate.value}
                       </>
                     }
-                    secondaryTypographyProps={{ component: 'div' }}
                     secondary={
                       <>
                         {/* The actual publication text this correction applies to
@@ -166,6 +170,9 @@ export function MyOverridesDialog({ open, onClose }) {
                         <div>{o.year ? `Publication year: ${o.year} — ` : ''}Edition: {o.rankSource}</div>
                       </>
                     }
+                    slotProps={{
+                      secondary: { component: 'div' }
+                    }}
                   />
                 </ListItem>
               </div>

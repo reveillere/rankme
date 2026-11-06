@@ -36,11 +36,16 @@ docker compose -f docker-compose.dev.yml logs -f api
 ## Tests & lint
 
 ```sh
-cd front && npm test && npm run lint   # vitest + eslint
+cd front && npm run lint && npm test   # eslint + vitest (unit)
+cd front && npm run e2e                # Playwright end-to-end, see below
 cd api   && npm test                   # node's built-in test runner
 ```
 
-Both run in CI (`.github/workflows/ci.yml`) on every push/PR, along with `docker compose -f docker-compose.dev.yml build` as a smoke test. Coverage is intentionally narrow so far — pure logic only (`levenshtein.js`'s venue-name matching, `filterPublications.js`'s filter chain) — not the DBLP/HAL/CORE/SJR fetch paths or the UI itself.
+**End-to-end (front).** `npm run e2e` builds the front and runs the Playwright suite in `front/e2e/` twice: against the production build (`vite preview`) and against the dev server, where any React warning fails the test. The API is mocked from fixtures in `front/e2e/mockApi.js`, so no backend is needed; a call the mock does not know also fails the test. First time only: `npx playwright install chromium`.
+
+**Integration (api).** `npm run test:integration` runs `api/src/*.integration.test.js` against a real MongoDB and Redis, given `MONGO_URI` and `REDIS_URI` (e.g. the dev stack's published ports: `MONGO_URI=mongodb://localhost:27017/ REDIS_URI=redis://localhost:6379/`). They only touch `zz-it/` records and keys, so pointing them at the dev database is safe. Without those variables they are skipped.
+
+All of this runs in CI (`.github/workflows/ci.yml`) on every push and PR, with Mongo and Redis as service containers for the integration tests, plus `docker compose build` of both the dev and the production images.
 
 ## `db-dump/`
 

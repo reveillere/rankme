@@ -133,7 +133,9 @@ export default function AdminDashboard() {
         <Card sx={{ width: 360 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>Admin dashboard</Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
+            <Typography variant="body2" gutterBottom sx={{
+              color: "text.secondary"
+            }}>
               Enter the ADMIN_TOKEN (see the API container logs if none was configured).
             </Typography>
             {error && <Alert severity="error" sx={{ my: 1 }}>{error}</Alert>}
@@ -266,7 +268,13 @@ export default function AdminDashboard() {
       <Card sx={{ mb: 3, p: 2 }}>
         <Box sx={{ height: 220 }}>
           {trafficSeries.length === 0
-            ? <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', pt: 8 }}>No data yet for this range</Typography>
+            ? <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              textAlign: 'center',
+              pt: 8
+            }}>No data yet for this range</Typography>
             : <Line data={chartData} options={chartOptions} />}
         </Box>
       </Card>
@@ -298,7 +306,9 @@ export default function AdminDashboard() {
                       value={s.total ? (s.completed / s.total) * 100 : 0}
                       sx={{ flexGrow: 1, borderRadius: 4, height: 6 }}
                     />
-                    <Typography variant="caption" color="text.secondary">{s.completed}/{s.total}</Typography>
+                    <Typography variant="caption" sx={{
+                      color: "text.secondary"
+                    }}>{s.completed}/{s.total}</Typography>
                   </Box>
                 </TableCell>
                 <TableCell align="right">{formatElapsed(s.elapsedMs)}</TableCell>
@@ -505,7 +515,9 @@ function SummaryTile({ label, value, highlight }) {
         <Typography variant="h5" sx={{ fontWeight: 700, color: highlight ? 'error.main' : 'text.primary' }}>
           {value}
         </Typography>
-        <Typography variant="caption" color="text.secondary">{label}</Typography>
+        <Typography variant="caption" sx={{
+          color: "text.secondary"
+        }}>{label}</Typography>
       </CardContent>
     </Card>
   );
@@ -515,7 +527,9 @@ function StatCard({ title, children }) {
   return (
     <Card>
       <CardContent>
-        <Typography variant="subtitle2" color="text.secondary" gutterBottom>{title}</Typography>
+        <Typography variant="subtitle2" gutterBottom sx={{
+          color: "text.secondary"
+        }}>{title}</Typography>
         {children}
       </CardContent>
     </Card>
@@ -525,7 +539,9 @@ function StatCard({ title, children }) {
 function Line2({ label, value, highlight }) {
   return (
     <Box sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
-      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Typography variant="body2" sx={{
+        color: "text.secondary"
+      }}>{label}</Typography>
       <Typography variant="body2" component="span" sx={{ fontWeight: 600, color: highlight ? 'error.main' : 'text.primary' }}>{value}</Typography>
     </Box>
   );

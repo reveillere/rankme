@@ -220,7 +220,9 @@ function CrossCheckTeamContent({ team, report, targetLabel, identityMembers, ide
             )}
 
             <Box sx={{ textAlign: 'center', marginBottom: '20px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <Typography variant="body2" color="text.secondary">{showingText}</Typography>
+                <Typography variant="body2" sx={{
+                    color: "text.secondary"
+                }}>{showingText}</Typography>
                 <CrosscheckDecisionFileButtons report={report} scope={{ type: 'team', id: team.id, name: team.name }} />
                 <ReportButton title="Cross-check report" onExportMarkdown={handleExportMarkdown} onExportJson={handleExportJson} onExportCsv={handleExportCsv} disabled={report.members.length === 0} />
             </Box>
@@ -235,7 +237,12 @@ function CrossCheckTeamContent({ team, report, targetLabel, identityMembers, ide
             <div style={{ height: '20px' }} />
 
             {report.members.length === 0 && report.unresolvedMembers.length === 0 && (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>No members in this team</Typography>
+                <Typography
+                    variant="body2"
+                    sx={{
+                        color: "text.secondary",
+                        textAlign: 'center'
+                    }}>No members in this team</Typography>
             )}
 
             {filteredMembers.map(member => (

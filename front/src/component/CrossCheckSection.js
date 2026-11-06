@@ -8,7 +8,7 @@ import Chip from '@mui/material/Chip';
 import Divider from '@mui/material/Divider';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import UndoIcon from '@mui/icons-material/Undo';
 
@@ -175,7 +175,12 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
             </Typography>
             {empty ? null : <>
             {description && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>{description}</Typography>
+                <Typography
+                    variant="body2"
+                    sx={{
+                        color: "text.secondary",
+                        mb: 1.5
+                    }}>{description}</Typography>
             )}
             <Collapse in={open} unmountOnExit>
             {showCandidates ? (
@@ -232,7 +237,13 @@ export function CrossCheckSection({ title, description, rows, showCandidates, co
                     {rows.map(({ result, nr }) => (
                         <li className={`entry ${result.publication.type}`} key={result.publication.dblp.key}>
                             <PublicationRow item={result.publication} nr={nr} pids={pids} onOpenAuthor={onOpenAuthor} sharedMaps={sharedMaps} activeCustomProfileIds={activeCustomProfileIds} />
-                            <Typography variant="body2" color="text.secondary" sx={{ mt: -0.5, mb: 1.5 }}>
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    color: "text.secondary",
+                                    mt: -0.5,
+                                    mb: 1.5
+                                }}>
                                 Already on HAL as{' '}
                                 <a href={result.unclaimedMatch.url} target="_blank" rel="noreferrer">{result.unclaimedMatch.halId || result.unclaimedMatch.docid}</a>
                                 , but not linked to your HAL identity — ask a co-author to add it, or link it yourself from your own HAL account.

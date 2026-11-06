@@ -30,7 +30,7 @@ import { startStatusPolling } from '../statusPolling';
 import { getSearchHistory, removeSearchHistoryByType } from '../searchHistory';
 import { PersonListItemText } from './PersonListItemText';
 import HistoryIcon from '@mui/icons-material/History';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 400;
@@ -404,7 +404,15 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
             ));
 
             return <List dense disablePadding>{listItems}</List>;
-        } else return <Typography variant="body2" color="text.secondary" sx={{ px: 2, py: 1.5 }}>No result!</Typography>;
+        } else return (
+            <Typography
+                variant="body2"
+                sx={{
+                    color: "text.secondary",
+                    px: 2,
+                    py: 1.5
+                }}>No result!</Typography>
+        );
     };
 
     return (
@@ -412,7 +420,9 @@ function AuthorSearchResults({ source, queryResult, queryStatus, onOpenAuthor })
             {queryStatus === 'pending' && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5 }}>
                     <CircularProgress size={20} />
-                    <Typography variant="body2" color="text.secondary">Searching…</Typography>
+                    <Typography variant="body2" sx={{
+                        color: "text.secondary"
+                    }}>Searching…</Typography>
                 </Box>
             )}
             {queryStatus === 'resolved' && <Results />}
