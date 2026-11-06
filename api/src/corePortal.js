@@ -65,7 +65,13 @@ async function getSources() {
 
 async function fetchSources() {
   const resp = await fetch(BASE);
-  const html = await resp.text();
+  return parseSources(await resp.text());
+}
+
+// The CORE portal's edition picker (<select name="source">), e.g.
+// "CORE2023" or "ERA2010", turned into [{ year, source }]. "All" and
+// options with no 4-digit year are left out. Exported for tests.
+export function parseSources(html) {
   const dom = HTMLParser.parse(html);
   const options = dom.querySelectorAll('select[name=source] option').map(o => o.rawText);
   const yearRegex = /\d+/g;
