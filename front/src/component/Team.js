@@ -37,7 +37,6 @@ import { useOverrideRefreshTick } from '../useOverrideRefreshTick';
 import { useSharedOverridesMaps } from '../useSharedOverridesMaps';
 import { SORT_MODES, DEFAULT_SORT_MODE } from '../rankOrder';
 
-import 'react-datepicker/dist/react-datepicker.css';
 import '../App.css';
 
 const Alert = React.forwardRef(function Alert(props, ref) {
