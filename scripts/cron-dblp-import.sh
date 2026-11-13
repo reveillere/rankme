@@ -30,12 +30,16 @@ API_CONTAINER="${2:-rankme-api-1}"
 MONGO_CONTAINER="rankme-mongo-1"  # same project-name-based convention as API_CONTAINER's default
 
 POLL_INTERVAL_S=15
-POLL_TIMEOUT_S=1800  # 30 minutes -- generous margin over the observed ~10-15 min
+POLL_TIMEOUT_S=2700  # 45 minutes -- a two-month incremental update took ~25 min (2026-11-13)
 
 # See scripts/deploy-dblp-dump.sh's RESOURCE BUMP comment for why these
 # bumps exist and how these specific values were chosen.
 MONGO_IMPORT_CACHE_GB=1
-MONGO_IMPORT_MEMORY_LIMIT=1536M
+# 3G, not the old 1536M: docker-compose.prod.yml's own default limit has
+# since been raised to 3G, so 1536M here *halved* mongo for the import, and
+# mongod got OOM-killed scanning ~530k touched articles in venueLookup
+# (2026-11-13). Never set this below the compose default.
+MONGO_IMPORT_MEMORY_LIMIT=3G
 API_IMPORT_MEMORY_LIMIT=2G
 
 log() { echo "[$(date -Is)] $*"; }

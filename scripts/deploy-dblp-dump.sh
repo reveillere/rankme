@@ -87,7 +87,7 @@ API_CONTAINER="${5:-rankme-api-1}"
 MONGO_CONTAINER="rankme-mongo-1"  # same project-name-based convention as API_CONTAINER's default
 
 POLL_INTERVAL_S=15
-POLL_TIMEOUT_S=1800  # 30 minutes -- generous margin over the observed ~10-15 min
+POLL_TIMEOUT_S=2700  # 45 minutes -- a two-month incremental update took ~25 min (2026-11-13)
 
 # Import-time-only mongo sizing (see RESOURCE BUMP above). Chosen to
 # leave real headroom for a full drop+reinsert without pushing this box's
@@ -95,7 +95,11 @@ POLL_TIMEOUT_S=1800  # 30 minutes -- generous margin over the observed ~10-15 mi
 # 256M + reverseproxy 256M + this) meaningfully past its ~3.7GB of physical
 # RAM.
 MONGO_IMPORT_CACHE_GB=1
-MONGO_IMPORT_MEMORY_LIMIT=1536M
+# 3G, not the old 1536M: docker-compose.prod.yml's own default limit has
+# since been raised to 3G, so 1536M here *halved* mongo for the import, and
+# mongod got OOM-killed scanning ~530k touched articles in venueLookup
+# (2026-11-13). Never set this below the compose default.
+MONGO_IMPORT_MEMORY_LIMIT=3G
 
 # Import-time-only api sizing: node auto-sizes its V8 old-space off the
 # container's own cgroup memory limit, and the standing prod default (1G,
