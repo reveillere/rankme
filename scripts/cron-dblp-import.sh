@@ -12,6 +12,8 @@
 # interactive password prompt under cron):
 #   sudo crontab -e
 #   0 2 2 * * /home/ubuntu/rankme/scripts/cron-dblp-import.sh >> /var/log/rankme-dblp-cron.log 2>&1
+# Check it is installed with `sudo crontab -l`: without that line nothing
+# ever triggers the monthly update (the api has no scheduler of its own).
 # Day 2 at 02:00: a day's margin after Dagstuhl's own 1st-of-the-month
 # publish (so the current month's file is reliably already there), and
 # off-peak for the site's live traffic during the import.
@@ -21,7 +23,9 @@
 
 set -euo pipefail
 
-REMOTE_DIR="${1:-$HOME/rankme}"
+# Defaults to the checkout this script lives in: under root's crontab
+# $HOME is /root, so the old "$HOME/rankme" default pointed nowhere.
+REMOTE_DIR="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 API_CONTAINER="${2:-rankme-api-1}"
 MONGO_CONTAINER="rankme-mongo-1"  # same project-name-based convention as API_CONTAINER's default
 
@@ -35,11 +39,16 @@ MONGO_IMPORT_MEMORY_LIMIT=1536M
 API_IMPORT_MEMORY_LIMIT=2G
 
 log() { echo "[$(date -Is)] $*"; }
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 log "==> Bumping mongo to ${MONGO_IMPORT_CACHE_GB}GB cache / ${MONGO_IMPORT_MEMORY_LIMIT} limit, and api to ${API_IMPORT_MEMORY_LIMIT}, for the import"
 (cd "$REMOTE_DIR" && sudo env MONGO_CACHE_GB=$MONGO_IMPORT_CACHE_GB MONGO_MEMORY_LIMIT=$MONGO_IMPORT_MEMORY_LIMIT API_MEMORY_LIMIT=$API_IMPORT_MEMORY_LIMIT docker compose -f docker-compose.prod.yml up -d mongo api)
 
 shrink_back() {
+  # The restart below recreates the api container, which throws away its
+  # logs -- keep the import's own output (and any error) in this log first.
+  log "==> api logs for this run (before the container is recreated)"
+  sudo docker logs --since "$STARTED_AT" "$API_CONTAINER" 2>&1 | grep -vE 'Download: |Progression|: [0-9]+%$' | tail -60 || true
   log "==> Shrinking mongo and api back to docker-compose.prod.yml's own defaults"
   (cd "$REMOTE_DIR" && sudo docker compose -f docker-compose.prod.yml up -d mongo api) \
     || echo "WARNING: failed to shrink mongo/api back down -- check them manually" >&2
@@ -86,8 +95,18 @@ while [ "$elapsed" -lt "$POLL_TIMEOUT_S" ]; do
   log "  $body"
   case "$body" in
     *'"ready":true'*)
-      log "==> Import finished successfully."
-      exit 0
+      # ready:true only says the api is serving *a* dump again -- possibly
+      # still the old one. lastAttempt (written before ready flips back to
+      # true, see admin.js extractVenues) says what this run actually did.
+      case "$body" in
+        *'"outcome":"updated"'*)    log "==> Import finished: new dump imported."; exit 0 ;;
+        *'"outcome":"up-to-date"'*) log "==> Nothing to do: this month's dump is already imported."; exit 0 ;;
+        *)
+          log "==> The update did NOT happen (see lastAttempt above)." >&2
+          echo "    sudo docker logs --tail 100 $API_CONTAINER" >&2
+          exit 1
+          ;;
+      esac
       ;;
   esac
   sleep "$POLL_INTERVAL_S"
