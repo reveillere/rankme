@@ -12,6 +12,8 @@
 # interactive password prompt under cron):
 #   sudo crontab -e
 #   0 2 2 * * /home/ubuntu/rankme/scripts/cron-dblp-import.sh >> /var/log/rankme-dblp-cron.log 2>&1
+# Check it is installed with `sudo crontab -l`: without that line nothing
+# ever triggers the monthly update (the api has no scheduler of its own).
 # Day 2 at 02:00: a day's margin after Dagstuhl's own 1st-of-the-month
 # publish (so the current month's file is reliably already there), and
 # off-peak for the site's live traffic during the import.
@@ -86,8 +88,18 @@ while [ "$elapsed" -lt "$POLL_TIMEOUT_S" ]; do
   log "  $body"
   case "$body" in
     *'"ready":true'*)
-      log "==> Import finished successfully."
-      exit 0
+      # ready:true only says the api is serving *a* dump again -- possibly
+      # still the old one. lastAttempt (written before ready flips back to
+      # true, see admin.js extractVenues) says what this run actually did.
+      case "$body" in
+        *'"outcome":"updated"'*)    log "==> Import finished: new dump imported."; exit 0 ;;
+        *'"outcome":"up-to-date"'*) log "==> Nothing to do: this month's dump is already imported."; exit 0 ;;
+        *)
+          log "==> The update did NOT happen (see lastAttempt above)." >&2
+          echo "    sudo docker logs --tail 100 $API_CONTAINER" >&2
+          exit 1
+          ;;
+      esac
       ;;
   esac
   sleep "$POLL_INTERVAL_S"

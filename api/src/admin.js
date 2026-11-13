@@ -686,6 +686,30 @@ async function venueLookup(collection, urlPrefix, resolveLocally, ids = null) {
 // at all, not just stale data.
 let dblpImportRunning = false;
 
+// Outcome of the most recent extractVenues run, whatever triggered it
+// (cron-dblp-import.sh, deploy-dblp-dump.sh, the admin dashboard). Before
+// this existed a failed run was only a console.error line: the status
+// endpoint went straight back to ready:true on the old dump, so the cron
+// script reported success and the site silently kept serving a months-old
+// snapshot. Persisted next to localMD5.txt so it survives an api restart.
+const LAST_ATTEMPT_PATH = '/data/dblp/lastAttempt.json';
+
+const storeLastAttempt = async (attempt) => {
+    try {
+        await writeFile(LAST_ATTEMPT_PATH, JSON.stringify(attempt), 'utf-8');
+    } catch (error) {
+        console.error(`[dblp] Could not record the import outcome: ${error.message}`);
+    }
+};
+
+const getLastAttempt = async () => {
+    try {
+        return JSON.parse(await readFile(LAST_ATTEMPT_PATH, 'utf-8'));
+    } catch {
+        return null;
+    }
+};
+
 export async function getDblpStatus() {
     let version = null;
     let importedAt = null;
@@ -708,15 +732,19 @@ export async function getDblpStatus() {
         // clearDagstuhlSnapshot) -- the front end falls back to just the
         // date in that case, since there's no Dagstuhl DOI to link to.
         dagstuhlSnapshot: await getStoredDagstuhlSnapshot(),
+        // { startedAt, finishedAt, snapshotId, outcome, error } -- outcome is
+        // 'updated', 'up-to-date', 'no-source' or 'failed'. null until the
+        // first run since this was added.
+        lastAttempt: await getLastAttempt(),
     };
 }
 
 export const extractVenues = async () => {
     dblpImportRunning = true;
+    const snapshotId = dagstuhlSnapshotId();
+    const attempt = { startedAt: new Date().toISOString(), snapshotId, outcome: 'failed', error: null };
     try {
         await mkdir('/data/dblp', { recursive: true });
-
-        const snapshotId = dagstuhlSnapshotId();
 
         // Dagstuhl's freshness check (getCurrentMD5) can still fail (network
         // hiccup, this month's snapshot not published yet) -- fall back to a
@@ -734,8 +762,11 @@ export const extractVenues = async () => {
 
         if (!targetMD5) {
             console.log('[dblp] No dump available: Dagstuhl is unreachable and no dblp.xml.gz.md5 sidecar was found next to /data/dblp/dblp.xml.gz.');
+            attempt.outcome = 'no-source';
+            attempt.error = `Dagstuhl did not answer for snapshot ${snapshotId} and no manually provided dump was found`;
         } else if (storedMD5 === targetMD5) {
             console.log('File has not been updated. Nothing to do.');
+            attempt.outcome = 'up-to-date';
         } else {
             console.log(`Target MD5: ${targetMD5}`);
             // Only attempt the live download when the freshness check
@@ -800,10 +831,15 @@ export const extractVenues = async () => {
                 await clearDagstuhlSnapshot();
             }
             if (maxMdate) await storeMdateWatermark(maxMdate);
+            attempt.outcome = 'updated';
         }
     } catch (error) {
         console.error('Error:', error.message);
+        attempt.outcome = 'failed';
+        attempt.error = error.message;
     } finally {
+        attempt.finishedAt = new Date().toISOString();
+        await storeLastAttempt(attempt);
         dblpImportRunning = false;
     }
 };
@@ -1016,6 +1052,18 @@ export async function controllerPrometheusMetrics(req, res) {
         lines.push('# HELP rankme_dblp_importing Whether a DBLP dump (re)import is currently running (1 = yes)');
         lines.push('# TYPE rankme_dblp_importing gauge');
         lines.push(formatPrometheusLine('rankme_dblp_importing', dblpStatus.importing ? 1 : 0));
+
+        // For alerting on a stale dump: a healthy monthly cron keeps this
+        // under ~32 days, so anything well past that means the update stopped.
+        if (dblpStatus.importedAt) {
+            lines.push('# HELP rankme_dblp_dump_age_seconds Seconds since the currently-served DBLP dump was imported');
+            lines.push('# TYPE rankme_dblp_dump_age_seconds gauge');
+            lines.push(formatPrometheusLine('rankme_dblp_dump_age_seconds', Math.round((Date.now() - Date.parse(dblpStatus.importedAt)) / 1000)));
+        }
+
+        lines.push('# HELP rankme_dblp_last_attempt_failed Whether the most recent DBLP update attempt failed or found no dump (1 = yes)');
+        lines.push('# TYPE rankme_dblp_last_attempt_failed gauge');
+        lines.push(formatPrometheusLine('rankme_dblp_last_attempt_failed', ['failed', 'no-source'].includes(dblpStatus.lastAttempt?.outcome) ? 1 : 0));
 
         lines.push('# HELP rankme_process_rss_bytes Node process resident set size');
         lines.push('# TYPE rankme_process_rss_bytes gauge');
