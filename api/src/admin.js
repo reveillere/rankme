@@ -544,20 +544,45 @@ async function ensureIndexes() {
 // `ids`, when given (see applyIncrementalUpdate/extractVenues), scopes
 // this to just the homepage records that run's mdate filter actually
 // touched -- on a routine dump update that's a small, already-in-memory
-// list (a few thousand at most, see applyIncrementalUpdate) out of ~4.2M
+// list (a few thousand ids per month in theory, but over 500k articles
+// after a two-month gap -- hence countMatching/findMatching's chunks) out of ~4.2M
 // total, so skipping the rest (their tokens can't have changed) is most
 // of the win from making the update incremental in the first place. A
 // full import (processXML) has no such list -- everything just got
 // rewritten -- so it passes no `ids` and this scans every homepage record.
+// A plain `{ _id: { $in: ids } }` filter is one BSON document, capped at
+// 16 MB by Mongo: the Sept -> Nov 2026 update touched 529,577 articles
+// (a ~21 MB filter), so countDocuments threw, extractVenues logged it and
+// stopped before storeMD5, and the next run would retry -- and fail -- from
+// the same watermark forever. Same scan, in chunks well under that limit.
+const ID_CHUNK_SIZE = 50000;
+
+export async function countMatching(coll, baseFilter, ids) {
+    if (!ids) return coll.countDocuments(baseFilter);
+    let total = 0;
+    for (let i = 0; i < ids.length; i += ID_CHUNK_SIZE) {
+        total += await coll.countDocuments({ ...baseFilter, _id: { $in: ids.slice(i, i + ID_CHUNK_SIZE) } });
+    }
+    return total;
+}
+
+export async function* findMatching(coll, baseFilter, ids, options = {}) {
+    if (!ids) {
+        yield* coll.find(baseFilter, options);
+        return;
+    }
+    for (let i = 0; i < ids.length; i += ID_CHUNK_SIZE) {
+        yield* coll.find({ ...baseFilter, _id: { $in: ids.slice(i, i + ID_CHUNK_SIZE) } }, options);
+    }
+}
+
 async function buildAuthorNameTokens(ids = null) {
     const client = await getClient();
     const db = client.db('dblp');
-    const filter = ids
-        ? { key: { $regex: '^homepages/' }, _id: { $in: ids } }
-        : { key: { $regex: '^homepages/' } };
-    const total = await db.collection('www').countDocuments(filter);
+    const filter = { key: { $regex: '^homepages/' } };
+    const total = await countMatching(db.collection('www'), filter, ids);
     const pp = printProgress('Building author name-token index');
-    const cursor = db.collection('www').find(filter, { projection: { author: 1 } });
+    const cursor = findMatching(db.collection('www'), filter, ids, { projection: { author: 1 } });
     let batch = [];
     let processed = 0;
     for await (const doc of cursor) {
@@ -627,11 +652,10 @@ async function venueLookup(collection, urlPrefix, resolveLocally, ids = null) {
             venueUrls.add(doc.url);
         }
 
-        const scanFilter = ids ? { _id: { $in: ids } } : {};
-        const totalDocs = await db.collection(collection).countDocuments(scanFilter);
+        const totalDocs = await countMatching(db.collection(collection), {}, ids);
         console.log(`Total entries to process: ${totalDocs}`);
 
-        const confsCursor = db.collection(collection).find(scanFilter);
+        const confsCursor = findMatching(db.collection(collection), {}, ids);
         let processed = 0;
         let count = 0;
         let fromLocal = 0;
